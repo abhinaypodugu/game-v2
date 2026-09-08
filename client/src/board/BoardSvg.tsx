@@ -1,7 +1,9 @@
 // The SVG board: layered rendering with fat transparent hit targets for
 // crisp pointer interaction (per MDN pointer-events semantics).
+// Production pulse: hexes whose token equals the last roll briefly scale.
 
 import { memo, useMemo } from 'react';
+import { motion } from 'framer-motion';
 import type { Board } from '@catan/shared';
 import { PIPS } from '@catan/shared';
 import type { PersonalSnapshot } from '../types';
@@ -19,6 +21,7 @@ export interface BoardSvgProps {
   onVertexClick?: (vertex: number) => void;
   onEdgeClick?: (edge: string) => void;
   onHexClick?: (hex: string) => void;
+  pulseHexes?: Set<string>;
   compact?: boolean;
 }
 
@@ -58,6 +61,7 @@ export const BoardSvg = memo(function BoardSvg({
   legalVertices,
   legalEdges,
   legalHexes,
+  pulseHexes,
   onVertexClick,
   onEdgeClick,
   onHexClick,
@@ -75,6 +79,7 @@ export const BoardSvg = memo(function BoardSvg({
       })),
     [board, geometry],
   );
+  const pulsing = pulseHexes ?? new Set<string>();
 
   const edgeStroke = compact ? 10 : 14;
   const vertexRadius = compact ? 12 : 16;
@@ -101,8 +106,17 @@ export const BoardSvg = memo(function BoardSvg({
           const hexData = board.hexes[hex]!;
           const isRobber = snap.robber === hex;
           const robberTargetable = legalHexes?.has(hex) ?? false;
+          const isPulsing = pulsing.has(hex);
           return (
-            <g key={hex} data-testid={`hex-${hex}`} data-terrain={hexData.terrain}>
+            <motion.g
+              key={hex}
+              data-testid={`hex-${hex}`}
+              data-terrain={hexData.terrain}
+              initial={false}
+              animate={{ scale: isPulsing ? 1.06 : 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 18 }}
+              style={{ transformOrigin: `${geometry.hexCenter(hex).x}px ${geometry.hexCenter(hex).y}px` }}
+            >
               <polygon
                 points={points}
                 fill={TERRAIN_FILL[hexData.terrain] ?? '#555'}
@@ -120,7 +134,7 @@ export const BoardSvg = memo(function BoardSvg({
                 />
               ) : null}
               {isRobber ? (
-                <circle
+                <motion.circle
                   cx={geometry.hexCenter(hex).x}
                   cy={geometry.hexCenter(hex).y}
                   r={22}
@@ -129,9 +143,13 @@ export const BoardSvg = memo(function BoardSvg({
                   strokeWidth={3}
                   pointerEvents="none"
                   data-testid="robber"
+                  initial={false}
+                  animate={{ scale: [0.8, 1.15, 1] }}
+                  transition={{ duration: 0.4 }}
+                  style={{ transformOrigin: `${geometry.hexCenter(hex).x}px ${geometry.hexCenter(hex).y}px` }}
                 />
               ) : null}
-            </g>
+            </motion.g>
           );
         })}
       </g>
