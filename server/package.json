@@ -12,7 +12,8 @@
     "@catan/shared": "workspace:*",
     "express": "catalog:",
     "nanoid": "catalog:",
-    "socket.io": "catalog:"
+    "socket.io": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/express": "catalog:",
