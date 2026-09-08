@@ -21,8 +21,21 @@ export interface LegalMoves {
   setupRoadsForVertex: (vertex: number) => string[];
 }
 
-export function useLegalMoves(snap: PersonalSnapshot, mySeat: number): LegalMoves {
+export function useLegalMoves(
+  snap: PersonalSnapshot | null,
+  mySeat: number,
+): LegalMoves {
   return useMemo(() => {
+    if (snap === null || mySeat < 0) {
+      return {
+        settlementVertices: new Set<number>(),
+        cityVertices: new Set<number>(),
+        roadEdges: new Set<string>(),
+        canBuyDev: false,
+        setupVertices: new Set<number>(),
+        setupRoadsForVertex: () => [],
+      };
+    }
     const setupPhase = snap.phase === 'setupForward' || snap.phase === 'setupReverse';
     const myTurn = snap.activeSeat === mySeat;
     const sbpTurn = snap.specialBuildSeat === mySeat;

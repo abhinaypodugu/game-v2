@@ -275,6 +275,7 @@ export function registerSocketHandlers(ctx: ServerContext): void {
         seatIndex: 0,
         reconnectToken: room.seats[0]!.reconnectToken,
       });
+      socket.emit('room:state', roomStatePayload(room));
     });
 
     socket.on('room:join', (raw: unknown) => {

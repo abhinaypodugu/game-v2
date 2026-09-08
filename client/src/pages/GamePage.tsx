@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { GameAction } from '@catan/shared';
 import { legalRobberHexes } from '@catan/shared';
+import { ReconnectBanner, ToastStack, TurnTimer } from '../components/Overlays';
 import { BoardSvg } from '../board/BoardSvg';
 import { BuildBar } from '../components/BuildBar';
 import { DiceDisplay } from '../components/DiceDisplay';
@@ -14,7 +15,7 @@ import { VictoryOverlay } from '../components/VictoryOverlay';
 import { useLegalMoves } from '../hooks/useLegalMoves';
 import { useStore } from '../store';
 import { PIECE_COLORS } from '../theme';
-import type { GameEvent, PersonalSnapshot } from '../types';
+import type { GameEvent } from '../types';
 
 const RESOURCE_EMOJI = {
   wood: '🪵',
@@ -39,7 +40,7 @@ export function GamePage(): React.JSX.Element {
   const [setupVertex, setSetupVertex] = useState<number | null>(null);
 
   const mySeat = session?.seatIndex ?? -1;
-  const legal = useLegalMoves(snap ?? null as unknown as PersonalSnapshot, mySeat);
+  const legal = useLegalMoves(snap, mySeat);
 
   // Roll animation trigger: fires on each new rolled event (by version).
   const lastRollSeq = useMemo(() => {
@@ -152,8 +153,9 @@ export function GamePage(): React.JSX.Element {
 
   return (
     <div className="min-h-screen bg-[#04182a] text-[#f6f8fa]">
+      <ReconnectBanner />
+      <ToastStack />
       <div className="mx-auto max-w-[1500px] p-4">
-        {/* Top bar: turn indicator + dice + roll/end buttons */}
         <div className="mb-3 flex items-center justify-between rounded-xl bg-[#0a4986] px-5 py-3" data-testid="turn-banner">
           <div className="flex items-center gap-3">
             <span
@@ -171,6 +173,7 @@ export function GamePage(): React.JSX.Element {
           </div>
           <div className="flex items-center gap-4">
             <DiceDisplay die1={snap.dice?.die1 ?? null} die2={snap.dice?.die2 ?? null} rolling={rolling} />
+            <TurnTimer />
             {myTurn && snap.phase === 'turnPreroll' ? (
               <button
                 type="button"
@@ -210,7 +213,7 @@ export function GamePage(): React.JSX.Element {
                 Pass build window
               </button>
             ) : null}
-            {myTurn && snap.phase === 'turnMain' ? (
+            {(myTurn && snap.phase === 'turnMain') || snap.trades.some((t) => t.status === 'open') ? (
               <button
                 type="button"
                 onClick={() => setTradeModal(true)}

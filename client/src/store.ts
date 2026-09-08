@@ -65,7 +65,9 @@ export interface Store {
   pushToast(message: string, kind?: 'error' | 'info'): void;
 }
 
-const SESSION_KEY = 'catan.session';
+// Session key namespaced by URL query so multiple players can share one
+// browser (each tab = its own seat) — e.g. ?p=bob.
+const SESSION_KEY = `catan.session${window.location.search}`;
 
 function loadSession(): Session | null {
   try {
