@@ -1,7 +1,4 @@
-import os
-
-def generate_01():
-    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1050" width="1600" height="1050" style="background:#03111e; font-family:'Rubik', system-ui, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1050" width="1600" height="1050" style="background:#03111e; font-family:'Rubik', system-ui, sans-serif;">
   <defs>
     <filter id="shadow-lg"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.6"/></filter>
     <filter id="shadow-md"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.45"/></filter>
@@ -271,9 +268,4 @@ def generate_01():
       </g>
     </g>
   </g>
-</svg>'''
-    with open("docs/design/01_CANVAS_ARCHITECTURE_AND_HUD_SPEC.svg", "w", encoding="utf-8") as f:
-        f.write(svg)
-    print("Generated 01_CANVAS_ARCHITECTURE_AND_HUD_SPEC.svg")
-
-generate_01()
+</svg>

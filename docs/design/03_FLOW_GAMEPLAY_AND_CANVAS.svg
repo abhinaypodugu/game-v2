@@ -1,7 +1,4 @@
-import os
-
-def generate_03():
-    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" style="background:#03111e; font-family:'Rubik', system-ui, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" style="background:#03111e; font-family:'Rubik', system-ui, sans-serif;">
   <defs>
     <filter id="shadow-lg"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.6"/></filter>
     <filter id="shadow-md"><feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#000" flood-opacity="0.45"/></filter>
@@ -347,10 +344,4 @@ def generate_03():
       </g>
     </g>
   </g>
-</svg>'''
-
-    with open("docs/design/03_FLOW_GAMEPLAY_AND_CANVAS.svg", "w", encoding="utf-8") as f:
-        f.write(svg)
-    print("Generated 03_FLOW_GAMEPLAY_AND_CANVAS.svg")
-
-generate_03()
+</svg>

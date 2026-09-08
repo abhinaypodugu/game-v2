@@ -1,7 +1,4 @@
-import os
-
-def generate_02():
-    svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" style="background:#03111e; font-family:'Rubik', system-ui, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900" style="background:#03111e; font-family:'Rubik', system-ui, sans-serif;">
   <defs>
     <filter id="shadow-lg"><feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#000" flood-opacity="0.6"/></filter>
     <filter id="shadow-md"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.45"/></filter>
@@ -219,10 +216,4 @@ def generate_02():
       <text x="132" y="34" font-family="'Bricolage Grotesque', sans-serif" font-size="20" font-weight="bold" fill="#ffffff" text-anchor="middle">START GAME ➜</text>
     </g>
   </g>
-</svg>'''
-
-    with open("docs/design/02_FLOW_LOBBY_AND_PREVIEW.svg", "w", encoding="utf-8") as f:
-        f.write(svg)
-    print("Generated 02_FLOW_LOBBY_AND_PREVIEW.svg")
-
-generate_02()
+</svg>

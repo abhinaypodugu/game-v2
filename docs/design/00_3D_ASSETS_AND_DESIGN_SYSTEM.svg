@@ -1,12 +1,4 @@
-import os
-
-def generate_all_design_assets():
-    os.makedirs("docs/design", exist_ok=True)
-    
-    # -------------------------------------------------------------------------
-    # 1. 00_3D_ASSETS_AND_DESIGN_SYSTEM.svg
-    # -------------------------------------------------------------------------
-    svg_00 = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1600" width="2400" height="1600" style="background:#03111e; font-family:'Rubik', system-ui, sans-serif;">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1600" width="2400" height="1600" style="background:#03111e; font-family:'Rubik', system-ui, sans-serif;">
   <defs>
     <filter id="shadow-sm"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.4"/></filter>
     <filter id="shadow-md"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000" flood-opacity="0.55"/></filter>
@@ -620,10 +612,4 @@ def generate_all_design_assets():
       </g>
     </g>
   </g>
-</svg>'''
-
-    with open("docs/design/00_3D_ASSETS_AND_DESIGN_SYSTEM.svg", "w", encoding="utf-8") as f:
-        f.write(svg_00)
-    print("Generated 00_3D_ASSETS_AND_DESIGN_SYSTEM.svg")
-
-generate_all_design_assets()
+</svg>
