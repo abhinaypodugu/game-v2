@@ -1,1 +1,35 @@
 @import "tailwindcss";
+
+@import "@fontsource/bricolage-grotesque/700.css";
+@import "@fontsource/rubik/400.css";
+@import "@fontsource/rubik/500.css";
+@import "@fontsource/rubik/700.css";
+
+:root {
+  --catan-bg: #04182a;
+  --catan-panel: #0a4986;
+  --catan-cta: #f06800;
+  --catan-text: #f6f8fa;
+}
+
+html,
+body {
+  background: var(--catan-bg);
+  color: var(--catan-text);
+  font-family: Rubik, system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Bricolage Grotesque", Rubik, system-ui, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

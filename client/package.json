@@ -11,13 +11,17 @@
   },
   "dependencies": {
     "@catan/shared": "workspace:*",
+    "canvas-confetti": "catalog:",
     "framer-motion": "catalog:",
+    "howler": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "socket.io-client": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {
+    "@fontsource/bricolage-grotesque": "catalog:",
+    "@fontsource/rubik": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@testing-library/dom": "catalog:",
     "@testing-library/jest-dom": "catalog:",
