@@ -501,83 +501,145 @@ export function createDesertProps(): THREE.Group {
 // 3D Playing Pieces Builders
 // ---------------------------------------------------------------------------
 
-/** Settlement: gabled cottage with roof & chimney */
+/** Settlement: high-contrast gabled cottage with white plaster walls, vibrant player roof & foundation ring */
 export function createSettlementMesh(color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
-  const wallMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.6 });
-  const roofMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.5 });
-  const trimMat = new THREE.MeshStandardMaterial({ color: pal.light, roughness: 0.5 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.35 });
+  const baseRingMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.4 });
+  const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.7 });
+  const eavesMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.9 });
 
-  // Cottage base
-  const base = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.9), wallMat);
-  base.position.y = 0.35;
-  base.castShadow = true;
-  base.receiveShadow = true;
-  group.add(base);
+  // Player-colored circular foundation ring at base
+  const baseRing = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.16, 16), baseRingMat);
+  baseRing.position.y = 0.08;
+  baseRing.receiveShadow = true;
+  group.add(baseRing);
 
-  // Roof (prism)
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.8, 0.55, 4), roofMat);
+  // Crisp white plaster cottage walls
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.75, 0.88), wallMat);
+  walls.position.y = 0.48;
+  walls.castShadow = true;
+  walls.receiveShadow = true;
+  group.add(walls);
+
+  // Dark wood eaves trim under roof
+  const eaves = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.08, 0.96), eavesMat);
+  eaves.position.y = 0.85;
+  group.add(eaves);
+
+  // High-saturation player color roof
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.85, 0.65, 4), roofMat);
   roof.rotation.y = Math.PI / 4;
-  roof.position.y = 0.95;
+  roof.position.y = 1.18;
   roof.castShadow = true;
   group.add(roof);
 
-  // Chimney
-  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.4, 0.18), trimMat);
-  chimney.position.set(0.25, 1.05, 0.15);
+  // Brick chimney with soot
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.45, 0.2), chimneyMat);
+  chimney.position.set(0.26, 1.25, 0.18);
   chimney.castShadow = true;
   group.add(chimney);
 
   return group;
 }
 
-/** City: fortified castle keep with corner tower */
+/** City: majestic double-tower fortified castle keep with battlements and heraldic pennant */
 export function createCityMesh(color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
-  const wallMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.5 });
-  const turretMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.5 });
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.5 });
+  const playerAccentMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.35 });
+  const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+  const goldPoleMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.3, metalness: 0.7 });
 
-  // Main hall
-  const hall = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 0.9), wallMat);
-  hall.position.set(0.2, 0.45, 0);
-  hall.castShadow = true;
-  hall.receiveShadow = true;
-  group.add(hall);
+  // City base foundation in player color
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.18, 1.2), playerAccentMat);
+  base.position.y = 0.09;
+  base.receiveShadow = true;
+  group.add(base);
 
-  // High tower
-  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.5, 0.7), turretMat);
-  tower.position.set(-0.4, 0.75, 0);
+  // Main castle keep (white ashlar limestone)
+  const keep = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.1, 0.95), stoneMat);
+  keep.position.set(0.2, 0.65, 0);
+  keep.castShadow = true;
+  keep.receiveShadow = true;
+  group.add(keep);
+
+  // Keep battlements in player color
+  const keepBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.25, 1.02), playerAccentMat);
+  keepBattlements.position.set(0.2, 1.28, 0);
+  keepBattlements.castShadow = true;
+  group.add(keepBattlements);
+
+  // High observation tower
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.85, 0.72), stoneMat);
+  tower.position.set(-0.45, 0.95, 0);
   tower.castShadow = true;
   tower.receiveShadow = true;
   group.add(tower);
 
-  // Battlements on tower
-  const battlements = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.25, 0.8), wallMat);
-  battlements.position.set(-0.4, 1.55, 0);
-  battlements.castShadow = true;
-  group.add(battlements);
+  // Tower battlements in player color
+  const towerBattlements = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.28, 0.82), playerAccentMat);
+  towerBattlements.position.set(-0.45, 1.95, 0);
+  towerBattlements.castShadow = true;
+  group.add(towerBattlements);
+
+  // Conical turret roof
+  const turretRoof = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.65, 8), playerAccentMat);
+  turretRoof.position.set(-0.45, 2.35, 0);
+  turretRoof.castShadow = true;
+  group.add(turretRoof);
+
+  // Gold flagpole with player heraldic pennant
+  const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), goldPoleMat);
+  flagPole.position.set(-0.45, 2.85, 0);
+  group.add(flagPole);
+
+  const flagMat = new THREE.MeshBasicMaterial({ color: pal.main, side: THREE.DoubleSide });
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.32), flagMat);
+  flag.position.set(-0.16, 2.95, 0);
+  group.add(flag);
+
+  // Portcullis gate (dark iron)
+  const gate = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.5, 0.1), darkTrimMat);
+  gate.position.set(0.2, 0.35, 0.5);
+  group.add(gate);
 
   return group;
 }
 
-/** Road: beveled timber log between two 3D points */
-export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: string): THREE.Mesh {
+/** Road: high-contrast dual-tone timber log with dark chassis and vibrant player core */
+export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
-  const mat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.6 });
+  const group = new THREE.Group();
+  const chassisMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.9 });
+  const coreMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.35 });
+  const highlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
 
   const dir = new THREE.Vector3().subVectors(p2, p1);
   const len = dir.length();
-  const geom = new THREE.CylinderGeometry(0.22, 0.22, len * 0.92, 8);
-  const mesh = new THREE.Mesh(geom, mat);
 
-  mesh.position.addVectors(p1, p2).multiplyScalar(0.5);
-  mesh.position.y += 0.24;
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
+  // 1. Dark outer timber chassis (creates clear boundary against any terrain)
+  const chassis = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, len * 0.92, 8), chassisMat);
+  chassis.castShadow = true;
+  group.add(chassis);
+
+  // 2. Vibrant player-colored core
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, len * 0.94, 8), coreMat);
+  core.castShadow = true;
+  group.add(core);
+
+  // 3. Crisp white center highlight strip
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.08, len * 0.88), highlightMat);
+  stripe.position.x = 0.22;
+  group.add(stripe);
+
+  group.position.addVectors(p1, p2).multiplyScalar(0.5);
+  group.position.y += 0.26;
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  return group;
 }
 
 /** Robber: classic wooden pawn silhouette */
@@ -635,49 +697,74 @@ export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
   if (!ctx) throw new Error('2D canvas unavailable');
 
   const isGeneric = harbor.type === 'generic';
+  let bgColor = '#0284c7';
+  let borderColor = '#38bdf8';
+  let icon = '⚓';
 
-  // Outer badge background
-  ctx.fillStyle = isGeneric ? '#0369a1' : '#b45309';
+  if (!isGeneric) {
+    switch (harbor.resource) {
+      case 'wood':
+        bgColor = '#15803d';
+        borderColor = '#4ade80';
+        icon = '🌲';
+        break;
+      case 'brick':
+        bgColor = '#c2410c';
+        borderColor = '#fb923c';
+        icon = '🧱';
+        break;
+      case 'sheep':
+        bgColor = '#65a30d';
+        borderColor = '#a3e635';
+        icon = '🐑';
+        break;
+      case 'wheat':
+        bgColor = '#b45309';
+        borderColor = '#fde047';
+        icon = '🌾';
+        break;
+      case 'ore':
+        bgColor = '#334155';
+        borderColor = '#94a3b8';
+        icon = '⛰';
+        break;
+    }
+  }
+
+  // Outer circular badge background with drop shadow
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = bgColor;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 10, 0, Math.PI * 2);
+  ctx.arc(size / 2, size / 2, size / 2 - 12, 0, Math.PI * 2);
   ctx.fill();
+  ctx.shadowBlur = 0;
 
-  // Golden / Brass border ring
-  ctx.strokeStyle = isGeneric ? '#38bdf8' : '#fbbf24';
+  // Glowing border ring
+  ctx.strokeStyle = borderColor;
   ctx.lineWidth = 14;
   ctx.stroke();
 
-  // Inner subtle ring
-  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  // Inner white accent circle
+  ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.arc(size / 2, size / 2, size / 2 - 24, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Text: Ratio (3:1 or 2:1)
-  ctx.font = 'bold 76px Rubik, sans-serif';
+  // Ratio text (bold white with dark outline)
+  ctx.font = 'bold 84px Rubik, sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(isGeneric ? '3:1' : '2:1', size / 2, size / 2 - 24);
+  ctx.fillText(isGeneric ? '3:1' : '2:1', size / 2, size / 2 - 26);
 
-  // Icon / symbol on bottom
-  ctx.font = '54px Rubik, sans-serif';
-  const icon = isGeneric
-    ? '⚓'
-    : harbor.resource === 'wood'
-      ? '🌲'
-      : harbor.resource === 'brick'
-        ? '🧱'
-        : harbor.resource === 'sheep'
-          ? '🐑'
-          : harbor.resource === 'wheat'
-            ? '🌾'
-            : '⛰';
-  ctx.fillText(icon, size / 2, size / 2 + 50);
+  // Icon emblem
+  ctx.font = '64px Rubik, sans-serif';
+  ctx.fillText(icon, size / 2, size / 2 + 48);
 
   const texture = new THREE.CanvasTexture(canvas);
-  texture.anisotropy = 4;
+  texture.anisotropy = 8;
   harborTextureCache.set(key, texture);
   return texture;
 }
@@ -777,20 +864,18 @@ export function createHarborPortMesh(harbor: Harbor): THREE.Group {
   crate.castShadow = true;
   port.add(crate);
 
-  // 4. 3D Trade Ratio Badge Signpost (elevated at end of pier)
-  const signpost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), woodDark);
-  signpost.position.set(0, 0.9, 2.45);
-  signpost.castShadow = true;
-  port.add(signpost);
-
+  // 4. Camera-Facing 3D Trade Ratio Badge (Sprite faces camera at all angles!)
   const badgeTex = createHarborBadgeTexture(harbor);
-  const badgeMat = new THREE.MeshStandardMaterial({ map: badgeTex, roughness: 0.4 });
-  const badgeGeom = new THREE.CylinderGeometry(0.65, 0.65, 0.1, 24);
-  const badge = new THREE.Mesh(badgeGeom, [woodDark, badgeMat, woodDark]);
-  badge.rotation.x = Math.PI / 4; // Tilted toward camera
-  badge.position.set(0, 1.6, 2.45);
-  badge.castShadow = true;
-  port.add(badge);
+  const spriteMat = new THREE.SpriteMaterial({
+    map: badgeTex,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const badgeSprite = new THREE.Sprite(spriteMat);
+  badgeSprite.scale.set(3.4, 3.4, 1);
+  badgeSprite.position.set(0, 2.5, 2.5);
+  badgeSprite.renderOrder = 999;
+  port.add(badgeSprite);
 
   return port;
 }
@@ -800,52 +885,46 @@ export function createHarborPortMesh(harbor: Harbor): THREE.Group {
 // ---------------------------------------------------------------------------
 
 /** Creates a rich physical wooden tabletop and a 3D hexagonal frame with depth and bevels */
-export function create3DTabletopAndFrame(): THREE.Group {
+export function createOceanBase(): THREE.Group {
   const group = new THREE.Group();
 
-  // 1. Warm Walnut Wooden Tabletop surface underneath the ocean
-  const tableMat = new THREE.MeshStandardMaterial({
-    color: 0x1c120c, // Deep dark walnut
-    roughness: 0.6,
-    metalness: 0.1,
+  // 1. Deep turquoise/navy ocean water basin
+  const oceanMat = new THREE.MeshStandardMaterial({
+    color: 0x052f52,
+    roughness: 0.12,
+    metalness: 0.35,
   });
-  const tableGeom = new THREE.CylinderGeometry(45, 45, 1.5, 64);
-  const table = new THREE.Mesh(tableGeom, tableMat);
-  table.position.y = -1.2;
-  table.receiveShadow = true;
-  group.add(table);
+  const ocean = new THREE.Mesh(new THREE.CylinderGeometry(85, 85, 1.4, 64), oceanMat);
+  ocean.position.y = -0.7;
+  ocean.receiveShadow = true;
+  group.add(ocean);
 
-  // 2. 3D Beveled Wooden Frame around the island
-  const woodFrameMat = new THREE.MeshStandardMaterial({
-    color: 0x3e2312, // Rich carved mahogany/oak
-    roughness: 0.65,
-    metalness: 0.15,
+  // 2. Shallow azure coastal shelf
+  const shelfMat = new THREE.MeshStandardMaterial({
+    color: 0x0284c7,
+    roughness: 0.25,
+    metalness: 0.2,
+    transparent: true,
+    opacity: 0.75,
   });
+  const shelf = new THREE.Mesh(new THREE.RingGeometry(18.2, 24.5, 6), shelfMat);
+  shelf.rotation.x = -Math.PI / 2;
+  shelf.rotation.z = Math.PI / 6;
+  shelf.position.y = 0.05;
+  shelf.receiveShadow = true;
+  group.add(shelf);
 
-  // Hexagonal wooden rim segments with actual height/thickness
-  const frameGeom = new THREE.CylinderGeometry(25.5, 26.2, 1.3, 6);
-  const innerCutterGeom = new THREE.CylinderGeometry(19.2, 19.2, 1.6, 6);
-  void innerCutterGeom;
-
-  // Outer solid wooden frame ring
-  const frameBase = new THREE.Mesh(frameGeom, woodFrameMat);
-  frameBase.rotation.y = Math.PI / 6;
-  frameBase.position.y = 0.35;
-  frameBase.castShadow = true;
-  frameBase.receiveShadow = true;
-  group.add(frameBase);
-
-  // 3. Sandy Shoreline Shelf inside the frame
-  const sandShelfMat = new THREE.MeshStandardMaterial({
-    color: 0xd97706, // Warm golden shoreline sand
+  // 3. Sandy golden shoreline fringe
+  const beachMat = new THREE.MeshStandardMaterial({
+    color: 0xf59e0b,
     roughness: 0.95,
   });
-  const sandGeom = new THREE.CylinderGeometry(19.2, 19.2, 0.4, 6);
-  const sandShelf = new THREE.Mesh(sandGeom, sandShelfMat);
-  sandShelf.rotation.y = Math.PI / 6;
-  sandShelf.position.y = 0.55;
-  sandShelf.receiveShadow = true;
-  group.add(sandShelf);
+  const beach = new THREE.Mesh(new THREE.RingGeometry(18.0, 18.6, 6), beachMat);
+  beach.rotation.x = -Math.PI / 2;
+  beach.rotation.z = Math.PI / 6;
+  beach.position.y = 0.08;
+  beach.receiveShadow = true;
+  group.add(beach);
 
   return group;
 }

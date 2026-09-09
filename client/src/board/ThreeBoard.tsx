@@ -9,7 +9,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { PersonalSnapshot } from '../types';
 import { hexToPixel, parseHexId, PIPS } from '@catan/shared';
 import {
-  create3DTabletopAndFrame,
+  createOceanBase,
   createCityMesh,
   createDesertProps,
   createFieldsProps,
@@ -464,9 +464,9 @@ export const ThreeBoard = memo(function ThreeBoard({
           hitMeshes.push({ mesh: hitMesh, kind: 'vertex', id: vid });
         }
       }
-      // --- H. Real 3D Solid Beveled Wooden Board Frame & Tabletop ---
-      const tabletopAndFrame = create3DTabletopAndFrame();
-      boardGroup.add(tabletopAndFrame);
+      // --- H. Real Ocean Sea Base & Shallow Coastal Shelf ---
+      const oceanBase = createOceanBase();
+      boardGroup.add(oceanBase);
     }
 
     // Initial build
