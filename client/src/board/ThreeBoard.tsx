@@ -290,46 +290,6 @@ export const ThreeBoard = memo(function ThreeBoard({
         }
         boardGroup.add(hexObj);
       }
-      // --- B. 3D Miniature Harbor Ports & Natural Flowing River Inlets ---
-      // Create procedural flowing water ripple texture
-      const riverCanvas = document.createElement('canvas');
-      riverCanvas.width = 128;
-      riverCanvas.height = 128;
-      const rCtx = riverCanvas.getContext('2d')!;
-      const rGrad = rCtx.createLinearGradient(0, 0, 0, 128);
-      rGrad.addColorStop(0, '#06b6d4');
-      rGrad.addColorStop(0.5, '#38bdf8');
-      rGrad.addColorStop(1, '#0284c7');
-      rCtx.fillStyle = rGrad;
-      rCtx.fillRect(0, 0, 128, 128);
-      rCtx.strokeStyle = 'rgba(255,255,255,0.4)';
-      rCtx.lineWidth = 3;
-      for (let y = 12; y < 128; y += 24) {
-        rCtx.beginPath();
-        rCtx.moveTo(0, y);
-        rCtx.bezierCurveTo(32, y + 6, 96, y - 6, 128, y);
-        rCtx.stroke();
-      }
-      const riverWaterTex = new THREE.CanvasTexture(riverCanvas);
-      riverWaterTex.wrapS = THREE.RepeatWrapping;
-      riverWaterTex.wrapT = THREE.RepeatWrapping;
-      riverWaterTex.repeat.set(1, 2);
-
-      const riverWaterMat = new THREE.MeshStandardMaterial({
-        map: riverWaterTex,
-        color: 0x06b6d4,
-        roughness: 0.08,
-        metalness: 0.35,
-        transparent: true,
-        opacity: 0.76, // Beautifully balanced with 80% tile opacity
-        depthWrite: false,
-      });
-      (scene as unknown as { __riverTex?: THREE.CanvasTexture }).__riverTex = riverWaterTex;
-      const riverBankMat = new THREE.MeshStandardMaterial({
-        color: 0xd97706,
-        roughness: 0.9,
-      });
-
       for (const [eid, harbor] of Object.entries(board.harbors)) {
         const endpoints = board.topology.edgeEndpoints[eid];
         if (!endpoints) continue;
@@ -341,34 +301,39 @@ export const ThreeBoard = memo(function ThreeBoard({
         const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT, pa.y * SCALE);
         const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT, pb.y * SCALE);
         const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-
-        // Direction pointing outward into the sea
         const dirFromCenter = new THREE.Vector3(mid.x, 0, mid.z).normalize();
+        const harborCenter = new THREE.Vector3().addVectors(mid, dirFromCenter.clone().multiplyScalar(2.6));
 
-        // Natural coastal river inlet bay
-        const inlet = new THREE.Group();
-        inlet.position.copy(mid);
-        inlet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
+        // Dual angled wooden bridge piers extending from vertex A and vertex B to harborCenter (matching reference image!)
+        const bridgeMat = new THREE.MeshStandardMaterial({
+          color: 0x26150b, // Dark walnut wood matching reference image!
+          roughness: 0.85,
+        });
 
-        // Turquoise river channel cutting into the coast
-        const waterChannel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.14, 3.2), riverWaterMat);
-        waterChannel.position.set(0, -0.32, 1.2);
-        inlet.add(waterChannel);
+        // Pier 1: from p1 to harborCenter
+        const dir1 = new THREE.Vector3().subVectors(harborCenter, p1);
+        const len1 = dir1.length();
+        const pier1 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, len1 * 0.95), bridgeMat);
+        pier1.position.addVectors(p1, harborCenter).multiplyScalar(0.5);
+        pier1.position.y = HEX_HEIGHT + 0.04;
+        pier1.rotation.set(0, Math.atan2(dir1.x, dir1.z), 0);
+        pier1.castShadow = true;
+        boardGroup.add(pier1);
 
-        // Sandy bank berms on left and right
-        const bankL = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.28, 10), riverBankMat);
-        bankL.position.set(-1.3, -0.2, 1.2);
-        inlet.add(bankL);
+        // Pier 2: from p2 to harborCenter
+        const dir2 = new THREE.Vector3().subVectors(harborCenter, p2);
+        const len2 = dir2.length();
+        const pier2 = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, len2 * 0.95), bridgeMat);
+        pier2.position.addVectors(p2, harborCenter).multiplyScalar(0.5);
+        pier2.position.y = HEX_HEIGHT + 0.04;
+        pier2.rotation.set(0, Math.atan2(dir2.x, dir2.z), 0);
+        pier2.castShadow = true;
+        boardGroup.add(pier2);
 
-        const bankR = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.28, 10), riverBankMat);
-        bankR.position.set(1.3, -0.2, 1.2);
-        inlet.add(bankR);
-
-        boardGroup.add(inlet);
-
-        // 3D Wooden Pier, Moored Ship, and Camera-Facing Sprite Badge
+        // Circular Harbor Disc and Moored Boat at harborCenter
         const port = createHarborPortMesh(harbor);
-        port.position.copy(mid);
+        port.position.copy(harborCenter);
+        port.position.y = HEX_HEIGHT + 0.04;
         port.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
         boardGroup.add(port);
       }
@@ -801,12 +766,6 @@ export const ThreeBoard = memo(function ThreeBoard({
 
       // Gentle water ripple rotation
       foam.rotation.z = elapsed * 0.05;
-
-      // Animated flowing river water toward the ocean
-      const riverTex = (scene as unknown as { __riverTex?: THREE.CanvasTexture }).__riverTex;
-      if (riverTex) {
-        riverTex.offset.y -= 0.007;
-      }
 
       // Pulsing glow on hover preview
       if (hoverGroup.children.length > 0) {
