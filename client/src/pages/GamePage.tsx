@@ -162,6 +162,7 @@ export function GamePage(): React.JSX.Element {
           legalEdges={legalEdges}
           legalHexes={legalHexes}
           pulseHexes={pulseHexes}
+          rolling={rolling}
           onVertexClick={onVertexClick}
           onEdgeClick={onEdgeClick}
           onHexClick={onHexClick}

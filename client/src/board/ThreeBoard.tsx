@@ -25,6 +25,7 @@ import {
   SCALE,
   TERRAIN_COLORS,
 } from './threeUtils';
+import { createDiceTrayMesh, createDieMesh, getDieTargetRotation } from './threeDice';
 
 export interface ThreeBoardProps {
   snap: PersonalSnapshot;
@@ -32,6 +33,7 @@ export interface ThreeBoardProps {
   legalEdges?: Set<string>;
   legalHexes?: Set<string>;
   pulseHexes?: Set<string>;
+  rolling?: boolean;
   onVertexClick?: (vertex: number) => void;
   onEdgeClick?: (edge: string) => void;
   onHexClick?: (hex: string) => void;
@@ -42,6 +44,7 @@ export const ThreeBoard = memo(function ThreeBoard({
   legalVertices,
   legalEdges,
   legalHexes,
+  rolling,
   onVertexClick,
   onEdgeClick,
   onHexClick,
@@ -50,11 +53,13 @@ export const ThreeBoard = memo(function ThreeBoard({
   const [cameraMode, setCameraMode] = useState<'3d' | 'top'>('3d');
 
   // Stable ref holders for props accessed during mouse events/animations.
+  const diceMeshesRef = useRef<{ die1: THREE.Mesh; die2: THREE.Mesh } | null>(null);
   const propsRef = useRef({
     snap,
     legalVertices,
     legalEdges,
     legalHexes,
+    rolling,
     onVertexClick,
     onEdgeClick,
     onHexClick,
@@ -64,14 +69,13 @@ export const ThreeBoard = memo(function ThreeBoard({
     legalVertices,
     legalEdges,
     legalHexes,
+    rolling,
     onVertexClick,
     onEdgeClick,
     onHexClick,
   };
-
-  const controlsRef = useRef<OrbitControls | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-
+  const controlsRef = useRef<OrbitControls | null>(null);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -235,15 +239,23 @@ export const ThreeBoard = memo(function ThreeBoard({
           hexObj.add(props);
         }
 
-        // Number token
+        // Recessed circular token well bezel in the tile top
         if (hexData.token !== null) {
+          const wellRingGeom = new THREE.RingGeometry(1.24, 1.48, 32);
+          const wellRingMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.8 });
+          const wellRing = new THREE.Mesh(wellRingGeom, wellRingMat);
+          wellRing.rotation.x = -Math.PI / 2;
+          wellRing.position.y = HEX_HEIGHT + 0.01;
+          hexObj.add(wellRing);
+
+          // Number token sitting flush inside the well
           const pips = PIPS[hexData.token] ?? 0;
           const tokenTex = getNumberTokenTexture(hexData.token, pips);
           const tokenTopMat = new THREE.MeshBasicMaterial({ map: tokenTex });
-          const tokenSideMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.5 });
-          const tokenGeom = new THREE.CylinderGeometry(1.25, 1.25, 0.18, 32);
+          const tokenSideMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.4 });
+          const tokenGeom = new THREE.CylinderGeometry(1.24, 1.24, 0.16, 32);
           const tokenMesh = new THREE.Mesh(tokenGeom, [tokenSideMat, tokenTopMat, tokenSideMat]);
-          tokenMesh.position.y = HEX_HEIGHT + 0.12;
+          tokenMesh.position.y = HEX_HEIGHT + 0.08;
           tokenMesh.castShadow = true;
           hexObj.add(tokenMesh);
         }
@@ -415,6 +427,32 @@ export const ThreeBoard = memo(function ThreeBoard({
           hitMeshes.push({ mesh: hitMesh, kind: 'vertex', id: vid });
         }
       }
+      // --- H. Hexagonal Coastal Interlocking Ocean Frame ---
+      const frameGeom = new THREE.RingGeometry(18.5, 23.5, 6);
+      const frameMat = new THREE.MeshStandardMaterial({
+        color: 0x075985,
+        roughness: 0.35,
+        metalness: 0.25,
+      });
+      const frame = new THREE.Mesh(frameGeom, frameMat);
+      frame.rotation.x = -Math.PI / 2;
+      frame.rotation.z = Math.PI / 6;
+      frame.position.y = 0.08;
+      frame.receiveShadow = true;
+      boardGroup.add(frame);
+
+      // --- I. 3D Wooden Rolling Tray & Animated Dice ---
+      const tray = createDiceTrayMesh();
+      tray.position.set(16.5, 0, 13.5);
+      boardGroup.add(tray);
+
+      const die1 = createDieMesh(1.15);
+      const die2 = createDieMesh(1.15);
+      die1.position.set(15.7, 0.7, 13.5);
+      die2.position.set(17.3, 0.7, 13.5);
+      boardGroup.add(die1);
+      boardGroup.add(die2);
+      diceMeshesRef.current = { die1, die2 };
     }
 
     // Initial build
@@ -474,6 +512,41 @@ export const ThreeBoard = memo(function ThreeBoard({
 
       // Gentle water ripple rotation
       foam.rotation.z = elapsed * 0.05;
+
+      // 3D Dice physics & tumble animation
+      if (diceMeshesRef.current) {
+        const { die1, die2 } = diceMeshesRef.current;
+        const isRolling = propsRef.current.rolling;
+        const currentDice = propsRef.current.snap.dice;
+        const val1 = currentDice?.die1 ?? 4;
+        const val2 = currentDice?.die2 ?? 2;
+        const targetRot1 = getDieTargetRotation(val1);
+        const targetRot2 = getDieTargetRotation(val2);
+
+        if (isRolling) {
+          // Rapid 3D tumble + bounce
+          die1.rotation.x += 0.35;
+          die1.rotation.y += 0.45;
+          die1.rotation.z += 0.25;
+          die1.position.y = 1.2 + Math.abs(Math.sin(elapsed * 18)) * 1.5;
+
+          die2.rotation.x += 0.42;
+          die2.rotation.y += 0.38;
+          die2.rotation.z += 0.32;
+          die2.position.y = 1.2 + Math.abs(Math.cos(elapsed * 16)) * 1.5;
+        } else {
+          // Smoothly interpolate to settled orientation
+          die1.rotation.x = THREE.MathUtils.lerp(die1.rotation.x, targetRot1.x, 0.15);
+          die1.rotation.y = THREE.MathUtils.lerp(die1.rotation.y, targetRot1.y, 0.15);
+          die1.rotation.z = THREE.MathUtils.lerp(die1.rotation.z, targetRot1.z, 0.15);
+          die1.position.y = THREE.MathUtils.lerp(die1.position.y, 0.7, 0.15);
+
+          die2.rotation.x = THREE.MathUtils.lerp(die2.rotation.x, targetRot2.x, 0.15);
+          die2.rotation.y = THREE.MathUtils.lerp(die2.rotation.y, targetRot2.y, 0.15);
+          die2.rotation.z = THREE.MathUtils.lerp(die2.rotation.z, targetRot2.z, 0.15);
+          die2.position.y = THREE.MathUtils.lerp(die2.position.y, 0.7, 0.15);
+        }
+      }
 
       controls.update();
       renderer.render(scene, camera);
