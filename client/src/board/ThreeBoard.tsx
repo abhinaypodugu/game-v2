@@ -89,8 +89,8 @@ export const ThreeBoard = memo(function ThreeBoard({
 
     // 1. Scene & Renderer setup
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#071828');
-    scene.fog = new THREE.FogExp2('#071828', 0.0035);
+    scene.background = new THREE.Color('#38bdf8'); // Liquid water lake sky blue!
+    scene.fog = new THREE.FogExp2('#38bdf8', 0.0022); // Atmospheric sunlit lake haze
 
     const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 800);
     camera.position.set(0, 36, 32);
@@ -117,10 +117,10 @@ export const ThreeBoard = memo(function ThreeBoard({
     controlsRef.current = controls;
 
     // 3. Lighting
-    const ambientLight = new THREE.AmbientLight(0xfff8ee, 1.2);
+    const ambientLight = new THREE.AmbientLight(0xf0f9ff, 1.40);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfff5e6, 2.4);
+    const sunLight = new THREE.DirectionalLight(0xfffbeb, 2.6);
     sunLight.position.set(24, 45, 18);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
@@ -134,17 +134,17 @@ export const ThreeBoard = memo(function ThreeBoard({
     sunLight.shadow.bias = -0.0003;
     scene.add(sunLight);
 
-    // Ocean cyan bounce light
-    const oceanLight = new THREE.DirectionalLight(0x38bdf8, 0.5);
+    // Lake sky blue ambient bounce light
+    const oceanLight = new THREE.DirectionalLight(0x38bdf8, 0.65);
     oceanLight.position.set(-20, -10, -20);
     scene.add(oceanLight);
 
-    // 4. Ocean
+    // 4. Liquid Water Lake Basin
     const oceanGeom = new THREE.CylinderGeometry(200, 200, 2.0, 64);
     const oceanMat = new THREE.MeshStandardMaterial({
-      color: 0x093354,
-      roughness: 0.15,
-      metalness: 0.35,
+      color: 0x0284c7, // Radiant liquid water lake sky blue
+      roughness: 0.10,
+      metalness: 0.28,
     });
     const ocean = new THREE.Mesh(oceanGeom, oceanMat);
     ocean.position.y = -0.6;
@@ -171,11 +171,11 @@ export const ThreeBoard = memo(function ThreeBoard({
     const riverGeom = new THREE.RingGeometry(19.3, 25.6, 64);
     riverFlowTex = getRiverFlowTexture();
     const riverMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
+      color: 0x0ea5e9, // Liquid flowing stream
       map: riverFlowTex,
       transparent: true,
-      opacity: 0.88,
-      roughness: 0.12,
+      opacity: 0.85,
+      roughness: 0.10,
       metalness: 0.25,
       side: THREE.DoubleSide,
     });
@@ -208,13 +208,11 @@ export const ThreeBoard = memo(function ThreeBoard({
       id: number | string;
     }> = [];
 
-    // Reusable Materials (80% tactile opacity with depthWrite for crystalline depth)
+    // Solid architectural quarry stone masonry for elevated building blocks
     const hexSideMat = new THREE.MeshStandardMaterial({
-      color: 0x947250,
+      color: 0x3d3126, // Solid building foundation masonry
       roughness: 0.85,
-      transparent: true,
-      opacity: 0.80,
-      depthWrite: true,
+      flatShading: true,
     });
     const beaconMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.85 });
     const beaconRingMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
@@ -258,9 +256,6 @@ export const ThreeBoard = memo(function ThreeBoard({
           color: col.top,
           roughness: col.rough,
           flatShading: true,
-          transparent: true,
-          opacity: 0.80,
-          depthWrite: true,
         });
         const materials = [hexSideMat, topMat, hexSideMat];
         const hexGeom = new THREE.CylinderGeometry(HEX_RADIUS, HEX_BASE_RADIUS, HEX_HEIGHT, 6);
@@ -412,6 +407,8 @@ export const ThreeBoard = memo(function ThreeBoard({
         color: 0x382012, // Dark walnut timber frame border
         roughness: 0.85,
         flatShading: true,
+        transparent: true,
+        opacity: 0.90,
         polygonOffset: true,
         polygonOffsetFactor: -1,
         polygonOffsetUnits: -1,
@@ -419,8 +416,11 @@ export const ThreeBoard = memo(function ThreeBoard({
       const unbuiltTrailMat = new THREE.MeshStandardMaterial({
         color: 0xd99864, // Warm golden-amber oak wood tone
         map: getWoodPathwayTexture(),
-        roughness: 0.75,
+        roughness: 0.72,
         flatShading: true,
+        transparent: true,
+        opacity: 0.84, // A little bit transparent as requested!
+        depthWrite: true,
         polygonOffset: true,
         polygonOffsetFactor: -2,
         polygonOffsetUnits: -2,
@@ -488,8 +488,11 @@ export const ThreeBoard = memo(function ThreeBoard({
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
         color: 0xd99864, // Warm circular timber deck
         map: getWoodPlazaTexture(),
-        roughness: 0.75,
+        roughness: 0.72,
         flatShading: true,
+        transparent: true,
+        opacity: 0.84, // Slightly transparent wooden plaza!
+        depthWrite: true,
         polygonOffset: true,
         polygonOffsetFactor: -3,
         polygonOffsetUnits: -3,

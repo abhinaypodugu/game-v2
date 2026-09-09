@@ -12,10 +12,10 @@ import * as THREE from 'three';
 import type { Harbor, Terrain } from '@catan/shared';
 
 export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D units
-export const HEX_RADIUS = 4.76;
-export const HEX_BASE_RADIUS = 4.80;
-export const HEX_HEIGHT = 1.70; // Elevated hex tile plateau height
-export const WELL_RADIUS = 1.70; // Sunken circular well for number tokens
+export const HEX_RADIUS = 4.40; // Calibrated for street canyon gap between hex building blocks
+export const HEX_BASE_RADIUS = 4.44;
+export const HEX_HEIGHT = 2.20; // Elevated solid building block height
+export const WELL_RADIUS = 1.65; // Sunken circular well for number tokens
 
 // ---------------------------------------------------------------------------
 // Materials & Palettes
@@ -63,31 +63,32 @@ export function getNumberTokenTexture(token: number, pips: number): THREE.Canvas
   ctx.fill();
 
   // Outer border ring
-  const isSixOrEight = token === 6 || token === 8;
-  ctx.strokeStyle = isSixOrEight ? '#dc2626' : '#475569';
+  // High-probability numbers: 6, 8, AND 10 in vivid red; all other numbers in bold solid black!
+  const isHighProb = token === 6 || token === 8 || token === 10;
+  ctx.strokeStyle = isHighProb ? '#dc2626' : '#000000';
   ctx.lineWidth = 26;
   ctx.stroke();
 
   // Inner subtle decorative circle
-  ctx.strokeStyle = isSixOrEight ? 'rgba(220,38,38,0.35)' : 'rgba(71,85,105,0.35)';
+  ctx.strokeStyle = isHighProb ? 'rgba(220,38,38,0.35)' : 'rgba(0,0,0,0.20)';
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.arc(size / 2, size / 2, size / 2 - 40, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Number text: massive, bold font!
+  // Number text: bold pure black for standard numbers, bold red for 8, 10, 6!
   ctx.font = 'bold 210px Rubik, sans-serif';
-  ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
+  ctx.fillStyle = isHighProb ? '#dc2626' : '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(token), size / 2, size / 2 - 32);
 
-  // Dot pips: large bold probability dots!
+  // Dot pips: red for 6, 8, 10; solid pure black for all others!
   const dotCount = pips;
   const dotSpacing = 36;
   const startX = size / 2 - ((dotCount - 1) * dotSpacing) / 2;
   const dotY = size / 2 + 120;
-  ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
+  ctx.fillStyle = isHighProb ? '#dc2626' : '#000000';
 
   for (let i = 0; i < dotCount; i++) {
     ctx.beginPath();
@@ -98,7 +99,7 @@ export function getNumberTokenTexture(token: number, pips: number): THREE.Canvas
     ctx.beginPath();
     ctx.arc(startX + i * dotSpacing - 3, dotY - 3, 4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
+    ctx.fillStyle = isHighProb ? '#dc2626' : '#000000';
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -995,8 +996,9 @@ export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
   ctx.stroke();
 
   // 4. Ratio text (bold tile-colored heading: "2:1" or "3:1")
+  // 4. Ratio text (solid pure black for all harbor numbers: "2:1" or "3:1"!)
   ctx.font = 'bold 74px Rubik, sans-serif';
-  ctx.fillStyle = bgColor;
+  ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(title, size / 2, size / 2 - 44);
@@ -1187,14 +1189,14 @@ export function createHarborPortMesh(harbor: Harbor): THREE.Group {
 export function createOceanBase(): THREE.Group {
   const group = new THREE.Group();
 
-  // Expansive deep turquoise/navy ocean water basin (radius 200 supports wide zoom out)
+  // Expansive sunny liquid water lake basin
   const oceanMat = new THREE.MeshStandardMaterial({
-    color: 0x052f52,
-    roughness: 0.15,
-    metalness: 0.35,
+    color: 0x0284c7, // Radiant liquid water lake sky blue
+    roughness: 0.10,
+    metalness: 0.28,
   });
-  const ocean = new THREE.Mesh(new THREE.CylinderGeometry(200, 200, 2.0, 64), oceanMat);
-  ocean.position.y = -1.0;
+  const ocean = new THREE.Mesh(new THREE.CylinderGeometry(240, 240, 2.0, 64), oceanMat);
+  ocean.position.y = -0.90;
   ocean.receiveShadow = true;
   group.add(ocean);
 
