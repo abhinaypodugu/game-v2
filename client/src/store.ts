@@ -246,3 +246,6 @@ export function bootstrapSessionRejoin(): void {
     useStore.setState({ session });
   }
 }
+if (import.meta.env.DEV) {
+  (window as unknown as { __catanStore?: typeof useStore }).__catanStore = useStore;
+}

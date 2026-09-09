@@ -92,9 +92,9 @@ export function RoomPage(): React.JSX.Element {
             {room.players.map((p) => (
               <div
                 key={p.seatIndex}
-                className={`flex items-center justify-between rounded-lg bg-[#0a4986] px-4 py-3 shadow-[0_2px_4px_rgba(0,0,0,0.2)] ${
-                  p.connected ? '' : 'opacity-60'
-                }`}
+                className={`flex items-center justify-between rounded-xl border border-amber-700/40 bg-gradient-to-b from-[#fffdf7] to-[#ede3cd] px-4 py-3 text-[#3b2a15] shadow-[0_4px_12px_rgba(0,0,0,0.45)] transition hover:shadow-[0_6px_16px_rgba(0,0,0,0.5)] ${
+                  p.connected ? '' : 'opacity-60 saturate-50'
+                } ${me?.ready === true && p.seatIndex === session.seatIndex ? 'ring-2 ring-emerald-500/70' : ''}`}
                 data-testid={`seat-${p.seatIndex}`}
               >
                 <div className="flex items-center gap-3">
@@ -110,7 +110,7 @@ export function RoomPage(): React.JSX.Element {
                 </div>
                 <div className="flex items-center gap-3">
                   {p.color === null ? (
-                    <div className="flex gap-1.5" data-testid={`color-picker-${p.seatIndex}`}>
+                    <div className="flex gap-2" data-testid={`color-picker-${p.seatIndex}`}>
                       {PLAYER_COLORS.filter((c) => !takenColors.has(c)).map((c) => (
                         <button
                           key={c}
@@ -118,7 +118,7 @@ export function RoomPage(): React.JSX.Element {
                           aria-label={`Pick ${c}`}
                           disabled={p.seatIndex !== session.seatIndex}
                           onClick={() => pickColor(c)}
-                          className="h-5 w-5 rounded-full border border-black/50 disabled:opacity-40"
+                          className="h-6 w-6 rounded-full border-2 border-black/40 shadow-md transition hover:scale-125 disabled:opacity-40 disabled:hover:scale-100"
                           style={{ background: PIECE_COLORS[c]!.main }}
                         />
                       ))}

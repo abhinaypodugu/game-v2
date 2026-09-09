@@ -5,7 +5,8 @@ import { useStore } from '../store';
 
 export function ReconnectBanner(): React.JSX.Element | null {
   const connected = useStore((s) => s.connected);
-  if (connected) return null;
+  const session = useStore((s) => s.session);
+  if (connected || session?.roomCode === 'DEMO' || !session) return null;
   return (
     <div
       className="pointer-events-none fixed inset-x-0 top-0 z-[70] bg-[#ef3f2a] py-2 text-center font-bold text-white"
@@ -39,9 +40,13 @@ export function TurnTimer(): React.JSX.Element | null {
   const timer = useStore((s) => s.timer);
   const game = useStore((s) => s.game);
 
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
+    const update = (): void => {
+      setNow(Date.now());
+    };
+    update();
+    const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
   }, []);
 
