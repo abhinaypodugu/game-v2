@@ -1,13 +1,25 @@
-// 3D procedural assets for Catan board matching the official 3D Asset Reference Sheet.
-// Complete set of 3D assets:
+// 3D procedural asset library for Catan matching the official 3D Asset Reference Sheet.
+// Assets:
 // - Terrain Hex Tiles with consistent wooden/beveled hex frames.
-// - Reference Biomes: radiating golden wheat, dense pine forest, stacked brick cubes,
-//   craggy snow peaks, 4 grazing sheep, desert dunes with crater.
+// - Reference Biomes:
+//   * Fields (Wheat): radiating curved golden wheat sheaves.
+//   * Forest (Wood): dense cluster of faceted evergreen pine trees.
+//   * Hills (Brick): terracotta clay quarry with two 3x2 stacked red brick cube piles.
+//   * Mountains (Ore): cool slate ground with craggy faceted rock peaks and white snowcaps.
+//   * Pasture (Sheep): lush green meadow with exactly 4 miniature 3D sheep.
+//   * Desert: concentric rippled sand dunes, 2 saguaro cacti, and central crater.
 // - Standard circular wooden vertex nodes and connecting road slots.
-// - Solid player pieces: classic wooden cottage settlement, stepped double-gabled city keep,
-//   and flat beveled wooden road bars (in Red, Blue, Orange, White/Gray).
-// - 3D Harbour ports with glowing dock lanterns, color-coded sailboats, and trade medallions.
-// - Robber pawn on textured crater base.
+// - Solid player pieces (Red, Blue, Orange, White/Gray):
+//   * Settlement: classic geometric wooden cottage with pitched gable roof.
+//   * City: stepped L-shaped fortress building (higher tower + attached lower wing).
+//   * Road: solid, clean, beveled rectangular bar lying flat in the slot.
+// - Harbour / Port Assets:
+//   * Wooden pier dock platform with railings and glowing warm lanterns.
+//   * Moored sailboat with color-coded sails (Wheat: yellow, Wood: green, Brick: red,
+//     Ore: white/gray, Sheep: light green, Generic: blue).
+//   * Circular wooden trade medallion with dark rim showing 2:1 or 3:1 + silhouette icon.
+// - Robber: smooth black pawn standing in a textured sandy crater base.
+// - Ocean: deep royal blue water basin.
 
 import * as THREE from 'three';
 import type { Harbor, Terrain } from '@catan/shared';
@@ -18,8 +30,18 @@ export const HEX_BASE_RADIUS = 4.78;
 export const HEX_HEIGHT = 1.15;
 export const WELL_RADIUS = 1.68; // Sunken circular well for number tokens
 
+// 30-degree rotation so hex top and bottom edges are horizontal (matching reference image)
+const COS30 = Math.cos(Math.PI / 6);
+const SIN30 = Math.sin(Math.PI / 6);
+
+export function toBoard3D(x2d: number, y2d: number): { x: number; z: number } {
+  const rx = (x2d * COS30 - y2d * SIN30) * SCALE;
+  const rz = (x2d * SIN30 + y2d * COS30) * SCALE;
+  return { x: rx, z: rz };
+}
+
 // ---------------------------------------------------------------------------
-// Materials & Palettes matching 3D Asset Reference Sheet
+// Materials & Palettes directly from the 3D Asset Reference Sheet
 // ---------------------------------------------------------------------------
 
 export const TERRAIN_COLORS: Record<Terrain, { top: string; side: string; rough: number }> = {
@@ -36,7 +58,7 @@ export const PLAYER_3D_COLORS: Record<string, { main: number; dark: number; ligh
   red: { main: 0xdc2626, dark: 0x991b1b, light: 0xef4444 },
   blue: { main: 0x2563eb, dark: 0x1d4ed8, light: 0x3b82f6 },
   orange: { main: 0xea580c, dark: 0xc2410c, light: 0xf97316 },
-  white: { main: 0xcbd5e1, dark: 0x94a3b8, light: 0xf1f5f9 }, // White/Gray matching reference
+  white: { main: 0xcbd5e1, dark: 0x94a3b8, light: 0xf1f5f9 }, // White/Gray matching reference sheet
   green: { main: 0x16a34a, dark: 0x15803d, light: 0x22c55e },
   brown: { main: 0x854d0e, dark: 0x543007, light: 0xa16207 },
 };
@@ -77,18 +99,18 @@ export function getNumberTokenTexture(token: number, pips: number): THREE.Canvas
   ctx.arc(size / 2, size / 2, size / 2 - 40, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Number text (massive, bold font: red for 6 and 8, dark slate/black for others)
-  ctx.font = 'bold 210px Rubik, sans-serif';
+  // Number text: bold red for 6 and 8, bold dark black for others
+  ctx.font = 'bold 160px sans-serif';
   ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(token), size / 2, size / 2 - 32);
+  ctx.fillText(String(token), size / 2, size / 2 - 42);
 
-  // Dot pips: large bold probability dots
+  // Dot pips: clear probability dots
   const dotCount = pips;
   const dotSpacing = 36;
   const startX = size / 2 - ((dotCount - 1) * dotSpacing) / 2;
-  const dotY = size / 2 + 120;
+  const dotY = size / 2 + 96;
   ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
 
   for (let i = 0; i < dotCount; i++) {
@@ -120,17 +142,16 @@ export function createForestProps(): THREE.Group {
   const darkPineMat = new THREE.MeshStandardMaterial({ color: 0x144d28, roughness: 0.8, flatShading: true });
   const lightPineMat = new THREE.MeshStandardMaterial({ color: 0x1b5e32, roughness: 0.8, flatShading: true });
 
-  // Dense cluster of pine trees encircling the central token well
   const treePositions = [
-    { x: -2.3, z: -1.2, s: 0.85 },
-    { x: -1.4, z: -2.1, s: 0.95 },
-    { x: 0.2, z: -2.4, s: 1.0 },
-    { x: 1.8, z: -1.8, s: 0.85 },
-    { x: 2.3, z: -0.2, s: 0.8 },
-    { x: 2.1, z: 1.4, s: 0.9 },
-    { x: 0.8, z: 2.3, s: 0.95 },
-    { x: -1.2, z: 2.2, s: 0.85 },
-    { x: -2.2, z: 0.8, s: 0.9 },
+    { x: -2.3, z: -1.2, s: 0.9 },
+    { x: -1.4, z: -2.1, s: 1.0 },
+    { x: 0.2, z: -2.4, s: 1.05 },
+    { x: 1.8, z: -1.8, s: 0.9 },
+    { x: 2.3, z: -0.2, s: 0.85 },
+    { x: 2.1, z: 1.4, s: 0.95 },
+    { x: 0.8, z: 2.3, s: 1.0 },
+    { x: -1.2, z: 2.2, s: 0.9 },
+    { x: -2.2, z: 0.8, s: 0.95 },
   ];
 
   for (const { x, z, s } of treePositions) {
@@ -141,7 +162,7 @@ export function createForestProps(): THREE.Group {
     trunk.castShadow = true;
     tree.add(trunk);
 
-    // Multi-tiered geometric pine cones
+    // Cones tiers
     const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.75 * s, 0.9 * s, 6), darkPineMat);
     c1.position.y = 0.7 * s;
     c1.castShadow = true;
@@ -203,11 +224,11 @@ export function createMountainProps(): THREE.Group {
   const snowMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4, flatShading: true });
 
   const peaks = [
-    { x: -1.3, z: -1.6, r: 1.4, h: 2.1, s: 5 },
-    { x: 0.8, z: -1.9, r: 1.2, h: 1.8, s: 5 },
-    { x: 2.1, z: -0.6, r: 1.1, h: 1.5, s: 5 },
-    { x: 1.5, z: 1.6, r: 1.2, h: 1.7, s: 5 },
-    { x: -1.6, z: 1.5, r: 1.3, h: 1.9, s: 5 },
+    { x: -1.3, z: -1.6, r: 1.4, h: 2.2, s: 5 },
+    { x: 0.8, z: -1.9, r: 1.2, h: 1.9, s: 5 },
+    { x: 2.1, z: -0.6, r: 1.1, h: 1.6, s: 5 },
+    { x: 1.5, z: 1.6, r: 1.2, h: 1.8, s: 5 },
+    { x: -1.6, z: 1.5, r: 1.3, h: 2.0, s: 5 },
   ];
 
   for (const p of peaks) {
@@ -379,8 +400,8 @@ export function createSettlementMesh(color: string): THREE.Group {
   const mat = new THREE.MeshStandardMaterial({
     color: pal.main,
     emissive: pal.main,
-    emissiveIntensity: 0.35,
-    roughness: 0.3,
+    emissiveIntensity: 0.25,
+    roughness: 0.35,
     metalness: 0.1,
   });
 
@@ -408,8 +429,8 @@ export function createCityMesh(color: string): THREE.Group {
   const mat = new THREE.MeshStandardMaterial({
     color: pal.main,
     emissive: pal.main,
-    emissiveIntensity: 0.4,
-    roughness: 0.3,
+    emissiveIntensity: 0.3,
+    roughness: 0.35,
     metalness: 0.1,
   });
 
