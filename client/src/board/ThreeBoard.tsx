@@ -170,20 +170,20 @@ export const ThreeBoard = memo(function ThreeBoard({
     scene.add(innerBank);
 
     // 2. Surrounding Flowing River Channel (bordering the entire elevated island perimeter!)
-    const riverGeom = new THREE.RingGeometry(19.3, 25.6, 64);
+    const riverGeom = new THREE.RingGeometry(18.0, 25.5, 64);
     riverFlowTex = getRiverFlowTexture();
     const riverMat = new THREE.MeshStandardMaterial({
       color: 0x0ea5e9, // Liquid flowing stream
       map: riverFlowTex,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.88,
       roughness: 0.10,
       metalness: 0.25,
       side: THREE.DoubleSide,
     });
     const river = new THREE.Mesh(riverGeom, riverMat);
     river.rotation.x = -Math.PI / 2;
-    river.position.y = -0.02; // Sits below street level (STREET_Y = 0.04)
+    river.position.y = 0.01; // Flowing river stream right at water level
     river.receiveShadow = true;
     scene.add(river);
 
@@ -334,44 +334,11 @@ export const ThreeBoard = memo(function ThreeBoard({
         }
         boardGroup.add(hexObj);
       }
-      // --- B. 3D Miniature Harbor Ports & Natural Flowing River Inlets ---
-      // Create procedural flowing water ripple texture
-      const riverCanvas = document.createElement('canvas');
-      riverCanvas.width = 128;
-      riverCanvas.height = 128;
-      const rCtx = riverCanvas.getContext('2d')!;
-      const rGrad = rCtx.createLinearGradient(0, 0, 0, 128);
-      rGrad.addColorStop(0, '#06b6d4');
-      rGrad.addColorStop(0.5, '#38bdf8');
-      rGrad.addColorStop(1, '#0284c7');
-      rCtx.fillStyle = rGrad;
-      rCtx.fillRect(0, 0, 128, 128);
-      rCtx.strokeStyle = 'rgba(255,255,255,0.4)';
-      rCtx.lineWidth = 3;
-      for (let y = 12; y < 128; y += 24) {
-        rCtx.beginPath();
-        rCtx.moveTo(0, y);
-        rCtx.bezierCurveTo(32, y + 6, 96, y - 6, 128, y);
-        rCtx.stroke();
-      }
-      const riverWaterTex = new THREE.CanvasTexture(riverCanvas);
-      riverWaterTex.wrapS = THREE.RepeatWrapping;
-      riverWaterTex.wrapT = THREE.RepeatWrapping;
-      riverWaterTex.repeat.set(1, 2);
-
-      const riverWaterMat = new THREE.MeshStandardMaterial({
-        map: riverWaterTex,
-        color: 0x06b6d4,
-        roughness: 0.08,
-        metalness: 0.35,
-        transparent: true,
-        opacity: 0.76, // Beautifully balanced with 80% tile opacity
-        depthWrite: false,
-      });
-      (scene as unknown as { __riverTex?: THREE.CanvasTexture }).__riverTex = riverWaterTex;
-      const riverBankMat = new THREE.MeshStandardMaterial({
-        color: 0xd97706,
-        roughness: 0.9,
+      // --- B. 3D Miniature Harbor Ports on Extended Wooden Bridge Piers ---
+      // Wooden bridge material for harbor piers
+      const bridgeMat = new THREE.MeshStandardMaterial({
+        color: 0x3d2415, // Dark walnut timber bridge
+        roughness: 0.85,
       });
 
       for (const [eid, harbor] of Object.entries(board.harbors)) {
@@ -386,33 +353,39 @@ export const ThreeBoard = memo(function ThreeBoard({
         const p2 = new THREE.Vector3(pb.x * SCALE, STREET_Y, pb.y * SCALE);
         const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
 
-        // Direction pointing outward into the sea
+        // Direction pointing outward into the river/sea
         const dirFromCenter = new THREE.Vector3(mid.x, 0, mid.z).normalize();
 
-        // Natural coastal river inlet bay
-        const inlet = new THREE.Group();
-        inlet.position.copy(mid);
-        inlet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
+        // Extend harbor out by a bridge into the water so it NEVER overlaps settlements at vertices p1 and p2!
+        const harborCenter = new THREE.Vector3().addVectors(mid, dirFromCenter.clone().multiplyScalar(3.0));
+        harborCenter.y = STREET_Y;
 
-        // Turquoise river channel cutting into the coast
-        const waterChannel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.14, 3.2), riverWaterMat);
-        waterChannel.position.set(0, -0.32, 1.2);
-        inlet.add(waterChannel);
+        // Wooden Bridge Pier 1 (connecting coastal vertex A to harbor dock)
+        const dir1 = new THREE.Vector3().subVectors(harborCenter, p1);
+        const len1 = dir1.length();
+        const bridge1 = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, len1 * 0.98), bridgeMat);
+        bridge1.position.addVectors(p1, harborCenter).multiplyScalar(0.5);
+        bridge1.position.y = STREET_Y + 0.04;
+        bridge1.rotation.set(0, Math.atan2(dir1.x, dir1.z), 0);
+        bridge1.castShadow = true;
+        bridge1.receiveShadow = true;
+        boardGroup.add(bridge1);
 
-        // Sandy bank berms on left and right
-        const bankL = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.28, 10), riverBankMat);
-        bankL.position.set(-1.3, -0.2, 1.2);
-        inlet.add(bankL);
+        // Wooden Bridge Pier 2 (connecting coastal vertex B to harbor dock)
+        const dir2 = new THREE.Vector3().subVectors(harborCenter, p2);
+        const len2 = dir2.length();
+        const bridge2 = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, len2 * 0.98), bridgeMat);
+        bridge2.position.addVectors(p2, harborCenter).multiplyScalar(0.5);
+        bridge2.position.y = STREET_Y + 0.04;
+        bridge2.rotation.set(0, Math.atan2(dir2.x, dir2.z), 0);
+        bridge2.castShadow = true;
+        bridge2.receiveShadow = true;
+        boardGroup.add(bridge2);
 
-        const bankR = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.28, 10), riverBankMat);
-        bankR.position.set(1.3, -0.2, 1.2);
-        inlet.add(bankR);
-
-        boardGroup.add(inlet);
-
-        // 3D Wooden Pier, Moored Ship, and Camera-Facing Sprite Badge
+        // 3D Wooden Pier, Moored Ship, Cargo Crates, and Trade Badge placed at the end of the bridge!
         const port = createHarborPortMesh(harbor);
-        port.position.copy(mid);
+        port.position.copy(harborCenter);
+        port.position.y = STREET_Y - 0.02;
         port.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
         boardGroup.add(port);
       }

@@ -739,7 +739,7 @@ export function createSettlementMesh(color: string): THREE.Group {
   const smoke2 = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), smokeMat);
   smoke2.position.set(0.50, 3.65, 0.28);
   group.add(smoke2);
-
+  group.scale.setScalar(0.74); // Calibrated to 1x base scale (down from 1.35x)
   return group;
 }
 
@@ -821,7 +821,7 @@ export function createCityMesh(color: string): THREE.Group {
   const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.50), flagMat);
   flag.position.set(-0.25, 5.35, 0);
   group.add(flag);
-
+  group.scale.setScalar(0.74); // Calibrated to 1x base scale (down from 1.35x)
   return group;
 }
 
@@ -850,27 +850,27 @@ export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: stri
   const len = Math.hypot(dx, dz);
   const angle = Math.atan2(dx, dz);
 
-  // 1. Dark chassis in deep player dark tone (width: 0.52)
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, len * 0.94), chassisMat);
-  chassis.position.y = 0.08;
+  // 1. Dark chassis in deep player dark tone (increased weight: 0.60, taller: 0.30)
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.30, len * 0.94), chassisMat);
+  chassis.position.y = 0.15;
   chassis.castShadow = true;
   chassis.receiveShadow = true;
   group.add(chassis);
 
-  // 2. Vibrant glowing player core beam (width: 0.42)
-  const core = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, len * 0.90), coreMat);
-  core.position.y = 0.10;
+  // 2. Vibrant glowing player core beam (weight: 0.50, taller: 0.26)
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.26, len * 0.90), coreMat);
+  core.position.y = 0.19;
   core.castShadow = true;
   group.add(core);
 
-  // 3. Center highlight stripe in player light tone (zero white!)
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, len * 0.86), highlightMat);
-  stripe.position.y = 0.18;
+  // 3. Center highlight stripe in player light tone (prominent height!)
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, len * 0.86), highlightMat);
+  stripe.position.y = 0.34;
   group.add(stripe);
 
-  // Position at midpoint and orient flat on ground
+  // Position at midpoint and orient flat on ground, elevated so road stands proud
   group.position.addVectors(p1, p2).multiplyScalar(0.5);
-  group.position.y += 0.06;
+  group.position.y += 0.10;
   group.rotation.set(0, angle, 0); // Flat on ground!
   return group;
 }
