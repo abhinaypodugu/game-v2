@@ -501,144 +501,166 @@ export function createDesertProps(): THREE.Group {
 // 3D Playing Pieces Builders
 // ---------------------------------------------------------------------------
 
-/** Settlement: high-contrast gabled cottage with white plaster walls, vibrant player roof & foundation ring */
+/** Settlement: bold, chunky gabled cottage with dark beveled plinth, white plaster walls, glossy player roof & chimney smoke */
 export function createSettlementMesh(color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
-  const roofMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.35 });
-  const baseRingMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.4 });
-  const chimneyMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.7 });
-  const eavesMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.9 });
 
-  // Player-colored circular foundation ring at base
-  const baseRing = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.95, 0.16, 16), baseRingMat);
-  baseRing.position.y = 0.08;
-  baseRing.receiveShadow = true;
-  group.add(baseRing);
+  const plinthMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+  const playerRingMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.2, metalness: 0.15 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const timberMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.18, metalness: 0.15 });
+  const chimneyMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.6 });
+  const smokeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.9, transparent: true, opacity: 0.85 });
 
-  // Crisp white plaster cottage walls
-  const walls = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.75, 0.88), wallMat);
-  walls.position.y = 0.48;
+  // 1. Dark charcoal beveled base plinth
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.18, 0.22, 16), plinthMat);
+  plinth.position.y = 0.11;
+  plinth.receiveShadow = true;
+  group.add(plinth);
+
+  // Saturated player color ring around the plinth
+  const playerRing = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.06, 16), playerRingMat);
+  playerRing.rotation.x = -Math.PI / 2;
+  playerRing.position.y = 0.23;
+  group.add(playerRing);
+
+  // 2. Crisp white cottage walls
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.88, 1.05), wallMat);
+  walls.position.y = 0.66;
   walls.castShadow = true;
   walls.receiveShadow = true;
   group.add(walls);
 
-  // Dark wood eaves trim under roof
-  const eaves = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.08, 0.96), eavesMat);
-  eaves.position.y = 0.85;
-  group.add(eaves);
+  // Dark corner timber framing
+  const cornerTrim = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 1.1), timberMat);
+  cornerTrim.position.y = 1.08;
+  group.add(cornerTrim);
 
-  // High-saturation player color roof
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.85, 0.65, 4), roofMat);
+  // 3. Bold, glossy player-colored gable roof
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.05, 0.78, 4), roofMat);
   roof.rotation.y = Math.PI / 4;
-  roof.position.y = 1.18;
+  roof.position.y = 1.46;
   roof.castShadow = true;
   group.add(roof);
 
-  // Brick chimney with soot
-  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.45, 0.2), chimneyMat);
-  chimney.position.set(0.26, 1.25, 0.18);
+  // 4. Chimney with smoke puff
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.55, 0.24), chimneyMat);
+  chimney.position.set(0.34, 1.55, 0.22);
   chimney.castShadow = true;
   group.add(chimney);
+
+  const smoke = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), smokeMat);
+  smoke.position.set(0.34, 1.9, 0.22);
+  group.add(smoke);
 
   return group;
 }
 
-/** City: majestic double-tower fortified castle keep with battlements and heraldic pennant */
+/** City: imposing double-tower castle keep with dark plinth, limestone walls, player battlements, and heraldic pennant */
 export function createCityMesh(color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
-  const stoneMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.5 });
-  const playerAccentMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.35 });
-  const darkTrimMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
-  const goldPoleMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.3, metalness: 0.7 });
 
-  // City base foundation in player color
-  const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.18, 1.2), playerAccentMat);
-  base.position.y = 0.09;
-  base.receiveShadow = true;
-  group.add(base);
+  const plinthMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.4 });
+  const playerAccentMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.18, metalness: 0.15 });
+  const windowMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+  const goldPoleMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.2, metalness: 0.8 });
 
-  // Main castle keep (white ashlar limestone)
-  const keep = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.1, 0.95), stoneMat);
-  keep.position.set(0.2, 0.65, 0);
+  // 1. Dark charcoal plinth foundation
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.24, 1.7), plinthMat);
+  plinth.position.y = 0.12;
+  plinth.receiveShadow = true;
+  group.add(plinth);
+
+  // Saturated player color foundation border
+  const playerBorder = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.28, 1.6), playerAccentMat);
+  playerBorder.position.y = 0.14;
+  group.add(playerBorder);
+
+  // 2. Main castle keep (limestone)
+  const keep = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.3, 1.15), stoneMat);
+  keep.position.set(0.24, 0.85, 0);
   keep.castShadow = true;
   keep.receiveShadow = true;
   group.add(keep);
 
-  // Keep battlements in player color
-  const keepBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.25, 1.02), playerAccentMat);
-  keepBattlements.position.set(0.2, 1.28, 0);
+  // Keep battlements in vibrant player color
+  const keepBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.32, 1.25), playerAccentMat);
+  keepBattlements.position.set(0.24, 1.58, 0);
   keepBattlements.castShadow = true;
   group.add(keepBattlements);
 
-  // High observation tower
-  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.72, 1.85, 0.72), stoneMat);
-  tower.position.set(-0.45, 0.95, 0);
+  // 3. Tall observation tower
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.85, 2.2, 0.85), stoneMat);
+  tower.position.set(-0.55, 1.25, 0);
   tower.castShadow = true;
   tower.receiveShadow = true;
   group.add(tower);
 
-  // Tower battlements in player color
-  const towerBattlements = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.28, 0.82), playerAccentMat);
-  towerBattlements.position.set(-0.45, 1.95, 0);
+  // Tower battlements in vibrant player color
+  const towerBattlements = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.35, 0.98), playerAccentMat);
+  towerBattlements.position.set(-0.55, 2.45, 0);
   towerBattlements.castShadow = true;
   group.add(towerBattlements);
 
   // Conical turret roof
-  const turretRoof = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.65, 8), playerAccentMat);
-  turretRoof.position.set(-0.45, 2.35, 0);
+  const turretRoof = new THREE.Mesh(new THREE.ConeGeometry(0.68, 0.75, 8), playerAccentMat);
+  turretRoof.position.set(-0.55, 2.95, 0);
   turretRoof.castShadow = true;
   group.add(turretRoof);
 
-  // Gold flagpole with player heraldic pennant
-  const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), goldPoleMat);
-  flagPole.position.set(-0.45, 2.85, 0);
+  // 4. Gold flagpole with waving heraldic pennant
+  const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 6), goldPoleMat);
+  flagPole.position.set(-0.55, 3.5, 0);
   group.add(flagPole);
 
   const flagMat = new THREE.MeshBasicMaterial({ color: pal.main, side: THREE.DoubleSide });
-  const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.55, 0.32), flagMat);
-  flag.position.set(-0.16, 2.95, 0);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.65, 0.38), flagMat);
+  flag.position.set(-0.2, 3.65, 0);
   group.add(flag);
 
-  // Portcullis gate (dark iron)
-  const gate = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.5, 0.1), darkTrimMat);
-  gate.position.set(0.2, 0.35, 0.5);
-  group.add(gate);
+  // 5. Arched windows with warm lantern glow
+  const win1 = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.34), windowMat);
+  win1.position.set(0.24, 0.9, 0.59);
+  group.add(win1);
 
   return group;
 }
 
-/** Road: high-contrast dual-tone timber log with dark chassis and vibrant player core */
+/** Road: bold, chunky timber bar with dark contrast chassis, glossy player core, and white highlight */
 export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
-  const chassisMat = new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.9 });
-  const coreMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.35 });
-  const highlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+  const chassisMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+  const coreMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.18, metalness: 0.15 });
+  const highlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
 
   const dir = new THREE.Vector3().subVectors(p2, p1);
   const len = dir.length();
 
-  // 1. Dark outer timber chassis (creates clear boundary against any terrain)
-  const chassis = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, len * 0.92, 8), chassisMat);
+  // 1. Dark outer chassis (provides razor-sharp contrast against any terrain)
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.32, len * 0.95), chassisMat);
   chassis.castShadow = true;
+  chassis.receiveShadow = true;
   group.add(chassis);
 
-  // 2. Vibrant player-colored core
-  const core = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, len * 0.94, 8), coreMat);
+  // 2. Bold, glossy player-colored inner timber bar
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.28, len * 0.92), coreMat);
+  core.position.y = 0.04;
   core.castShadow = true;
   group.add(core);
 
-  // 3. Crisp white center highlight strip
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.08, len * 0.88), highlightMat);
-  stripe.position.x = 0.22;
+  // 3. Crisp white center highlight stripe
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, len * 0.88), highlightMat);
+  stripe.position.y = 0.18;
   group.add(stripe);
 
   group.position.addVectors(p1, p2).multiplyScalar(0.5);
-  group.position.y += 0.26;
-  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  group.position.y += 0.32;
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.normalize());
   return group;
 }
 

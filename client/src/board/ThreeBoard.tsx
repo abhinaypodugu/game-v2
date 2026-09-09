@@ -25,6 +25,7 @@ import {
   HEX_BASE_RADIUS,
   HEX_HEIGHT,
   HEX_RADIUS,
+  PLAYER_3D_COLORS,
   SCALE,
   TERRAIN_COLORS,
 } from './threeUtils';
@@ -282,7 +283,17 @@ export const ThreeBoard = memo(function ThreeBoard({
         boardGroup.add(hexObj);
       }
 
-      // --- B. Harbors ---
+      // --- B. 3D Miniature Harbor Ports & Natural River Inlets ---
+      const riverWaterMat = new THREE.MeshStandardMaterial({
+        color: 0x06b6d4, // Sparkling turquoise river estuary
+        roughness: 0.1,
+        metalness: 0.35,
+      });
+      const riverBankMat = new THREE.MeshStandardMaterial({
+        color: 0xd97706, // Sandy riverbank
+        roughness: 0.9,
+      });
+
       for (const [eid, harbor] of Object.entries(board.harbors)) {
         const endpoints = board.topology.edgeEndpoints[eid];
         if (!endpoints) continue;
@@ -297,21 +308,44 @@ export const ThreeBoard = memo(function ThreeBoard({
 
         // Direction pointing outward into the sea
         const dirFromCenter = new THREE.Vector3(mid.x, 0, mid.z).normalize();
+
+        // Natural coastal river inlet bay
+        const inlet = new THREE.Group();
+        inlet.position.copy(mid);
+        inlet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
+
+        // Turquoise river channel cutting into the coast
+        const waterChannel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.14, 3.2), riverWaterMat);
+        waterChannel.position.set(0, -0.32, 1.2);
+        inlet.add(waterChannel);
+
+        // Sandy bank berms on left and right
+        const bankL = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.28, 10), riverBankMat);
+        bankL.position.set(-1.3, -0.2, 1.2);
+        inlet.add(bankL);
+
+        const bankR = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.28, 10), riverBankMat);
+        bankR.position.set(1.3, -0.2, 1.2);
+        inlet.add(bankR);
+
+        boardGroup.add(inlet);
+
+        // 3D Wooden Pier, Moored Ship, and Camera-Facing Sprite Badge
         const port = createHarborPortMesh(harbor);
         port.position.copy(mid);
         port.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
         boardGroup.add(port);
       }
       // --- C. Road Path Bed Strips Along All Edges ---
-      const trailMat = new THREE.MeshStandardMaterial({
-        color: 0x57534e,
+      const unbuiltTrailMat = new THREE.MeshStandardMaterial({
+        color: 0x44403c, // Dark stone gravel
         roughness: 0.95,
         flatShading: true,
       });
       const legalTrailMat = new THREE.MeshStandardMaterial({
         color: 0xfacc15,
         emissive: 0xca8a04,
-        emissiveIntensity: 0.4,
+        emissiveIntensity: 0.45,
         roughness: 0.5,
       });
 
@@ -327,8 +361,19 @@ export const ThreeBoard = memo(function ThreeBoard({
         const len = dir.length();
 
         const isLegal = propsRef.current.legalEdges?.has(eid);
-        const trailGeom = new THREE.BoxGeometry(0.38, 0.06, len * 0.92);
-        const trail = new THREE.Mesh(trailGeom, isLegal ? legalTrailMat : trailMat);
+        const ownerSeat = roads[eid];
+        let edgeMat = isLegal ? legalTrailMat : unbuiltTrailMat;
+        if (ownerSeat !== undefined) {
+          const pCol = playerColorMap.get(ownerSeat) ?? 'white';
+          const hexCol = PLAYER_3D_COLORS[pCol]?.main ?? 0xffffff;
+          edgeMat = new THREE.MeshStandardMaterial({
+            color: hexCol,
+            roughness: 0.35,
+          });
+        }
+
+        const trailGeom = new THREE.BoxGeometry(0.48, 0.08, len * 0.94);
+        const trail = new THREE.Mesh(trailGeom, edgeMat);
         trail.position.addVectors(p1, p2).multiplyScalar(0.5);
         trail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.normalize());
         trail.receiveShadow = true;
@@ -336,16 +381,16 @@ export const ThreeBoard = memo(function ThreeBoard({
       }
 
       // --- D. Settlement Foundation Plazas at All Vertices ---
-      const plazaGeom = new THREE.CylinderGeometry(0.72, 0.82, 0.12, 16);
+      const plazaGeom = new THREE.CylinderGeometry(0.88, 1.0, 0.16, 16);
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
-        color: 0x64748b,
+        color: 0x475569, // Dark slate foundation
         roughness: 0.85,
         flatShading: true,
       });
       const legalPlazaMat = new THREE.MeshStandardMaterial({
         color: 0xfacc15,
         emissive: 0xca8a04,
-        emissiveIntensity: 0.45,
+        emissiveIntensity: 0.5,
         roughness: 0.4,
       });
 
@@ -354,8 +399,19 @@ export const ThreeBoard = memo(function ThreeBoard({
         const vx = pos.x * SCALE;
         const vz = pos.y * SCALE;
         const isLegal = propsRef.current.legalVertices?.has(vid);
-        const plaza = new THREE.Mesh(plazaGeom, isLegal ? legalPlazaMat : unbuiltPlazaMat);
-        plaza.position.set(vx, HEX_HEIGHT + 0.06, vz);
+        const building = buildings[vid];
+        let plazaMat = isLegal ? legalPlazaMat : unbuiltPlazaMat;
+        if (building !== undefined) {
+          const pCol = playerColorMap.get(building.seat) ?? 'white';
+          const hexCol = PLAYER_3D_COLORS[pCol]?.main ?? 0xffffff;
+          plazaMat = new THREE.MeshStandardMaterial({
+            color: hexCol,
+            roughness: 0.35,
+          });
+        }
+
+        const plaza = new THREE.Mesh(plazaGeom, plazaMat);
+        plaza.position.set(vx, HEX_HEIGHT + 0.08, vz);
         plaza.receiveShadow = true;
         boardGroup.add(plaza);
       }
