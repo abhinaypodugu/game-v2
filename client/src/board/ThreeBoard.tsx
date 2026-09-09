@@ -410,7 +410,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           });
         }
 
-        const trailGeom = new THREE.BoxGeometry(1.12, 0.06, len * 0.94);
+        const trailGeom = new THREE.BoxGeometry(1.02, 0.06, len * 0.94);
         const trail = new THREE.Mesh(trailGeom, edgeMat);
         trail.position.addVectors(p1, p2).multiplyScalar(0.5);
         trail.position.y = HEX_HEIGHT + 0.04;
@@ -420,7 +420,7 @@ export const ThreeBoard = memo(function ThreeBoard({
       }
 
       // --- D. Settlement Foundation Plazas at All Vertices ---
-      const plazaGeom = new THREE.CylinderGeometry(1.25, 1.45, 0.18, 16);
+      const plazaGeom = new THREE.CylinderGeometry(1.12, 1.30, 0.16, 16);
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
         color: 0x475569, // Dark slate foundation
         roughness: 0.85,
@@ -513,7 +513,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const angle = Math.atan2(dx, dz);
 
           // Visual glowing ghost road (flat on the ground, 2x wide!)
-          const ghostGeom = new THREE.BoxGeometry(1.0, 0.32, len * 0.94);
+          const ghostGeom = new THREE.BoxGeometry(0.88, 0.30, len * 0.94);
           const ghost = new THREE.Mesh(ghostGeom, roadGhostMat);
           ghost.position.addVectors(p1, p2).multiplyScalar(0.5);
           ghost.position.y = HEX_HEIGHT + 0.22;
@@ -521,7 +521,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           boardGroup.add(ghost);
 
           // Fat raycast hit target
-          const hitGeom = new THREE.BoxGeometry(1.4, 0.7, len);
+          const hitGeom = new THREE.BoxGeometry(1.25, 0.65, len);
           const hitMesh = new THREE.Mesh(hitGeom, new THREE.MeshBasicMaterial({ visible: false }));
           hitMesh.position.copy(ghost.position);
           hitMesh.rotation.set(0, angle, 0);
@@ -641,7 +641,7 @@ export const ThreeBoard = memo(function ThreeBoard({
             hoverGroup.add(ghostSettlement);
 
             // Glowing rotating halo ring around the vertex (2x scale)
-            const halo = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.7, 24), hoverRingMat);
+            const halo = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.55, 24), hoverRingMat);
             halo.rotation.x = -Math.PI / 2;
             halo.position.set(vx, HEX_HEIGHT + 0.16, vz);
             hoverGroup.add(halo);
@@ -660,7 +660,7 @@ export const ThreeBoard = memo(function ThreeBoard({
               const len = Math.hypot(dx, dz);
               const angle = Math.atan2(dx, dz);
 
-              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.34, len * 0.94), hoverGlowMat);
+              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.32, len * 0.94), hoverGlowMat);
               ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
               ghostRoad.position.y = HEX_HEIGHT + 0.28;
               ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
