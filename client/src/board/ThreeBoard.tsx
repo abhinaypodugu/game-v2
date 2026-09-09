@@ -337,18 +337,18 @@ export const ThreeBoard = memo(function ThreeBoard({
         port.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
         boardGroup.add(port);
       }
-      // --- C. Road Path Bed Strips Along All Edges (Black Border + Soft Greyish-White Path) ---
+      // --- C. Road Tracks Along All Edges (Dark Walnut Border + Cream Birch Slot) ---
       const trailBorderMat = new THREE.MeshStandardMaterial({
-        color: 0x09090b, // Crisp black border outline
-        roughness: 0.9,
+        color: 0x26150b, // Dark walnut beveled edge
+        roughness: 0.85,
         flatShading: true,
         polygonOffset: true,
         polygonOffsetFactor: -1,
         polygonOffsetUnits: -1,
       });
       const unbuiltTrailMat = new THREE.MeshStandardMaterial({
-        color: 0xd1d5db, // Soft greyish white limestone
-        roughness: 0.85,
+        color: 0xe2d9c8, // Cream birch wood slot
+        roughness: 0.7,
         flatShading: true,
         polygonOffset: true,
         polygonOffsetFactor: -2,
@@ -357,8 +357,8 @@ export const ThreeBoard = memo(function ThreeBoard({
       const legalTrailMat = new THREE.MeshStandardMaterial({
         color: 0xfacc15,
         emissive: 0xca8a04,
-        emissiveIntensity: 0.45,
-        roughness: 0.5,
+        emissiveIntensity: 0.5,
+        roughness: 0.4,
         polygonOffset: true,
         polygonOffsetFactor: -2,
         polygonOffsetUnits: -2,
@@ -385,7 +385,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const hexCol = PLAYER_3D_COLORS[pCol]?.main ?? 0xffffff;
           edgeMat = new THREE.MeshStandardMaterial({
             color: hexCol,
-            roughness: 0.35,
+            roughness: 0.3,
             polygonOffset: true,
             polygonOffsetFactor: -2,
             polygonOffsetUnits: -2,
@@ -397,12 +397,12 @@ export const ThreeBoard = memo(function ThreeBoard({
         trailGroup.position.y = HEX_HEIGHT + 0.04;
         trailGroup.rotation.set(0, angle, 0);
 
-        // 1. Black outer border frame (crisp outline against all tiles)
+        // Dark walnut outer border frame
         const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.05, len * 0.94), trailBorderMat);
         borderMesh.receiveShadow = true;
         trailGroup.add(borderMesh);
 
-        // 2. Soft greyish-white inner pathbed (or player color if built!)
+        // Cream birch inner road slot
         const innerTrail = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.07, len * 0.92), edgeMat);
         innerTrail.position.y = 0.01;
         innerTrail.receiveShadow = true;
@@ -411,12 +411,12 @@ export const ThreeBoard = memo(function ThreeBoard({
         boardGroup.add(trailGroup);
       }
 
-      // --- D. Settlement Foundation Plazas at All Vertices (Black Border + Greyish-White Plaza) ---
-      const plazaBorderGeom = new THREE.CylinderGeometry(1.28, 1.48, 0.16, 16);
-      const innerPlazaGeom = new THREE.CylinderGeometry(1.06, 1.22, 0.20, 16);
+      // --- D. Standard Circular Wooden Nodes at All Vertices (Matching Reference Sheet) ---
+      const plazaBorderGeom = new THREE.CylinderGeometry(1.15, 1.35, 0.16, 24);
+      const innerPlazaGeom = new THREE.CylinderGeometry(0.96, 1.15, 0.20, 24);
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
-        color: 0xd1d5db, // Soft greyish white carved stone
-        roughness: 0.85,
+        color: 0xe2d9c8, // Cream birch wood top face
+        roughness: 0.7,
         flatShading: true,
         polygonOffset: true,
         polygonOffsetFactor: -3,
@@ -444,7 +444,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const hexCol = PLAYER_3D_COLORS[pCol]?.main ?? 0xffffff;
           plazaMat = new THREE.MeshStandardMaterial({
             color: hexCol,
-            roughness: 0.35,
+            roughness: 0.3,
             polygonOffset: true,
             polygonOffsetFactor: -3,
             polygonOffsetUnits: -3,
@@ -454,12 +454,12 @@ export const ThreeBoard = memo(function ThreeBoard({
         const plazaGroup = new THREE.Group();
         plazaGroup.position.set(vx, HEX_HEIGHT + 0.06, vz);
 
-        // 1. Black outer border ring
+        // Dark walnut outer border ring
         const borderRing = new THREE.Mesh(plazaBorderGeom, trailBorderMat);
         borderRing.receiveShadow = true;
         plazaGroup.add(borderRing);
 
-        // 2. Soft greyish-white inner stone plaza disc (or player color if built!)
+        // Cream birch inner node disc (Standard Node)
         const innerPlaza = new THREE.Mesh(innerPlazaGeom, plazaMat);
         innerPlaza.position.y = 0.02;
         innerPlaza.receiveShadow = true;
