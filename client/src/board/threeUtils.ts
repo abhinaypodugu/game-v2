@@ -15,7 +15,7 @@ export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D unit
 export const HEX_RADIUS = 4.76;
 export const HEX_BASE_RADIUS = 4.80;
 export const HEX_HEIGHT = 1.15;
-export const WELL_RADIUS = 1.35; // Sunken circular well for number tokens
+export const WELL_RADIUS = 1.70; // Sunken circular well for number tokens
 
 // ---------------------------------------------------------------------------
 // Materials & Palettes
@@ -49,7 +49,7 @@ export function getNumberTokenTexture(token: number, pips: number): THREE.Canvas
   const cached = tokenTextureCache.get(token);
   if (cached) return cached;
 
-  const size = 256;
+  const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -59,44 +59,50 @@ export function getNumberTokenTexture(token: number, pips: number): THREE.Canvas
   // Background circle (parchment ivory)
   ctx.fillStyle = '#fefdfa';
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 8, 0, Math.PI * 2);
+  ctx.arc(size / 2, size / 2, size / 2 - 14, 0, Math.PI * 2);
   ctx.fill();
 
   // Outer border ring
   const isSixOrEight = token === 6 || token === 8;
-  ctx.strokeStyle = isSixOrEight ? '#dc2626' : '#64748b';
-  ctx.lineWidth = 12;
+  ctx.strokeStyle = isSixOrEight ? '#dc2626' : '#475569';
+  ctx.lineWidth = 26;
   ctx.stroke();
 
   // Inner subtle decorative circle
-  ctx.strokeStyle = isSixOrEight ? 'rgba(220,38,38,0.35)' : 'rgba(100,116,139,0.35)';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = isSixOrEight ? 'rgba(220,38,38,0.35)' : 'rgba(71,85,105,0.35)';
+  ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 20, 0, Math.PI * 2);
+  ctx.arc(size / 2, size / 2, size / 2 - 40, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Number text
-  ctx.font = 'bold 96px Rubik, sans-serif';
+  // Number text: massive, bold font!
+  ctx.font = 'bold 210px Rubik, sans-serif';
   ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(token), size / 2, size / 2 - 14);
+  ctx.fillText(String(token), size / 2, size / 2 - 32);
 
-  // Dot pips
+  // Dot pips: large bold probability dots!
   const dotCount = pips;
-  const dotSpacing = 17;
+  const dotSpacing = 36;
   const startX = size / 2 - ((dotCount - 1) * dotSpacing) / 2;
-  const dotY = size / 2 + 56;
+  const dotY = size / 2 + 120;
   ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
 
   for (let i = 0; i < dotCount; i++) {
     ctx.beginPath();
-    ctx.arc(startX + i * dotSpacing, dotY, 5.5, 0, Math.PI * 2);
+    ctx.arc(startX + i * dotSpacing, dotY, 12, 0, Math.PI * 2);
     ctx.fill();
+    // Inner dot highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(startX + i * dotSpacing - 3, dotY - 3, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
   }
 
   const texture = new THREE.CanvasTexture(canvas);
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
   tokenTextureCache.set(token, texture);
   return texture;
 }

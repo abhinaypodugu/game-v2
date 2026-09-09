@@ -169,7 +169,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     // Raycast hit targets map
     const hitMeshes: Array<{
       mesh: THREE.Object3D;
-      kind: 'vertex' | 'edge' | 'hex';
+      kind: 'vertex' | 'edge' | 'hex' | 'builtBuilding' | 'builtRoad';
       id: number | string;
     }> = [];
 
@@ -252,21 +252,21 @@ export const ThreeBoard = memo(function ThreeBoard({
 
         // Recessed circular token well bezel in the tile top
         if (hexData.token !== null) {
-          const wellRingGeom = new THREE.RingGeometry(1.24, 1.48, 32);
+          const wellRingGeom = new THREE.RingGeometry(1.65, 1.95, 32);
           const wellRingMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.8 });
           const wellRing = new THREE.Mesh(wellRingGeom, wellRingMat);
           wellRing.rotation.x = -Math.PI / 2;
           wellRing.position.y = HEX_HEIGHT + 0.01;
           hexObj.add(wellRing);
 
-          // Number token sitting flush inside the well
+          // Number token sitting flush inside the well (enlarged 3D disc!)
           const pips = PIPS[hexData.token] ?? 0;
           const tokenTex = getNumberTokenTexture(hexData.token, pips);
           const tokenTopMat = new THREE.MeshBasicMaterial({ map: tokenTex });
           const tokenSideMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.4 });
-          const tokenGeom = new THREE.CylinderGeometry(1.24, 1.24, 0.16, 32);
+          const tokenGeom = new THREE.CylinderGeometry(1.65, 1.65, 0.20, 32);
           const tokenMesh = new THREE.Mesh(tokenGeom, [tokenSideMat, tokenTopMat, tokenSideMat]);
-          tokenMesh.position.y = HEX_HEIGHT + 0.08;
+          tokenMesh.position.y = HEX_HEIGHT + 0.10;
           tokenMesh.castShadow = true;
           hexObj.add(tokenMesh);
         }
@@ -469,6 +469,7 @@ export const ThreeBoard = memo(function ThreeBoard({
         const color = playerColorMap.get(ownerSeat) ?? 'white';
         const road = createRoadMesh(p1, p2, color);
         boardGroup.add(road);
+        hitMeshes.push({ mesh: road, kind: 'builtRoad' as never, id: eid });
       }
 
       // --- F. Buildings (Settlements & Cities) ---
@@ -484,6 +485,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           building.type === 'city' ? createCityMesh(color) : createSettlementMesh(color);
         piece.position.set(vx, HEX_HEIGHT + 0.12, vz);
         boardGroup.add(piece);
+        hitMeshes.push({ mesh: piece, kind: 'builtBuilding' as never, id: vid });
       }
 
       const robberAxial = parseHexId(robber);
@@ -583,7 +585,17 @@ export const ThreeBoard = memo(function ThreeBoard({
       if (intersects.length === 0) return null;
 
       const hitObj = intersects[0]!.object;
-      return hitMeshes.find((h) => h.mesh === hitObj) ?? null;
+      return (
+        hitMeshes.find((h) => {
+          if (h.mesh === hitObj) return true;
+          let curr: THREE.Object3D | null = hitObj;
+          while (curr) {
+            if (curr === h.mesh) return true;
+            curr = curr.parent;
+          }
+          return false;
+        }) ?? null
+      );
     };
 
     const hoverGroup = new THREE.Group();
@@ -610,15 +622,29 @@ export const ThreeBoard = memo(function ThreeBoard({
       side: THREE.DoubleSide,
     });
 
+    let lastHoveredPiece: THREE.Object3D | null = null;
+
     const onPointerMove = (event: MouseEvent) => {
       const hit = getRaycastHit(event);
       container.style.cursor = hit ? 'pointer' : 'default';
+
+      // Restore prior hovered built piece if any
+      if (lastHoveredPiece && (!hit || (hit.mesh !== lastHoveredPiece && !hit.mesh.children.includes(lastHoveredPiece)))) {
+        lastHoveredPiece.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const m = (child as THREE.Mesh).material;
+            if (m && 'emissiveIntensity' in m) {
+              (m as THREE.MeshStandardMaterial).emissiveIntensity = 0.7;
+            }
+          }
+        });
+        lastHoveredPiece = null;
+      }
 
       // Clear prior hover preview
       while (hoverGroup.children.length > 0) {
         hoverGroup.remove(hoverGroup.children[0]!);
       }
-
       if (hit) {
         const { snap, legalVertices, legalEdges, legalHexes } = propsRef.current;
         const { board, you } = snap;
@@ -678,6 +704,23 @@ export const ThreeBoard = memo(function ThreeBoard({
           ring.rotation.z = Math.PI / 6;
           ring.position.set(hx, HEX_HEIGHT + 0.2, hz);
           hoverGroup.add(ring);
+        } else if (hit.kind === 'builtBuilding' || hit.kind === 'builtRoad') {
+          // Dynamic hover glow on built piece!
+          lastHoveredPiece = hit.mesh;
+          hit.mesh.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const m = (child as THREE.Mesh).material;
+              if (m && 'emissiveIntensity' in m) {
+                (m as THREE.MeshStandardMaterial).emissiveIntensity = 1.4;
+              }
+            }
+          });
+          if (hit.kind === 'builtBuilding') {
+            const halo = new THREE.Mesh(new THREE.RingGeometry(1.4, 2.0, 24), hoverRingMat);
+            halo.rotation.x = -Math.PI / 2;
+            halo.position.set(hit.mesh.position.x, HEX_HEIGHT + 0.14, hit.mesh.position.z);
+            hoverGroup.add(halo);
+          }
         }
       }
     };
