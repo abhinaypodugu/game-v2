@@ -116,12 +116,12 @@ export function createForestProps(): THREE.Group {
 
   // 6 trees arranged around the outer perimeter of the hex
   const treePositions = [
-    { x: -2.3, z: -1.2, s: 1.1 },
-    { x: -1.8, z: 1.8, s: 0.95 },
-    { x: 0, z: -2.6, s: 1.15 },
-    { x: 1.8, z: -1.8, s: 1.0 },
-    { x: 2.3, z: 1.2, s: 0.9 },
-    { x: 0.2, z: 2.5, s: 1.05 },
+    { x: -2.3, z: -1.2, s: 0.78 },
+    { x: -1.8, z: 1.8, s: 0.7 },
+    { x: 0, z: -2.6, s: 0.82 },
+    { x: 1.8, z: -1.8, s: 0.75 },
+    { x: 2.3, z: 1.2, s: 0.68 },
+    { x: 0.2, z: 2.5, s: 0.76 },
   ];
 
   for (const { x, z, s } of treePositions) {
@@ -244,9 +244,9 @@ export function createMountainProps(): THREE.Group {
 
   // 3 craggy mountain peaks clustered in the north
   const peaks = [
-    { x: -1.2, z: -1.6, r: 1.6, h: 2.9, s: 5 },
-    { x: 0.8, z: -1.9, r: 1.4, h: 2.6, s: 5 },
-    { x: 2.1, z: -0.6, r: 1.3, h: 2.2, s: 5 },
+    { x: -1.2, z: -1.6, r: 1.4, h: 2.1, s: 5 },
+    { x: 0.8, z: -1.9, r: 1.2, h: 1.8, s: 5 },
+    { x: 2.1, z: -0.6, r: 1.1, h: 1.5, s: 5 },
   ];
 
   for (const p of peaks) {
@@ -501,166 +501,192 @@ export function createDesertProps(): THREE.Group {
 // 3D Playing Pieces Builders
 // ---------------------------------------------------------------------------
 
-/** Settlement: bold, chunky gabled cottage with dark beveled plinth, white plaster walls, glossy player roof & chimney smoke */
+/** Settlement: towering, glowing gabled cottage (height ~4.0) with dark plinth, white walls, emissive player roof & chimney smoke */
 export function createSettlementMesh(color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
 
   const plinthMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
-  const playerRingMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.2, metalness: 0.15 });
+  const playerGlowMat = new THREE.MeshStandardMaterial({
+    color: pal.main,
+    emissive: pal.main,
+    emissiveIntensity: 0.65,
+    roughness: 0.18,
+    metalness: 0.15,
+  });
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
   const timberMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
-  const roofMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.18, metalness: 0.15 });
   const chimneyMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.6 });
-  const smokeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.9, transparent: true, opacity: 0.85 });
+  const smokeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.9, transparent: true, opacity: 0.9 });
 
   // 1. Dark charcoal beveled base plinth
-  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.18, 0.22, 16), plinthMat);
-  plinth.position.y = 0.11;
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.35, 0.3, 16), plinthMat);
+  plinth.position.y = 0.15;
   plinth.receiveShadow = true;
   group.add(plinth);
 
-  // Saturated player color ring around the plinth
-  const playerRing = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.06, 16), playerRingMat);
+  // Saturated glowing player color ring around the plinth
+  const playerRing = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.22, 16), playerGlowMat);
   playerRing.rotation.x = -Math.PI / 2;
-  playerRing.position.y = 0.23;
+  playerRing.position.y = 0.31;
   group.add(playerRing);
 
-  // 2. Crisp white cottage walls
-  const walls = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.88, 1.05), wallMat);
-  walls.position.y = 0.66;
+  // 2. Tall crisp white cottage walls
+  const walls = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.4, 1.2), wallMat);
+  walls.position.y = 1.0;
   walls.castShadow = true;
   walls.receiveShadow = true;
   group.add(walls);
 
   // Dark corner timber framing
-  const cornerTrim = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.08, 1.1), timberMat);
-  cornerTrim.position.y = 1.08;
+  const cornerTrim = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.1, 1.26), timberMat);
+  cornerTrim.position.y = 1.7;
   group.add(cornerTrim);
 
-  // 3. Bold, glossy player-colored gable roof
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.05, 0.78, 4), roofMat);
+  // 3. Steep, towering glowing player-colored gable roof
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.25, 1.35, 4), playerGlowMat);
   roof.rotation.y = Math.PI / 4;
-  roof.position.y = 1.46;
+  roof.position.y = 2.35;
   roof.castShadow = true;
   group.add(roof);
 
-  // 4. Chimney with smoke puff
-  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.55, 0.24), chimneyMat);
-  chimney.position.set(0.34, 1.55, 0.22);
+  // 4. Tall chimney with smoke puff (rising to height ~4.0)
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.9, 0.28), chimneyMat);
+  chimney.position.set(0.42, 2.5, 0.26);
   chimney.castShadow = true;
   group.add(chimney);
 
-  const smoke = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 8), smokeMat);
-  smoke.position.set(0.34, 1.9, 0.22);
+  const smoke = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), smokeMat);
+  smoke.position.set(0.42, 3.1, 0.26);
   group.add(smoke);
+
+  const smoke2 = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), smokeMat);
+  smoke2.position.set(0.48, 3.5, 0.26);
+  group.add(smoke2);
 
   return group;
 }
 
-/** City: imposing double-tower castle keep with dark plinth, limestone walls, player battlements, and heraldic pennant */
+/** City: imposing, monumental double-tower fortress (height ~5.5) with glowing battlements and heraldic pennant */
 export function createCityMesh(color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
 
   const plinthMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
   const stoneMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.4 });
-  const playerAccentMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.18, metalness: 0.15 });
+  const playerGlowMat = new THREE.MeshStandardMaterial({
+    color: pal.main,
+    emissive: pal.main,
+    emissiveIntensity: 0.7,
+    roughness: 0.18,
+    metalness: 0.15,
+  });
   const windowMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
   const goldPoleMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.2, metalness: 0.8 });
 
   // 1. Dark charcoal plinth foundation
-  const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.24, 1.7), plinthMat);
-  plinth.position.y = 0.12;
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.32, 1.9), plinthMat);
+  plinth.position.y = 0.16;
   plinth.receiveShadow = true;
   group.add(plinth);
 
-  // Saturated player color foundation border
-  const playerBorder = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.28, 1.6), playerAccentMat);
-  playerBorder.position.y = 0.14;
+  // Glowing player-colored border
+  const playerBorder = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.38, 1.8), playerGlowMat);
+  playerBorder.position.y = 0.19;
   group.add(playerBorder);
 
   // 2. Main castle keep (limestone)
-  const keep = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.3, 1.15), stoneMat);
-  keep.position.set(0.24, 0.85, 0);
+  const keep = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.8, 1.3), stoneMat);
+  keep.position.set(0.28, 1.25, 0);
   keep.castShadow = true;
   keep.receiveShadow = true;
   group.add(keep);
 
-  // Keep battlements in vibrant player color
-  const keepBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.32, 1.25), playerAccentMat);
-  keepBattlements.position.set(0.24, 1.58, 0);
+  // Keep battlements in radiant glowing player color
+  const keepBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.42, 1.45), playerGlowMat);
+  keepBattlements.position.set(0.28, 2.25, 0);
   keepBattlements.castShadow = true;
   group.add(keepBattlements);
 
-  // 3. Tall observation tower
-  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.85, 2.2, 0.85), stoneMat);
-  tower.position.set(-0.55, 1.25, 0);
+  // 3. Tall observation watchtower (rising to height ~3.6)
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3.2, 1.0), stoneMat);
+  tower.position.set(-0.65, 1.8, 0);
   tower.castShadow = true;
   tower.receiveShadow = true;
   group.add(tower);
 
-  // Tower battlements in vibrant player color
-  const towerBattlements = new THREE.Mesh(new THREE.BoxGeometry(0.98, 0.35, 0.98), playerAccentMat);
-  towerBattlements.position.set(-0.55, 2.45, 0);
+  // Tower battlements in glowing player color
+  const towerBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.48, 1.15), playerGlowMat);
+  towerBattlements.position.set(-0.65, 3.5, 0);
   towerBattlements.castShadow = true;
   group.add(towerBattlements);
 
-  // Conical turret roof
-  const turretRoof = new THREE.Mesh(new THREE.ConeGeometry(0.68, 0.75, 8), playerAccentMat);
-  turretRoof.position.set(-0.55, 2.95, 0);
+  // Conical turret roof (rising to height ~4.4)
+  const turretRoof = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.0, 8), playerGlowMat);
+  turretRoof.position.set(-0.65, 4.2, 0);
   turretRoof.castShadow = true;
   group.add(turretRoof);
 
-  // 4. Gold flagpole with waving heraldic pennant
-  const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 6), goldPoleMat);
-  flagPole.position.set(-0.55, 3.5, 0);
+  // 4. Gold flagpole with waving heraldic pennant (rising to height ~5.5!)
+  const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.4, 6), goldPoleMat);
+  flagPole.position.set(-0.65, 4.9, 0);
   group.add(flagPole);
 
   const flagMat = new THREE.MeshBasicMaterial({ color: pal.main, side: THREE.DoubleSide });
-  const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.65, 0.38), flagMat);
-  flag.position.set(-0.2, 3.65, 0);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.48), flagMat);
+  flag.position.set(-0.2, 5.15, 0);
   group.add(flag);
 
   // 5. Arched windows with warm lantern glow
-  const win1 = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.34), windowMat);
-  win1.position.set(0.24, 0.9, 0.59);
+  const win1 = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.42), windowMat);
+  win1.position.set(0.28, 1.3, 0.66);
   group.add(win1);
 
   return group;
 }
 
-/** Road: bold, chunky timber bar with dark contrast chassis, glossy player core, and white highlight */
+/** Road: thick, elevated, glowing timber highway with dark chassis, illuminated player core, and neon highlight */
 export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
   const chassisMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
-  const coreMat = new THREE.MeshStandardMaterial({ color: pal.main, roughness: 0.18, metalness: 0.15 });
-  const highlightMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
+  const coreMat = new THREE.MeshStandardMaterial({
+    color: pal.main,
+    emissive: pal.main,
+    emissiveIntensity: 0.65,
+    roughness: 0.18,
+    metalness: 0.15,
+  });
+  const highlightMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.8,
+    roughness: 0.2,
+  });
 
   const dir = new THREE.Vector3().subVectors(p2, p1);
   const len = dir.length();
 
-  // 1. Dark outer chassis (provides razor-sharp contrast against any terrain)
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.32, len * 0.95), chassisMat);
+  // 1. Thick dark outer chassis (width: 0.72, height: 0.46)
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.46, len * 0.95), chassisMat);
   chassis.castShadow = true;
   chassis.receiveShadow = true;
   group.add(chassis);
 
-  // 2. Bold, glossy player-colored inner timber bar
-  const core = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.28, len * 0.92), coreMat);
+  // 2. Radiant, glowing player-colored inner highway beam
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.42, len * 0.92), coreMat);
   core.position.y = 0.04;
   core.castShadow = true;
   group.add(core);
 
-  // 3. Crisp white center highlight stripe
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, len * 0.88), highlightMat);
-  stripe.position.y = 0.18;
+  // 3. Crisp illuminated white center highlight stripe
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, len * 0.88), highlightMat);
+  stripe.position.y = 0.25;
   group.add(stripe);
 
   group.position.addVectors(p1, p2).multiplyScalar(0.5);
-  group.position.y += 0.32;
-  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.normalize());
+  group.position.y += 0.44;
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
   return group;
 }
 
@@ -719,71 +745,88 @@ export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
   if (!ctx) throw new Error('2D canvas unavailable');
 
   const isGeneric = harbor.type === 'generic';
-  let bgColor = '#0284c7';
+  let bgColor = '#0284c7'; // Oceanic azure for 3:1 generic harbor
   let borderColor = '#38bdf8';
+  let title = '3:1';
+  let label = 'ANY';
   let icon = '⚓';
 
   if (!isGeneric) {
+    title = '2:1';
     switch (harbor.resource) {
       case 'wood':
-        bgColor = '#15803d';
-        borderColor = '#4ade80';
+        bgColor = TERRAIN_COLORS.forest.top; // Exact match to forest tile
+        borderColor = TERRAIN_COLORS.forest.side;
+        label = 'WOOD';
         icon = '🌲';
         break;
       case 'brick':
-        bgColor = '#c2410c';
-        borderColor = '#fb923c';
+        bgColor = TERRAIN_COLORS.hills.top; // Exact match to hills tile
+        borderColor = TERRAIN_COLORS.hills.side;
+        label = 'BRICK';
         icon = '🧱';
         break;
       case 'sheep':
-        bgColor = '#65a30d';
-        borderColor = '#a3e635';
+        bgColor = TERRAIN_COLORS.pasture.top; // Exact match to pasture tile
+        borderColor = TERRAIN_COLORS.pasture.side;
+        label = 'SHEEP';
         icon = '🐑';
         break;
       case 'wheat':
-        bgColor = '#b45309';
-        borderColor = '#fde047';
+        bgColor = TERRAIN_COLORS.fields.top; // Exact match to fields tile
+        borderColor = TERRAIN_COLORS.fields.side;
+        label = 'WHEAT';
         icon = '🌾';
         break;
       case 'ore':
-        bgColor = '#334155';
-        borderColor = '#94a3b8';
+        bgColor = TERRAIN_COLORS.mountains.top; // Exact match to mountains tile
+        borderColor = TERRAIN_COLORS.mountains.side;
+        label = 'ORE';
         icon = '⛰';
         break;
     }
   }
 
-  // Outer circular badge background with drop shadow
-  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  // 1. Outer circular badge background in exact tile color with soft shadow
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
   ctx.shadowBlur = 12;
   ctx.fillStyle = bgColor;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 12, 0, Math.PI * 2);
+  ctx.arc(size / 2, size / 2, size / 2 - 10, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
 
-  // Glowing border ring
+  // 2. Beveled border ring in tile side shade
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = 14;
   ctx.stroke();
 
-  // Inner white accent circle
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 4;
+  // 3. Inner cream parchment disc
+  ctx.fillStyle = '#fefdf8';
   ctx.beginPath();
   ctx.arc(size / 2, size / 2, size / 2 - 24, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Subtle inner gold/border accent ring
+  ctx.strokeStyle = bgColor;
+  ctx.lineWidth = 4;
   ctx.stroke();
 
-  // Ratio text (bold white with dark outline)
-  ctx.font = 'bold 84px Rubik, sans-serif';
-  ctx.fillStyle = '#ffffff';
+  // 4. Ratio text (bold tile-colored heading: "2:1" or "3:1")
+  ctx.font = 'bold 74px Rubik, sans-serif';
+  ctx.fillStyle = bgColor;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(isGeneric ? '3:1' : '2:1', size / 2, size / 2 - 26);
+  ctx.fillText(title, size / 2, size / 2 - 44);
 
-  // Icon emblem
-  ctx.font = '64px Rubik, sans-serif';
-  ctx.fillText(icon, size / 2, size / 2 + 48);
+  // 5. Center icon emblem matching tile
+  ctx.font = '56px Rubik, sans-serif';
+  ctx.fillText(icon, size / 2, size / 2 + 18);
+
+  // 6. Bottom resource name label
+  ctx.font = 'bold 26px Rubik, sans-serif';
+  ctx.fillStyle = '#1e293b';
+  ctx.fillText(label, size / 2, size / 2 + 64);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 8;
