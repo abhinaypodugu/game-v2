@@ -173,15 +173,23 @@ export const ThreeBoard = memo(function ThreeBoard({
       id: number | string;
     }> = [];
 
-    // Reusable Materials
-    const hexSideMat = new THREE.MeshStandardMaterial({ color: 0x947250, roughness: 0.9 });
+    // Reusable Materials (80% tactile opacity with depthWrite for crystalline depth)
+    const hexSideMat = new THREE.MeshStandardMaterial({
+      color: 0x947250,
+      roughness: 0.85,
+      transparent: true,
+      opacity: 0.80,
+      depthWrite: true,
+    });
     const beaconMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.85 });
     const beaconRingMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
     const roadGhostMat = new THREE.MeshStandardMaterial({
       color: 0xfacc15,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.8,
       transparent: true,
-      opacity: 0.75,
-      roughness: 0.4,
+      opacity: 0.85,
+      roughness: 0.3,
     });
     const hexHighlightMat = new THREE.MeshBasicMaterial({
       color: 0xef4444,
@@ -210,13 +218,14 @@ export const ThreeBoard = memo(function ThreeBoard({
         const hz = center2d.y * SCALE;
         const hexObj = new THREE.Group();
         hexObj.position.set(hx, 0, hz);
-
-        // Hex slab cylinder
         const col = TERRAIN_COLORS[hexData.terrain];
         const topMat = new THREE.MeshStandardMaterial({
           color: col.top,
           roughness: col.rough,
           flatShading: true,
+          transparent: true,
+          opacity: 0.80,
+          depthWrite: true,
         });
         const materials = [hexSideMat, topMat, hexSideMat];
         const hexGeom = new THREE.CylinderGeometry(HEX_RADIUS, HEX_BASE_RADIUS, HEX_HEIGHT, 6);
@@ -279,18 +288,45 @@ export const ThreeBoard = memo(function ThreeBoard({
           ring.position.y = HEX_HEIGHT + 0.15;
           hexObj.add(ring);
         }
-
         boardGroup.add(hexObj);
       }
+      // --- B. 3D Miniature Harbor Ports & Natural Flowing River Inlets ---
+      // Create procedural flowing water ripple texture
+      const riverCanvas = document.createElement('canvas');
+      riverCanvas.width = 128;
+      riverCanvas.height = 128;
+      const rCtx = riverCanvas.getContext('2d')!;
+      const rGrad = rCtx.createLinearGradient(0, 0, 0, 128);
+      rGrad.addColorStop(0, '#06b6d4');
+      rGrad.addColorStop(0.5, '#38bdf8');
+      rGrad.addColorStop(1, '#0284c7');
+      rCtx.fillStyle = rGrad;
+      rCtx.fillRect(0, 0, 128, 128);
+      rCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+      rCtx.lineWidth = 3;
+      for (let y = 12; y < 128; y += 24) {
+        rCtx.beginPath();
+        rCtx.moveTo(0, y);
+        rCtx.bezierCurveTo(32, y + 6, 96, y - 6, 128, y);
+        rCtx.stroke();
+      }
+      const riverWaterTex = new THREE.CanvasTexture(riverCanvas);
+      riverWaterTex.wrapS = THREE.RepeatWrapping;
+      riverWaterTex.wrapT = THREE.RepeatWrapping;
+      riverWaterTex.repeat.set(1, 2);
 
-      // --- B. 3D Miniature Harbor Ports & Natural River Inlets ---
       const riverWaterMat = new THREE.MeshStandardMaterial({
-        color: 0x06b6d4, // Sparkling turquoise river estuary
-        roughness: 0.1,
+        map: riverWaterTex,
+        color: 0x06b6d4,
+        roughness: 0.08,
         metalness: 0.35,
+        transparent: true,
+        opacity: 0.76, // Beautifully balanced with 80% tile opacity
+        depthWrite: false,
       });
+      (scene as unknown as { __riverTex?: THREE.CanvasTexture }).__riverTex = riverWaterTex;
       const riverBankMat = new THREE.MeshStandardMaterial({
-        color: 0xd97706, // Sandy riverbank
+        color: 0xd97706,
         roughness: 0.9,
       });
 
@@ -546,12 +582,96 @@ export const ThreeBoard = memo(function ThreeBoard({
       return hitMeshes.find((h) => h.mesh === hitObj) ?? null;
     };
 
+    const hoverGroup = new THREE.Group();
+    scene.add(hoverGroup);
+
+    const hoverGlowMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 1.1,
+      transparent: true,
+      opacity: 0.88,
+      roughness: 0.2,
+    });
+    const hoverRingMat = new THREE.MeshBasicMaterial({
+      color: 0xfffbeb,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+    });
+    const hoverHexMat = new THREE.MeshBasicMaterial({
+      color: 0xef4444,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide,
+    });
+
     const onPointerMove = (event: MouseEvent) => {
       const hit = getRaycastHit(event);
+      container.style.cursor = hit ? 'pointer' : 'default';
+
+      // Clear prior hover preview
+      while (hoverGroup.children.length > 0) {
+        hoverGroup.remove(hoverGroup.children[0]!);
+      }
+
       if (hit) {
-        container.style.cursor = 'pointer';
-      } else {
-        container.style.cursor = 'default';
+        const { snap, legalVertices, legalEdges, legalHexes } = propsRef.current;
+        const { board, you } = snap;
+        const myColor = snap.players[you.seat]?.color ?? 'red';
+
+        if (hit.kind === 'vertex' && typeof hit.id === 'number' && legalVertices?.has(hit.id)) {
+          const vPos = board.topology.vertexPos[hit.id];
+          if (vPos) {
+            const vx = vPos.x * SCALE;
+            const vz = vPos.y * SCALE;
+
+            // Glowing holographic ghost settlement
+            const ghostSettlement = createSettlementMesh(myColor);
+            ghostSettlement.position.set(vx, HEX_HEIGHT + 0.14, vz);
+            ghostSettlement.traverse((child) => {
+              if ((child as THREE.Mesh).isMesh) {
+                (child as THREE.Mesh).material = hoverGlowMat;
+              }
+            });
+            hoverGroup.add(ghostSettlement);
+
+            // Glowing rotating halo ring around the vertex
+            const halo = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.25, 24), hoverRingMat);
+            halo.rotation.x = -Math.PI / 2;
+            halo.position.set(vx, HEX_HEIGHT + 0.12, vz);
+            hoverGroup.add(halo);
+          }
+        } else if (hit.kind === 'edge' && typeof hit.id === 'string' && legalEdges?.has(hit.id)) {
+          const endpoints = board.topology.edgeEndpoints[hit.id];
+          if (endpoints) {
+            const [a, b] = endpoints;
+            const pa = board.topology.vertexPos[a];
+            const pb = board.topology.vertexPos[b];
+            if (pa && pb) {
+              const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.14, pa.y * SCALE);
+              const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.14, pb.y * SCALE);
+              const dir = new THREE.Vector3().subVectors(p2, p1);
+              const len = dir.length();
+
+              const ghostRoad = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, len * 0.94, 8), hoverGlowMat);
+              ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
+              ghostRoad.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+              hoverGroup.add(ghostRoad);
+            }
+          }
+        } else if (hit.kind === 'hex' && typeof hit.id === 'string' && legalHexes?.has(hit.id)) {
+          const axial = parseHexId(hit.id);
+          const center2d = hexToPixel(axial.q, axial.r);
+          const hx = center2d.x * SCALE;
+          const hz = center2d.y * SCALE;
+
+          const ring = new THREE.Mesh(new THREE.RingGeometry(HEX_RADIUS * 0.3, HEX_RADIUS * 0.96, 6), hoverHexMat);
+          ring.rotation.x = -Math.PI / 2;
+          ring.rotation.z = Math.PI / 6;
+          ring.position.set(hx, HEX_HEIGHT + 0.2, hz);
+          hoverGroup.add(ring);
+        }
       }
     };
 
@@ -583,6 +703,18 @@ export const ThreeBoard = memo(function ThreeBoard({
       // Gentle water ripple rotation
       foam.rotation.z = elapsed * 0.05;
 
+      // Animated flowing river water toward the ocean
+      const riverTex = (scene as unknown as { __riverTex?: THREE.CanvasTexture }).__riverTex;
+      if (riverTex) {
+        riverTex.offset.y -= 0.007;
+      }
+
+      // Pulsing glow on hover preview
+      if (hoverGroup.children.length > 0) {
+        const pulse = 1.0 + Math.sin(elapsed * 8) * 0.25;
+        hoverGlowMat.emissiveIntensity = 0.9 * pulse;
+        hoverRingMat.opacity = 0.7 + Math.sin(elapsed * 8) * 0.3;
+      }
       controls.update();
       renderer.render(scene, camera);
     };
