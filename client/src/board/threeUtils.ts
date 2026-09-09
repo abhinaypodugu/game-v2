@@ -1,736 +1,900 @@
-// 3D procedural asset library for Catan matching the official 3D Asset Reference Sheet.
-// Assets:
-// - Terrain Hex Tiles with consistent wooden/beveled hex frames.
-// - Reference Biomes:
-//   * Fields (Wheat): radiating curved golden wheat sheaves.
-//   * Forest (Wood): dense cluster of faceted evergreen pine trees.
-//   * Hills (Brick): terracotta clay quarry with two 3x2 stacked red brick cube piles.
-//   * Mountains (Ore): cool slate ground with craggy faceted rock peaks and white snowcaps.
-//   * Pasture (Sheep): lush green meadow with exactly 4 miniature 3D sheep.
-//   * Desert: concentric rippled sand dunes, 2 saguaro cacti, and central crater.
-// - Standard circular wooden vertex nodes and connecting road slots.
-// - Solid player pieces (Red, Blue, Orange, White/Gray):
-//   * Settlement: classic geometric wooden cottage with pitched gable roof.
-//   * City: stepped L-shaped fortress building (higher tower + attached lower wing).
-//   * Road: solid, clean, beveled rectangular bar lying flat in the slot.
-// - Harbour / Port Assets:
-//   * Wooden pier dock platform with railings and glowing warm lanterns.
-//   * Moored sailboat with color-coded sails (Wheat: yellow, Wood: green, Brick: red,
-//     Ore: white/gray, Sheep: light green, Generic: blue).
-//   * Circular wooden trade medallion with dark rim showing 2:1 or 3:1 + silhouette icon.
-// - Robber: smooth black pawn standing in a textured sandy crater base.
-// - Ocean: deep royal blue water basin.
-
+// CATAN-STYLE 3D ASSET PACK — HIGH FIDELITY PROCEDURAL VERSION
+// ==============================================================
+// Ported from the supplied catanReferencePack.js reference implementation to
+// match the stylized board reference images:
+// - warm beveled hex frames
+// - rich miniature terrain (per-biome detail props)
+// - cream inset number chips with red 6/8 ink and probability pips
+// - chunky toy-like player pieces (roads, settlements, cities)
+// - detailed wooden harbours with boats, sails, lamps, crates and trade signs
+// - dark blue water with glossy wave rings
+// - cinematic warm/cool lighting rig
+//
 import * as THREE from 'three';
-import type { Harbor, Terrain } from '@catan/shared';
+import type { Terrain } from '@catan/shared';
 
-export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D units
-export const HEX_RADIUS = 4.74;
-export const HEX_BASE_RADIUS = 4.78;
-export const HEX_HEIGHT = 1.15;
-export const WELL_RADIUS = 1.68; // Sunken circular well for number tokens
 
-// 30-degree rotation so hex top and bottom edges are horizontal (matching reference image)
-const COS30 = Math.cos(Math.PI / 6);
-const SIN30 = Math.sin(Math.PI / 6);
+/* ================================================================
+   MATERIALS
+   ================================================================ */
 
-export function toBoard3D(x2d: number, y2d: number): { x: number; z: number } {
-  const rx = (x2d * COS30 - y2d * SIN30) * SCALE;
-  const rz = (x2d * SIN30 + y2d * COS30) * SCALE;
-  return { x: rx, z: rz };
+const C = {
+  water: 0x063a5e,
+  water2: 0x0b527c,
+  foam: 0x8fc5d9,
+
+  frame: 0xe6c994,
+  frameEdge: 0x8d693d,
+  frameDark: 0x5a4026,
+
+  wheat: 0xdca42d,
+  wheatHi: 0xffcf45,
+
+  forest: 0x287445,
+  forestDark: 0x114d2b,
+  forestHi: 0x4a9b58,
+
+  brick: 0xb65a32,
+  brickHi: 0xd97945,
+
+  ore: 0x59636d,
+  oreHi: 0x89939b,
+
+  sheep: 0x66a95e,
+  sheepHi: 0x92c96c,
+
+  desert: 0xd6b46e,
+  desertHi: 0xe4c989,
+  cactus: 0x398b4a,
+
+  token: 0xf2e3c1,
+  tokenEdge: 0x737674,
+  tokenInk: 0x34424a,
+  tokenHot: 0xd8393b,
+
+  wood: 0x8a512b,
+  woodHi: 0xc17a3b,
+  woodDark: 0x4b2a17,
+
+  metal: 0x777b78,
+  red: 0xd92d2d,
+  blue: 0x2364d2,
+  orange: 0xe47720,
+  white: 0xc9cdd1,
+
+  black: 0x111315,
+  lamp: 0xffb943,
+} as const;
+
+const cache = new Map<string, THREE.MeshStandardMaterial>();
+
+function M(key: string, color: number, roughness = 0.72, metalness = 0): THREE.MeshStandardMaterial {
+  let m = cache.get(key);
+  if (!m) {
+    m = new THREE.MeshStandardMaterial({ color, roughness, metalness });
+    cache.set(key, m);
+  }
+  return m;
 }
 
-// ---------------------------------------------------------------------------
-// Materials & Palettes directly from the 3D Asset Reference Sheet
-// ---------------------------------------------------------------------------
+function mesh(g: THREE.Object3D, geo: THREE.BufferGeometry, material: THREE.Material, name = ''): THREE.Mesh {
+  const m = new THREE.Mesh(geo, material);
+  m.name = name;
+  m.castShadow = true;
+  m.receiveShadow = true;
+  g.add(m);
+  return m;
+}
 
-export const TERRAIN_COLORS: Record<Terrain, { top: string; side: string; rough: number }> = {
-  fields: { top: '#f59e0b', side: '#b45309', rough: 0.75 }, // Golden wheat
-  forest: { top: '#15803d', side: '#14532d', rough: 0.8 }, // Evergreen pine
-  pasture: { top: '#22c55e', side: '#16a34a', rough: 0.7 }, // Lush meadow green
-  mountains: { top: '#475569', side: '#334155', rough: 0.85 }, // Granite slate
-  hills: { top: '#c2410c', side: '#9a3412', rough: 0.8 }, // Terracotta brick clay
-  desert: { top: '#eab308', side: '#ca8a04', rough: 0.9 }, // Golden dune sand
-};
+function box(
+  g: THREE.Object3D,
+  x: number,
+  y: number,
+  z: number,
+  material: THREE.Material,
+  p: readonly [number, number, number] = [0, 0, 0],
+  name = '',
+): THREE.Mesh {
+  const m = mesh(g, new THREE.BoxGeometry(x, y, z), material, name);
+  m.position.set(p[0], p[1], p[2]);
+  return m;
+}
 
-// 4 Player Colors directly from the 3D Asset Reference Sheet
-export const PLAYER_3D_COLORS: Record<string, { main: number; dark: number; light: number }> = {
-  red: { main: 0xdc2626, dark: 0x991b1b, light: 0xef4444 },
-  blue: { main: 0x2563eb, dark: 0x1d4ed8, light: 0x3b82f6 },
-  orange: { main: 0xea580c, dark: 0xc2410c, light: 0xf97316 },
-  white: { main: 0xcbd5e1, dark: 0x94a3b8, light: 0xf1f5f9 }, // White/Gray matching reference sheet
-  green: { main: 0x16a34a, dark: 0x15803d, light: 0x22c55e },
-  brown: { main: 0x854d0e, dark: 0x543007, light: 0xa16207 },
-};
+function cyl(
+  g: THREE.Object3D,
+  r: number,
+  h: number,
+  material: THREE.Material,
+  p: readonly [number, number, number] = [0, 0, 0],
+  radial = 16,
+  name = '',
+): THREE.Mesh {
+  const m = mesh(g, new THREE.CylinderGeometry(r, r, h, radial), material, name);
+  m.position.set(p[0], p[1], p[2]);
+  return m;
+}
 
-// ---------------------------------------------------------------------------
-// Dynamic Canvas Texture for Number Tokens (matching reference sheet)
-// ---------------------------------------------------------------------------
+function sphere(
+  g: THREE.Object3D,
+  r: number,
+  material: THREE.Material,
+  p: readonly [number, number, number] = [0, 0, 0],
+  name = '',
+): THREE.Mesh {
+  const m = mesh(g, new THREE.SphereGeometry(r, 16, 10), material, name);
+  m.position.set(p[0], p[1], p[2]);
+  return m;
+}
 
-const tokenTextureCache = new Map<number, THREE.CanvasTexture>();
+function cone(
+  g: THREE.Object3D,
+  r: number,
+  h: number,
+  material: THREE.Material,
+  p: readonly [number, number, number] = [0, 0, 0],
+  radial = 7,
+  name = '',
+): THREE.Mesh {
+  const m = mesh(g, new THREE.ConeGeometry(r, h, radial), material, name);
+  m.position.set(p[0], p[1], p[2]);
+  return m;
+}
 
-export function getNumberTokenTexture(token: number, pips: number): THREE.CanvasTexture {
-  const cached = tokenTextureCache.get(token);
-  if (cached) return cached;
+function group(name: string): THREE.Group {
+  const g = new THREE.Group();
+  g.name = name;
+  return g;
+}
 
-  const size = 512;
+/* ================================================================
+   TEXT / TRADE SIGN TEXTURES (canvas sprites; no font assets)
+   ================================================================ */
+
+interface TextTextureOpts {
+  width?: number;
+  height?: number;
+  font?: string;
+  color?: string;
+  sub?: string;
+}
+
+function textTexture(text: string, opts: TextTextureOpts = {}): THREE.CanvasTexture {
+  const { width = 512, height = 256, font = 'bold 92px Arial', color = '#26333b', sub = '' } = opts;
+
   const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = width;
+  canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
-  // Background circle (parchment ivory)
-  ctx.fillStyle = '#fefdfa';
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 14, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Outer border ring (dark wood / charcoal)
-  const isSixOrEight = token === 6 || token === 8;
-  ctx.strokeStyle = '#26150b';
-  ctx.lineWidth = 26;
-  ctx.stroke();
-
-  // Inner subtle decorative circle
-  ctx.strokeStyle = isSixOrEight ? 'rgba(220,38,38,0.3)' : 'rgba(38,21,11,0.25)';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 40, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Number text: bold red for 6 and 8, bold dark black for others
-  ctx.font = 'bold 160px sans-serif';
-  ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = font;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(token), size / 2, size / 2 - 42);
+  ctx.fillStyle = color;
+  ctx.fillText(text, width / 2, height / 2 - (sub ? 22 : 0));
 
-  // Dot pips: clear probability dots
-  const dotCount = pips;
-  const dotSpacing = 36;
-  const startX = size / 2 - ((dotCount - 1) * dotSpacing) / 2;
-  const dotY = size / 2 + 96;
-  ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
-
-  for (let i = 0; i < dotCount; i++) {
-    ctx.beginPath();
-    ctx.arc(startX + i * dotSpacing, dotY, 12, 0, Math.PI * 2);
-    ctx.fill();
-    // Inner dot highlight
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.beginPath();
-    ctx.arc(startX + i * dotSpacing - 3, dotY - 3, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = isSixOrEight ? '#dc2626' : '#0f172a';
+  if (sub) {
+    ctx.font = 'bold 45px Arial';
+    ctx.fillText(sub, width / 2, height / 2 + 48);
   }
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.anisotropy = 16;
-  tokenTextureCache.set(token, texture);
-  return texture;
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
 }
 
-// ---------------------------------------------------------------------------
-// 3D Biome Props Builders (100% Matching the 3D Asset Reference Sheet)
-// ---------------------------------------------------------------------------
-
-/** Forest: dense cluster of geometric evergreen pine trees encircling the token well */
-export function createForestProps(): THREE.Group {
-  const group = new THREE.Group();
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x452a17, roughness: 0.9 });
-  const darkPineMat = new THREE.MeshStandardMaterial({ color: 0x144d28, roughness: 0.8, flatShading: true });
-  const lightPineMat = new THREE.MeshStandardMaterial({ color: 0x1b5e32, roughness: 0.8, flatShading: true });
-
-  const treePositions = [
-    { x: -2.3, z: -1.2, s: 0.9 },
-    { x: -1.4, z: -2.1, s: 1.0 },
-    { x: 0.2, z: -2.4, s: 1.05 },
-    { x: 1.8, z: -1.8, s: 0.9 },
-    { x: 2.3, z: -0.2, s: 0.85 },
-    { x: 2.1, z: 1.4, s: 0.95 },
-    { x: 0.8, z: 2.3, s: 1.0 },
-    { x: -1.2, z: 2.2, s: 0.9 },
-    { x: -2.2, z: 0.8, s: 0.95 },
-  ];
-
-  for (const { x, z, s } of treePositions) {
-    const tree = new THREE.Group();
-    // Trunk
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * s, 0.14 * s, 0.6 * s, 6), trunkMat);
-    trunk.position.y = 0.3 * s;
-    trunk.castShadow = true;
-    tree.add(trunk);
-
-    // Cones tiers
-    const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.75 * s, 0.9 * s, 6), darkPineMat);
-    c1.position.y = 0.7 * s;
-    c1.castShadow = true;
-    tree.add(c1);
-
-    const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.55 * s, 0.75 * s, 6), lightPineMat);
-    c2.position.y = 1.2 * s;
-    c2.castShadow = true;
-    tree.add(c2);
-
-    const c3 = new THREE.Mesh(new THREE.ConeGeometry(0.38 * s, 0.55 * s, 6), lightPineMat);
-    c3.position.y = 1.6 * s;
-    c3.castShadow = true;
-    tree.add(c3);
-
-    tree.position.set(x, 0, z);
-    group.add(tree);
-  }
-
-  return group;
+function flatText(
+  g: THREE.Object3D,
+  text: string,
+  size: number,
+  position: readonly [number, number, number],
+  rotation: readonly [number, number, number],
+  opts: TextTextureOpts = {},
+): THREE.Sprite {
+  const material = new THREE.SpriteMaterial({
+    map: textTexture(text, opts),
+    transparent: true,
+    depthWrite: false,
+  });
+  const s = new THREE.Sprite(material);
+  s.position.set(position[0], position[1], position[2]);
+  s.rotation.set(rotation[0], rotation[1], rotation[2]);
+  s.scale.set(size, size * 0.5, 1);
+  s.name = `text-${text}`;
+  g.add(s);
+  return s;
 }
 
-/** Fields: radiating golden curved wheat sheaves sweeping around the token well */
-export function createFieldsProps(): THREE.Group {
-  const group = new THREE.Group();
-  const wheatMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.75, flatShading: true });
-  const goldSheafMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.7, flatShading: true });
+/* ================================================================
+   HEX TILE
+   ================================================================ */
 
-  const sheaves = [
-    { x: -2.1, z: -1.2, rot: 0.5, len: 1.8 },
-    { x: -1.2, z: -2.2, rot: 1.1, len: 2.0 },
-    { x: 0.8, z: -2.3, rot: 1.8, len: 1.9 },
-    { x: 2.1, z: -1.2, rot: 2.5, len: 1.8 },
-    { x: 2.2, z: 0.8, rot: -0.3, len: 2.0 },
-    { x: 1.2, z: 2.2, rot: 0.4, len: 1.9 },
-    { x: -0.8, z: 2.3, rot: 1.2, len: 2.0 },
-    { x: -2.1, z: 1.1, rot: 2.0, len: 1.8 },
-  ];
+function hexFrame(radius: number, depth = 0.26): THREE.Group {
+  const g = group('hex-frame');
 
-  for (let i = 0; i < sheaves.length; i++) {
-    const s = sheaves[i]!;
-    const mat = i % 2 === 0 ? wheatMat : goldSheafMat;
-    const sheaf = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.38, s.len, 6), mat);
-    sheaf.rotation.z = Math.PI / 2;
-    sheaf.rotation.y = s.rot;
-    sheaf.position.set(s.x, 0.16, s.z);
-    sheaf.castShadow = true;
-    sheaf.receiveShadow = true;
-    group.add(sheaf);
-  }
+  mesh(g, new THREE.CylinderGeometry(radius, radius, depth, 6), M('frame', C.frame), 'beveled-hex-frame');
 
-  return group;
+  // raised inner face
+  const inner = mesh(
+    g,
+    new THREE.CylinderGeometry(radius * 0.905, radius * 0.905, depth * 0.82, 6),
+    M('frame-inner', C.frameEdge),
+    'inner-frame',
+  );
+  inner.position.y = depth * 0.2;
+
+  const face = mesh(
+    g,
+    new THREE.CylinderGeometry(radius * 0.865, radius * 0.865, depth * 0.55, 6),
+    M('terrain-face', C.frameDark),
+    'terrain-face',
+  );
+  face.position.y = depth * 0.38;
+
+  return g;
 }
 
-/** Mountains: craggy faceted rock peaks with prominent white snowcaps */
-export function createMountainProps(): THREE.Group {
-  const group = new THREE.Group();
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.85, flatShading: true });
-  const snowMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.4, flatShading: true });
+const TERRAIN_TO_PACK: Record<Terrain, 'wheat' | 'forest' | 'brick' | 'ore' | 'sheep' | 'desert'> = {
+  fields: 'wheat',
+  forest: 'forest',
+  hills: 'brick',
+  mountains: 'ore',
+  pasture: 'sheep',
+  desert: 'desert',
+};
 
-  const peaks = [
-    { x: -1.3, z: -1.6, r: 1.4, h: 2.2, s: 5 },
-    { x: 0.8, z: -1.9, r: 1.2, h: 1.9, s: 5 },
-    { x: 2.1, z: -0.6, r: 1.1, h: 1.6, s: 5 },
-    { x: 1.5, z: 1.6, r: 1.2, h: 1.8, s: 5 },
-    { x: -1.6, z: 1.5, r: 1.3, h: 2.0, s: 5 },
-  ];
+export function createTerrainTile(terrain: Terrain, radius = 2.0): THREE.Group {
+  const type = TERRAIN_TO_PACK[terrain];
+  const g = group(`Terrain_${type}`);
+  g.add(hexFrame(radius));
 
-  for (const p of peaks) {
-    const peak = new THREE.Group();
-    const rock = new THREE.Mesh(new THREE.ConeGeometry(p.r, p.h, p.s), rockMat);
-    rock.position.y = p.h / 2;
-    rock.castShadow = true;
-    rock.receiveShadow = true;
-    peak.add(rock);
+  const face = new THREE.Group();
+  face.position.y = 0.25;
+  g.add(face);
 
-    // Snowcap
-    const snowH = p.h * 0.38;
-    const snow = new THREE.Mesh(new THREE.ConeGeometry(p.r * 0.42, snowH, p.s), snowMat);
-    snow.position.y = p.h - snowH / 2 + 0.02;
-    snow.castShadow = true;
-    peak.add(snow);
+  const terrainColor = {
+    wheat: C.wheat,
+    forest: C.forest,
+    brick: C.brick,
+    ore: C.ore,
+    sheep: C.sheep,
+    desert: C.desert,
+  }[type];
 
-    peak.position.set(p.x, 0, p.z);
-    group.add(peak);
+  // Slightly smaller colored top plate.
+  mesh(
+    face,
+    new THREE.CylinderGeometry(radius * 0.855, radius * 0.855, 0.035, 6),
+    M(`terrain-${type}`, terrainColor),
+    'terrain-surface',
+  );
+
+  switch (type) {
+    case 'wheat':
+      wheat(face, radius);
+      break;
+    case 'forest':
+      forest(face, radius);
+      break;
+    case 'brick':
+      bricks(face);
+      break;
+    case 'ore':
+      ore(face, radius);
+      break;
+    case 'sheep':
+      sheep(face, radius);
+      break;
+    case 'desert':
+      desert(face, radius);
+      break;
   }
 
-  return group;
+  return g;
 }
 
-/** Hills: terracotta clay quarry with 3x2 stacked red brick cubes (exact match to reference sheet) */
-export function createHillsProps(): THREE.Group {
-  const group = new THREE.Group();
-  const clayTerraceMat = new THREE.MeshStandardMaterial({ color: 0x9a3412, roughness: 0.85, flatShading: true });
-  const brickMat = new THREE.MeshStandardMaterial({ color: 0xc2410c, roughness: 0.7, flatShading: true });
-  const darkBrickMat = new THREE.MeshStandardMaterial({ color: 0x7c2d12, roughness: 0.8 });
+/* ---------------- terrain details ---------------- */
 
-  // Terraced quarry bases
-  const terraces = [
-    { x: -1.8, z: -1.2, r: 1.1, h: 0.35 },
-    { x: 1.8, z: 1.2, r: 1.2, h: 0.4 },
-  ];
+function wheat(g: THREE.Group, r: number): void {
+  const stem = M('wheat-stem', C.wheatHi);
+  const seed = M('wheat-seed', 0xf0b52e);
 
-  for (const t of terraces) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(t.r * 0.7, t.r, t.h, 6), clayTerraceMat);
-    m.position.set(t.x, t.h / 2, t.z);
-    m.receiveShadow = true;
-    group.add(m);
+  for (let i = 0; i < 18; i++) {
+    const a = i * 2.399;
+    const rr = r * (0.4 + (i % 5) * 0.12);
+    const x = Math.cos(a) * rr;
+    const z = Math.sin(a) * rr;
+
+    const s = box(g, 0.045, 0.28, 0.045, stem, [x, 0.17, z], 'wheat-stem');
+    s.rotation.z = (i % 2 === 0 ? 1 : -1) * 0.14;
+
+    for (let j = 0; j < 3; j++) {
+      const q = sphere(
+        g,
+        0.052,
+        seed,
+        [x + (j - 1) * 0.045, 0.28 + j * 0.035, z + (j % 2 === 0 ? 0.035 : -0.025)],
+        'wheat-head',
+      );
+      q.scale.y = 1.25;
+    }
+  }
+}
+
+function forest(g: THREE.Group, r: number): void {
+  const trunk = M('tree-trunk', 0x694126);
+  const dark = M('tree-dark', C.forestDark);
+  const hi = M('tree-hi', C.forestHi);
+
+  for (let i = 0; i < 15; i++) {
+    const a = i * 2.17;
+    const rr = r * (0.4 + (i % 5) * 0.135);
+    const x = Math.cos(a) * rr;
+    const z = Math.sin(a) * rr;
+    const scale = 0.72 + (i % 3) * 0.16;
+
+    cyl(g, 0.055 * scale, 0.28 * scale, trunk, [x, 0.17 * scale, z], 7, 'tree-trunk');
+    cone(g, 0.21 * scale, 0.42 * scale, dark, [x, 0.42 * scale, z], 7, 'tree-lower');
+    cone(g, 0.15 * scale, 0.34 * scale, hi, [x, 0.62 * scale, z], 7, 'tree-upper');
+  }
+}
+
+function bricks(g: THREE.Group): void {
+  const brick = M('brick-hi', C.brickHi);
+  const mortar = M('brick-mortar', 0x9b492b);
+
+  // Pile offset to one side so the central token well stays clear.
+  const ox = 0.95;
+  const oz = -0.7;
+  for (let row = 0; row < 3; row++) {
+    for (let i = 0; i < 4; i++) {
+      const x = (i - 1.5) * 0.34 + (row % 2) * 0.17 + ox;
+      const z = (row - 1) * 0.3 + oz;
+      const b = box(g, 0.28, 0.13, 0.2, brick, [x, 0.11 + row * 0.075, z], 'brick');
+      b.rotation.y = (i % 2) * 0.08;
+    }
   }
 
-  // Two clusters of stacked brick cubes (3x2 blocks neatly stacked)
-  const brickClusters = [
-    { cx: -1.8, cz: -1.2 },
-    { cx: 1.8, cz: 1.2 },
-  ];
+  // A few darker loose bricks.
+  box(g, 0.24, 0.11, 0.19, mortar, [0.95, 0.11, -0.55], 'loose-brick');
+  box(g, 0.24, 0.11, 0.19, mortar, [-0.85, 0.11, 0.55], 'loose-brick');
+}
 
-  for (const { cx, cz } of brickClusters) {
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 2; col++) {
-        const b = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.24, 0.32), row % 2 === 0 ? brickMat : darkBrickMat);
-        b.position.set(cx + (col - 0.5) * 0.52, 0.12 + row * 0.25, cz + (row - 1) * 0.1);
-        b.castShadow = true;
-        b.receiveShadow = true;
-        group.add(b);
+function ore(g: THREE.Group, r: number): void {
+  const rock = M('ore-hi', C.oreHi);
+  const dark = M('ore-dark', C.ore);
+
+  // Rocks offset from the centre so the token well stays clear.
+  const ox = 1.15;
+  const oz = 0.85;
+  for (let i = 0; i < 11; i++) {
+    const a = i * 2.47;
+    const rr = r * (0.05 + (i % 4) * 0.11);
+    const m = mesh(
+      g,
+      new THREE.DodecahedronGeometry(0.17 + (i % 3) * 0.04, 0),
+      i % 2 === 0 ? rock : dark,
+      'ore-rock',
+    );
+    m.position.set(Math.cos(a) * rr + ox, 0.17, Math.sin(a) * rr + oz);
+    m.rotation.set(i * 0.3, i * 0.7, i * 0.2);
+    m.scale.y = 0.7;
+  }
+}
+
+function sheep(g: THREE.Group, r: number): void {
+  const wool = M('wool', 0xf0eee4);
+  const head = M('sheep-head', 0x3b3a37);
+  const grass = M('grass', 0x3d914d);
+
+  for (let i = 0; i < 6; i++) {
+    const a = i * 2.12;
+    const rr = r * (0.4 + (i % 3) * 0.18);
+    const x = Math.cos(a) * rr;
+    const z = Math.sin(a) * rr;
+
+    sphere(g, 0.17, wool, [x, 0.2, z], 'sheep-body');
+    sphere(g, 0.085, wool, [x - 0.07, 0.27, z + 0.02]);
+    sphere(g, 0.1, head, [x + 0.13, 0.24, z], 'sheep-head');
+    sphere(g, 0.018, M('eye', 0xffffff), [x + 0.2, 0.27, z - 0.035], 'eye');
+
+    // tiny grass tufts
+    if (i < 3) {
+      for (let k =  0; k < 3; k++) {
+        box(g, 0.018, 0.11, 0.018, grass, [x + k * 0.05, 0.07, z + 0.04]);
+      }
+    }
+  }
+}
+
+function desert(g: THREE.Group, r: number): void {
+  const sand = M('desert-hi', C.desertHi);
+  const cactus = M('cactus', C.cactus);
+
+  for (let i = 0; i < 10; i++) {
+    const a = i * 1.83;
+    const rr = r * (0.32 + (i % 4) * 0.14);
+    const d = mesh(g, new THREE.SphereGeometry(0.24, 12, 6, 0, Math.PI), sand, 'sand-dune');
+    d.position.set(Math.cos(a) * rr, 0.055, Math.sin(a) * rr);
+    d.scale.set(1.5, 0.35, 0.7);
+  }
+
+  for (const [x, z] of [
+    [0.95, -0.6],
+    [-0.9, 0.55],
+  ] as const) {
+    cyl(g, 0.055, 0.42, cactus, [x, 0.26, z], 8, 'cactus');
+    box(g, 0.18, 0.055, 0.055, cactus, [x - 0.07, 0.31, z], 'cactus-arm');
+  }
+}
+
+/* ================================================================
+   NUMBER TOKEN — cream wood chip; number + probability pips drawn
+   into a single canvas face sprite (red ink for 6/8).
+   ================================================================ */
+
+const tokenFaceCache = new Map<string, THREE.MeshBasicMaterial>();
+
+/** Flat canvas plane: number over a row of probability pips (red ink 6/8). */
+function tokenFacePlane(number: number, radius: number): THREE.Mesh {
+  const hot = number === 6 || number === 8;
+  const key = `${number}:${radius}`;
+  let material = tokenFaceCache.get(key);
+  if (!material) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2D context unavailable');
+
+    ctx.clearRect(0, 0, 256, 256);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // number (upper half)
+    ctx.font = 'bold 132px Arial';
+    ctx.fillStyle = hot ? '#d8393b' : '#34424a';
+    ctx.fillText(String(number), 128, 92);
+
+    // probability pips (row below the number): ways to roll / 36
+    const PIP_COUNT: Record<number, number> = {
+      2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1,
+    };
+    const pips = PIP_COUNT[number] ?? 0;
+    const spacing = 26;
+    const x0 = 128 - ((pips - 1) * spacing) / 2;
+    ctx.fillStyle = hot ? '#d8393b' : '#34424a';
+    for (let i = 0; i < pips; i++) {
+      ctx.beginPath();
+      ctx.arc(x0 + i * spacing, 180, 9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    material = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+    tokenFaceCache.set(key, material);
+  }
+
+  const s = new THREE.Mesh(new THREE.PlaneGeometry(radius * 1.85, radius * 1.85), material);
+  s.rotation.x = -Math.PI / 2;
+  s.name = `token-face-${number}`;
+  return s;
+}
+export function createNumberToken(number = 6, radius = 0.35): THREE.Group {
+  const g = group(`NumberToken_${number}`);
+
+  cyl(g, radius, 0.075, M('token', C.token, 0.58), [0, 0.05, 0], 32, 'token-body');
+  cyl(g, radius * 0.91, 0.02, M('token-inset2', 0xe7d8b8, 0.48), [0, 0.091, 0], 32, 'token-inset');
+  const face = tokenFacePlane(number, radius);
+  face.position.y = 0.115;
+  g.add(face);
+
+  return g;
+}
+
+/* ================================================================
+   ROBBER
+   ================================================================ */
+
+export function createRobber(scale = 1): THREE.Group {
+  const g = group('Robber');
+  g.scale.setScalar(scale);
+
+  cyl(g, 0.39, 0.13, M('robber-sand', 0xb99859), [0, 0.065, 0], 12, 'sand-base');
+  cyl(g, 0.18, 0.3, M('robber-black', C.black, 0.38), [0, 0.28, 0], 16, 'torso');
+  sphere(g, 0.19, M('robber-black', C.black, 0.38), [0, 0.47, 0], 'body');
+  sphere(g, 0.145, M('robber-black', C.black, 0.38), [0, 0.68, 0], 'head');
+
+  // shoulder cape
+  const cape = mesh(g, new THREE.ConeGeometry(0.23, 0.27, 6), M('robber-cape', 0x1d2024, 0.65), 'cape');
+  cape.position.set(0, 0.43, 0);
+  cape.rotation.x = Math.PI;
+
+  return g;
+}
+
+/* ================================================================
+   PLAYER ROADS
+   ================================================================ */
+
+const PLAYER_COLOR: Record<string, number> = {
+  red: C.red,
+  blue: C.blue,
+  orange: C.orange,
+  white: C.white,
+};
+
+/** Chunky rectangular road with bevel cap, lying along +Z from origin. */
+export function createRoad(color = 'red', length = 1.0): THREE.Group {
+  const g = group(`Road_${color}`);
+  const m = M(`player-${color}`, PLAYER_COLOR[color] ?? C.red, 0.48);
+
+  const r = mesh(g, new THREE.BoxGeometry(length, 0.14, 0.17), m, 'road');
+  r.position.y = 0.07;
+
+  box(g, length * 0.86, 0.035, 0.115, m, [0, 0.155, 0], 'road-cap');
+  return g;
+}
+
+/* ================================================================
+   SETTLEMENT
+   ================================================================ */
+
+export function createSettlement(color = 'red', scale = 1): THREE.Group {
+  const g = group(`Settlement_${color}`);
+  g.scale.setScalar(scale);
+  const m = M(`player-${color}`, PLAYER_COLOR[color] ?? C.red, 0.45);
+
+  box(g, 0.44, 0.3, 0.36, m, [0, 0.15, 0], 'house');
+  const roof = cone(g, 0.3, 0.3, m, [0, 0.44, 0], 4, 'roof');
+  roof.rotation.y = Math.PI / 4;
+
+  box(g, 0.075, 0.17, 0.075, m, [0.14, 0.53, 0.02], 'chimney');
+
+  box(g, 0.09, 0.15, 0.015, M(`door-${color}`, 0x33271f), [0, -0.01, 0.19], 'door');
+  return g;
+}
+
+/* ================================================================
+   CITY
+   ================================================================ */
+
+export function createCity(color = 'red', scale = 1): THREE.Group {
+  const g = group(`City_${color}`);
+  g.scale.setScalar(scale);
+  const m = M(`player-${color}`, PLAYER_COLOR[color] ?? C.red, 0.45);
+
+  box(g, 0.55, 0.36, 0.42, m, [0, 0.18, 0], 'city-body');
+
+  for (const x of [-0.19, 0.19]) {
+    box(g, 0.17, 0.31, 0.39, m, [x, 0.515, 0], 'city-tower');
+    const roof = cone(g, 0.14, 0.16, m, [x, 0.75, 0], 4, 'tower-roof');
+    roof.rotation.y = Math.PI / 4;
+  }
+
+  box(g, 0.11, 0.17, 0.02, M(`door-city-${color}`, 0x33271f), [0, 0.085, 0.22], 'city-door');
+  return g;
+}
+
+/* ================================================================
+   BOARD NODES
+   ================================================================ */
+
+export function createNode(type: 'standard' | 'port' = 'standard'): THREE.Group {
+  const g = group(`Node_${type}`);
+
+  cyl(g, 0.25, 0.105, M('node-cream', C.token), [0, 0.052, 0], 18, 'node');
+  cyl(g, 0.19, 0.018, M('node-inner', 0xe1d2b5), [0, 0.112, 0], 18, 'node-inner');
+
+  if (type === 'port') {
+    box(g, 0.48, 0.075, 0.15, M('dock', C.woodHi), [0.27, 0.04, 0], 'dock-plank');
+    box(g, 0.15,  0.075, 0.15, M('dock-dark', C.woodDark), [-0.24, 0.04, 0], 'dock-plank');
+  }
+
+  return g;
+}
+
+/* ================================================================
+   HARBOUR SYSTEM
+   ================================================================ */
+
+const PORT_SAIL: Record<string, number> = {
+  wheat: 0xe0a62d,
+  wood: 0x5b9a61,
+  brick: 0xc95b3d,
+  ore: 0x697583,
+  sheep: 0xe9ddc6,
+  generic: 0x2d79bd,
+};
+
+export function createHarbour(resource: string | undefined, scale = 1): THREE.Group {
+  const specKey = resource ?? 'generic';
+  const g = group(`Harbour_${specKey}`);
+  g.scale.setScalar(scale);
+
+  createHarbourDeck(g);
+  createHarbourPosts(g);
+  createHarbourBoat(g, PORT_SAIL[specKey] ?? PORT_SAIL.generic!);
+  createTradeSign(g, resource);
+  createHarbourProps(g);
+
+  return g;
+}
+
+function createHarbourDeck(g: THREE.Group): void {
+  const deck = M('dock-wood', C.wood, 0.72);
+  const deckHi = M('dock-hi', C.woodHi, 0.68);
+  const dark = M('dock-dark', C.woodDark);
+
+  // layered floating pier
+  box(g, 1.55, 0.14, 0.78, deck, [0, 0.07, 0], 'pier');
+  box(g, 1.28, 0.1, 0.57, deckHi, [0, 0.17, 0], 'pier-inner');
+
+  // individual plank strips
+  for (let i = -4; i <= 4; i++) {
+    box(g, 0.055, 0.018, 0.55, dark, [i * 0.15, 0.225, 0], 'deck-plank-line');
+  }
+
+  // front bumper
+  box(g, 1.42, 0.1, 0.1, dark, [0, 0.19, 0.39], 'front-bumper');
+}
+
+function createHarbourPosts(g: THREE.Group): void {
+  const dark = M('dock-dark', C.woodDark);
+  const hi = M('dock-hi', C.woodHi);
+
+  for (const x of [-0.65, 0.65]) {
+    for (const z of [-0.32, 0.32]) {
+      cyl(g, 0.075, 0.62, dark, [x, 0.31, z], 10, 'mooring-post');
+      cyl(g, 0.1, 0.06, hi, [x, 0.62, z], 10, 'post-cap');
+
+      // rope collar
+      const ring = mesh(g, new THREE.TorusGeometry(0.08, 0.012, 6, 12), M('rope', 0x9a7041), 'rope-collar');
+      ring.position.set(x, 0.4, z);
+      ring.rotation.x = Math.PI / 2;
+    }
+  }
+}
+
+function createHarbourBoat(g: THREE.Group, sailColor: number): void {
+  const boat = createBoat(sailColor, 0.78);
+  // moored in the water on the seaward (local +X) side of the pier
+  boat.position.set(1.05, -0.08, -0.62);
+  boat.rotation.y = 0.35;
+  g.add(boat);
+}
+
+export function createBoat(sailColor = 0x2d79bd, scale = 1): THREE.Group {
+  const g = group('Boat');
+  g.scale.setScalar(scale);
+
+  // stylized pointed hull
+  const shape = new THREE.Shape();
+  shape.moveTo(-0.62, 0);
+  shape.lineTo(-0.42, -0.2);
+  shape.lineTo(0.38, -0.2);
+  shape.lineTo(0.62, 0);
+  shape.lineTo(0.38, 0.13);
+  shape.lineTo(-0.4, 0.13);
+  shape.closePath();
+
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 0.22,
+    bevelEnabled: true,
+    bevelSegments: 2,
+    bevelSize: 0.035,
+    bevelThickness: 0.035,
+  });
+
+  const hull = mesh(g, geo, M('boat-hull', C.woodDark), 'hull');
+  hull.rotation.x = Math.PI / 2;
+  hull.position.y = 0.11;
+
+  // lighter top rim
+  box(g, 0.78, 0.045, 0.035, M('boat-rim', C.woodHi), [0, 0.22, 0], 'gunwale');
+
+  // mast
+  cyl(g, 0.032, 0.92, M('mast', C.woodHi), [-0.02, 0.63, 0], 8, 'mast');
+
+  // triangular sail (vertical, double-sided)
+  const sailShape = new THREE.Shape();
+  sailShape.moveTo(0, 0);
+  sailShape.lineTo(0, 0.7);
+  sailShape.lineTo(0.46, 0.13);
+  sailShape.closePath();
+
+  // solid triangular-prism sail — reads from any camera bearing
+  const sailGeo = new THREE.ExtrudeGeometry(sailShape, { depth: 0.4, bevelEnabled: false });
+  const sailMat = new THREE.MeshStandardMaterial({ color: sailColor, roughness: 0.85, side: THREE.DoubleSide });
+  const sail = mesh(g, sailGeo, sailMat, 'sail');
+  sail.position.set(-0.18, 0.29, -0.02);
+  sail.rotation.y = Math.PI;
+
+  // rope boom
+  box(g, 0.52, 0.018, 0.018, M('rope', 0xc1a77c), [0.23, 0.34, 0], 'boom');
+  return g;
+}
+
+function createTradeSign(g: THREE.Group, resource: string | undefined): void {
+  const type = resource ?? 'generic';
+  const trade = type === 'generic' ? '3:1' : '2:1';
+  const sign = group('TradeSign');
+
+  // post
+  cyl(sign, 0.045, 0.48, M('sign-post', C.woodDark), [0, 0.55, 0.05], 8, 'sign-post');
+
+  // thick round wooden medallion
+  cyl(sign, 0.31, 0.075, M('trade-sign-edge', C.woodHi), [0, 0.85, 0.05], 32, 'sign-edge');
+  cyl(sign, 0.285, 0.04, M('trade-sign-face', C.token), [0, 0.895, 0.05], 32, 'sign-face');
+
+  flatText(sign, trade, 0.48, [0, 0.93, 0.075], [-Math.PI / 2, 0, 0], {
+    width: 256,
+    height: 128,
+    font: 'bold 78px Arial',
+    color: '#25333b',
+  });
+
+  flatText(sign, type === 'generic' ? 'ANY' : (RESOURCE_ICON[type] ?? RESOURCE_ICON.generic!), 0.28, [0, 0.76, 0.08], [-Math.PI / 2, 0, 0], {
+    width: 256,
+    height: 128,
+    font: 'bold 48px Arial',
+    color: '#4a5a60',
+  });
+
+  g.add(sign);
+}
+
+const RESOURCE_ICON: Record<string, string> = {
+  wheat: '🌾',
+  wood: '🪵',
+  brick: '▰',
+  ore: '◆',
+  sheep: '🐑',
+  generic: '⚓',
+};
+
+function createHarbourProps(g: THREE.Group): void {
+  const crate = createCrate(0.65);
+  crate.position.set(-0.42, 0.27, 0.16);
+  crate.rotation.y = -0.18;
+  g.add(crate);
+
+  const barrel = createBarrel(0.68);
+  barrel.position.set(0.42, 0.28, 0.16);
+  g.add(barrel);
+
+  for (const x of [-0.55, 0.55]) {
+    const lamp = createLantern(0.62);
+    lamp.position.set(x, 0.68, 0.2);
+    g.add(lamp);
+  }
+}
+
+/* ================================================================
+   LANTERN / CRATE / BARREL
+   ================================================================ */
+
+export function createLantern(scale = 1): THREE.Group {
+  const g = group('Lantern');
+  g.scale.setScalar(scale);
+
+  const brass = M('brass', 0xb8883d, 0.32, 0.35);
+  const glow = M('lamp-glow', C.lamp, 0.24);
+
+  cyl(g, 0.1, 0.055, brass, [0, 0.03, 0], 10, 'base');
+  box(g, 0.13, 0.2, 0.13, brass, [0, 0.15, 0], 'frame');
+  sphere(g, 0.052, glow, [0, 0.15, 0], 'glow');
+  cyl(g, 0.05, 0.035, brass, [0, 0.27, 0], 10, 'cap');
+
+  return g;
+}
+
+export function createCrate(scale = 1): THREE.Group {
+  const g = group('Crate');
+  g.scale.setScalar(scale);
+  const wood = M('crate-wood', C.woodHi);
+  const slat = M('crate-slat', C.woodDark);
+
+  box(g, 0.34, 0.34, 0.34, wood, [0, 0.17, 0], 'body');
+  for (const z of [-0.175, 0.175]) box(g, 0.37, 0.045, 0.045, slat, [0, 0.17, z], 'slat');
+  for (const x of [-0.175, 0.175]) box(g, 0.045, 0.045, 0.37, slat, [x, 0.17, 0], 'slat');
+  return g;
+}
+
+export function createBarrel(scale = 1): THREE.Group {
+  const g = group('Barrel');
+  g.scale.setScalar(scale);
+
+  cyl(g, 0.17, 0.31, M('barrel-body', C.wood), [0, 0.155, 0], 18, 'body');
+
+  for (const y of [0.065, 0.245]) {
+    const ring = mesh(g, new THREE.TorusGeometry(0.175, 0.018, 6, 18), M('barrel-band', C.woodDark), 'band');
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = y;
+  }
+
+  return g;
+}
+
+/* ================================================================
+   WATER
+   ================================================================ */
+
+export function createWaterTile(radius = 2.25): THREE.Group {
+  const g = group('WaterTile');
+
+  // no opaque disc: only ripple rings live on the open water
+
+  const waveMat = M('wave', C.water2, 0.22);
+
+  // rings distributed in the open water outside the island footprint
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * Math.PI * 2 + 0.35;
+    const rr = radius * (0.68 + (i % 5) * 0.065);
+    const w = mesh(g, new THREE.TorusGeometry(0.16, 0.014, 5, 12), waveMat, 'wave');
+    w.rotation.x = Math.PI / 2;
+    w.position.set(Math.cos(a) * rr, 0.025, Math.sin(a) * rr);
+    w.scale.x = 1.8;
+  }
+
+  return g;
+}
+/* ================================================================
+   DICE
+   ================================================================ */
+
+export function createDie(color = 0xe9d9b5, size = 0.38): THREE.Group {
+  const g = group('Die');
+  const m = M(`die-${color}`, color, 0.48);
+
+  mesh(g, new THREE.BoxGeometry(size, size, size), m, 'die');
+
+  // Rounded-looking corner caps
+  for (const x of [-1, 1]) {
+    for (const y of [-1, 1]) {
+      for (const z of [-1, 1]) {
+        sphere(g, size * 0.055, m, [x * size * 0.47, y * size * 0.47, z * size * 0.47], 'corner');
       }
     }
   }
 
-  return group;
+  return g;
 }
 
-/** Pasture: lush green grass with exactly 4 miniature 3D sheep grazing around the token */
-export function createPastureProps(): THREE.Group {
-  const group = new THREE.Group();
-  const woolMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.9 });
-  const headMat = new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.9 });
-  const earMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 });
-
-  // Exactly 4 grazing sheep in 4 quadrants around the central token
-  const sheepPositions = [
-    { x: -1.6, z: -1.4, rot: 0.4 },
-    { x: 1.7, z: -1.3, rot: 2.2 },
-    { x: -1.5, z: 1.5, rot: -0.8 },
-    { x: 1.6, z: 1.6, rot: -2.3 },
-  ];
-
-  for (const sp of sheepPositions) {
-    const sheep = new THREE.Group();
-    // Wool body
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), woolMat);
-    body.scale.set(1, 0.85, 1.35);
-    body.position.y = 0.38;
-    body.castShadow = true;
-    sheep.add(body);
-
-    // Black head
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), headMat);
-    head.position.set(0, 0.48, 0.42);
-    head.castShadow = true;
-    sheep.add(head);
-
-    // Tiny ears
-    const earL = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 4), earMat);
-    earL.rotation.z = Math.PI / 3;
-    earL.position.set(-0.15, 0.55, 0.38);
-    sheep.add(earL);
-
-    const earR = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 4), earMat);
-    earR.rotation.z = -Math.PI / 3;
-    earR.position.set(0.15, 0.55, 0.38);
-    sheep.add(earR);
-
-    sheep.position.set(sp.x, 0, sp.z);
-    sheep.rotation.y = sp.rot;
-    group.add(sheep);
-  }
-
-  return group;
-}
-
-/** Desert: concentric rippled sand dunes, 2 saguaro cacti, and central crater for robber */
-export function createDesertProps(): THREE.Group {
-  const group = new THREE.Group();
-  const duneMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.9, flatShading: true });
-  const cactusMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.85, flatShading: true });
-
-  // Concentric rippled dunes
-  const r1 = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.18, 8, 24), duneMat);
-  r1.rotation.x = -Math.PI / 2;
-  r1.position.y = 0.08;
-  group.add(r1);
-
-  const r2 = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.22, 8, 24), duneMat);
-  r2.rotation.x = -Math.PI / 2;
-  r2.position.y = 0.06;
-  group.add(r2);
-
-  // 2 Saguaro Cacti
-  const cacti = [
-    { x: -1.7, z: 0.6, h: 1.4 },
-    { x: 1.7, z: -0.6, h: 1.2 },
-  ];
-
-  for (const c of cacti) {
-    const cactus = new THREE.Group();
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, c.h, 6), cactusMat);
-    trunk.position.y = c.h / 2;
-    trunk.castShadow = true;
-    cactus.add(trunk);
-
-    const armH = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.35, 6), cactusMat);
-    armH.rotation.z = Math.PI / 2;
-    armH.position.set(0.18, c.h * 0.55, 0);
-    cactus.add(armH);
-
-    const armV = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.45, 6), cactusMat);
-    armV.position.set(0.35, c.h * 0.7, 0);
-    cactus.add(armV);
-
-    cactus.position.set(c.x, 0, c.z);
-    group.add(cactus);
-  }
-
-  return group;
-}
-
-// ---------------------------------------------------------------------------
-// Solid Player Pieces (Matching 3D Asset Reference Sheet)
-// ---------------------------------------------------------------------------
-
-/** Settlement: clean geometric wooden cottage with pitched gable roof in solid player color */
-export function createSettlementMesh(color: string): THREE.Group {
-  const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({
-    color: pal.main,
-    emissive: pal.main,
-    emissiveIntensity: 0.25,
-    roughness: 0.35,
-    metalness: 0.1,
-  });
-
-  // Solid rectangular base walls
-  const base = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.1, 1.35), mat);
-  base.position.y = 0.55;
-  base.castShadow = true;
-  base.receiveShadow = true;
-  group.add(base);
-
-  // Pitched gable roof
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1.1, 4), mat);
-  roof.rotation.y = Math.PI / 4;
-  roof.position.y = 1.65;
-  roof.castShadow = true;
-  group.add(roof);
-
-  return group;
-}
-
-/** City: stepped L-shaped fortress building (higher tower + attached lower wing) in solid player color */
-export function createCityMesh(color: string): THREE.Group {
-  const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({
-    color: pal.main,
-    emissive: pal.main,
-    emissiveIntensity: 0.3,
-    roughness: 0.35,
-    metalness: 0.1,
-  });
-
-  // Attached lower gabled wing
-  const wingBase = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 1.2), mat);
-  wingBase.position.set(0.4, 0.6, 0);
-  wingBase.castShadow = true;
-  wingBase.receiveShadow = true;
-  group.add(wingBase);
-
-  const wingRoof = new THREE.Mesh(new THREE.ConeGeometry(1.2, 0.9, 4), mat);
-  wingRoof.rotation.y = Math.PI / 4;
-  wingRoof.position.set(0.4, 1.65, 0);
-  wingRoof.castShadow = true;
-  group.add(wingRoof);
-
-  // Higher gabled tower (forming L-shape)
-  const towerBase = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.2, 1.1), mat);
-  towerBase.position.set(-0.55, 1.1, 0);
-  towerBase.castShadow = true;
-  towerBase.receiveShadow = true;
-  group.add(towerBase);
-
-  const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(1.1, 1.2, 4), mat);
-  towerRoof.rotation.y = Math.PI / 4;
-  towerRoof.position.set(-0.55, 2.8, 0);
-  towerRoof.castShadow = true;
-  group.add(towerRoof);
-
-  return group;
-}
-
-/** Road: solid, clean, beveled rectangular bar in player color, lying flat between nodes */
-export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: string): THREE.Group {
-  const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
-  const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({
-    color: pal.main,
-    emissive: pal.main,
-    emissiveIntensity: 0.35,
-    roughness: 0.3,
-    metalness: 0.1,
-  });
-
-  const dx = p2.x - p1.x;
-  const dz = p2.z - p1.z;
-  const len = Math.hypot(dx, dz);
-  const angle = Math.atan2(dx, dz);
-
-  // Clean, solid, beveled rectangular wooden road bar
-  const road = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.38, len * 0.94), mat);
-  road.position.y = 0.19;
-  road.castShadow = true;
-  road.receiveShadow = true;
-  group.add(road);
-
-  group.position.addVectors(p1, p2).multiplyScalar(0.5);
-  group.position.y += 0.22;
-  group.rotation.set(0, angle, 0); // Flat on ground!
-  return group;
-}
-
-/** Robber: smooth black pawn standing in a textured sandy crater base */
-export function createRobberMesh(): THREE.Group {
-  const group = new THREE.Group();
-  const pawnMat = new THREE.MeshStandardMaterial({
-    color: 0x18181b,
-    roughness: 0.35,
-    metalness: 0.2,
-  });
-  const craterMat = new THREE.MeshStandardMaterial({
-    color: 0xd4a373,
-    roughness: 0.9,
-    flatShading: true,
-  });
-
-  // Textured crater / rock base
-  const crater = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.45, 0.35, 12), craterMat);
-  crater.position.y = 0.17;
-  crater.castShadow = true;
-  group.add(crater);
-
-  // Black pawn body
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.8, 0.3, 16), pawnMat);
-  base.position.y = 0.45;
-  base.castShadow = true;
-  group.add(base);
-
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.6, 1.3, 16), pawnMat);
-  body.position.y = 1.25;
-  body.castShadow = true;
-  group.add(body);
-
-  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.38, 0.14, 16), pawnMat);
-  collar.position.y = 1.95;
-  collar.castShadow = true;
-  group.add(collar);
-
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.46, 16, 16), pawnMat);
-  head.position.y = 2.45;
-  head.castShadow = true;
-  group.add(head);
-
-  return group;
-}
-
-// ---------------------------------------------------------------------------
-// 3D Harbour / Port Assets (Matching 3D Asset Reference Sheet)
-// ---------------------------------------------------------------------------
-
-const harborTextureCache = new Map<string, THREE.CanvasTexture>();
-
-export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
-  const key = `${harbor.type}:${harbor.resource ?? 'any'}`;
-  const cached = harborTextureCache.get(key);
-  if (cached) return cached;
-
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas unavailable');
-
-  const isGeneric = harbor.type === 'generic';
-  let title = '3:1';
-  let label = 'ANY';
-  let icon = '⚓';
-
-  if (!isGeneric) {
-    title = '2:1';
-    switch (harbor.resource) {
-      case 'wood':
-        label = 'WOOD';
-        icon = '🪵';
-        break;
-      case 'brick':
-        label = 'BRICK';
-        icon = '🧱';
-        break;
-      case 'sheep':
-        label = 'SHEEP';
-        icon = '🐑';
-        break;
-      case 'wheat':
-        label = 'WHEAT';
-        icon = '🌾';
-        break;
-      case 'ore':
-        label = 'ORE';
-        icon = '🪨';
-        break;
-    }
-  }
-
-  // 1. Cream parchment circular disc background
-  ctx.fillStyle = '#fefdf8';
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 8, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 2. Dark walnut/charcoal beveled rim (matching reference sheet)
-  ctx.strokeStyle = '#26150b';
-  ctx.lineWidth = 18;
-  ctx.stroke();
-
-  // Inner subtle border line
-  ctx.strokeStyle = 'rgba(38,21,11,0.25)';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 24, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // 3. Ratio text: "2:1" or "3:1"
-  ctx.font = 'bold 84px Rubik, sans-serif';
-  ctx.fillStyle = '#0f172a';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(title, size / 2, size / 2 - 46);
-
-  // 4. Center resource emblem icon
-  ctx.font = '64px Rubik, sans-serif';
-  ctx.fillText(icon, size / 2, size / 2 + 20);
-
-  // 5. Bottom label for 3:1 ("ANY")
-  if (isGeneric) {
-    ctx.font = 'bold 26px Rubik, sans-serif';
-    ctx.fillStyle = '#475569';
-    ctx.fillText(label, size / 2, size / 2 + 66);
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.anisotropy = 8;
-  harborTextureCache.set(key, texture);
-  return texture;
-}
-
-/** Creates a 3D harbor port matching the reference sheet: wooden dock, warm lanterns, color-coded sailboat, and medallion */
-export function createHarborPortMesh(harbor: Harbor): THREE.Group {
-  const port = new THREE.Group();
-
-  const woodDark = new THREE.MeshStandardMaterial({ color: 0x26150b, roughness: 0.85 });
-  const woodPlank = new THREE.MeshStandardMaterial({ color: 0x854d0e, roughness: 0.75 });
-  const lanternGlowMat = new THREE.MeshStandardMaterial({
-    color: 0xfbbf24,
-    emissive: 0xf59e0b,
-    emissiveIntensity: 1.2,
-  });
-
-  // Color-coded sail according to resource from reference sheet:
-  // Wheat: yellow sail; Wood: green sail; Brick: red sail; Ore: white/gray sail; Sheep: light green sail; Generic: blue sail
-  let sailColor = 0x2563eb;
-  if (harbor.type === 'specialty') {
-    switch (harbor.resource) {
-      case 'wheat': sailColor = 0xeab308; break;
-      case 'wood': sailColor = 0x16a34a; break;
-      case 'brick': sailColor = 0xdc2626; break;
-      case 'ore': sailColor = 0xcbd5e1; break;
-      case 'sheep': sailColor = 0x4ade80; break;
-    }
-  }
-  const sailMat = new THREE.MeshStandardMaterial({ color: sailColor, roughness: 0.4, side: THREE.DoubleSide });
-
-  // 1. Circular Wooden Harbor Trade Token Disc
-  const badgeTex = createHarborBadgeTexture(harbor);
-  const topMat = new THREE.MeshBasicMaterial({ map: badgeTex });
-  const sideMat = new THREE.MeshStandardMaterial({ color: 0x26150b, roughness: 0.8 });
-  const discGeom = new THREE.CylinderGeometry(1.25, 1.32, 0.28, 32);
-  const harborDisc = new THREE.Mesh(discGeom, [sideMat, topMat, sideMat]);
-  harborDisc.position.set(0, 0.14, 0);
-  harborDisc.castShadow = true;
-  harborDisc.receiveShadow = true;
-  port.add(harborDisc);
-
-  // 2. Wooden Dock Platform with Pilings & Railing
-  const dock = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.24, 2.4), woodPlank);
-  dock.position.set(0, 0.12, 1.4);
-  dock.castShadow = true;
-  port.add(dock);
-
-  // 2 Glowing Lantern Posts on the dock corners (Dock Props)
-  const postGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.7, 8);
-  const lanternBoxGeom = new THREE.BoxGeometry(0.18, 0.22, 0.18);
-
-  const post1 = new THREE.Mesh(postGeom, woodDark);
-  post1.position.set(-0.7, 0.45, 2.4);
-  port.add(post1);
-  const lantern1 = new THREE.Mesh(lanternBoxGeom, lanternGlowMat);
-  lantern1.position.set(-0.7, 0.85, 2.4);
-  port.add(lantern1);
-
-  const post2 = new THREE.Mesh(postGeom, woodDark);
-  post2.position.set(0.7, 0.45, 2.4);
-  port.add(post2);
-  const lantern2 = new THREE.Mesh(lanternBoxGeom, lanternGlowMat);
-  lantern2.position.set(0.7, 0.85, 2.4);
-  port.add(lantern2);
-
-  // 3. Moored Sailboat with color-coded sail
-  const ship = new THREE.Group();
-  ship.position.set(-1.2, -0.15, 1.2);
-  ship.rotation.y = 0.35;
-
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.35, 1.6), woodDark);
-  hull.position.y = 0.17;
-  hull.castShadow = true;
-  ship.add(hull);
-
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.9, 6), woodDark);
-  mast.position.set(0, 1.05, 0);
-  mast.castShadow = true;
-  ship.add(mast);
-
-  const sail = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 1.2), sailMat);
-  sail.position.set(0, 1.15, 0.08);
-  sail.rotation.y = -0.12;
-  sail.castShadow = true;
-  ship.add(sail);
-
-  port.add(ship);
-  return port;
-}
-
-// ---------------------------------------------------------------------------
-// Deep Royal Blue Ocean Water
-// ---------------------------------------------------------------------------
-
-export function createOceanBase(): THREE.Group {
-  const group = new THREE.Group();
-
-  // Deep royal/navy blue ocean water basin matching reference sheet
-  const oceanMat = new THREE.MeshStandardMaterial({
-    color: 0x0a2647, // Deep royal blue sea
-    roughness: 0.15,
-    metalness: 0.35,
-  });
-  const ocean = new THREE.Mesh(new THREE.CylinderGeometry(200, 200, 2.0, 64), oceanMat);
-  ocean.position.y = -1.0;
-  ocean.receiveShadow = true;
-  group.add(ocean);
-
-  return group;
+/* ================================================================
+   CINEMATIC LIGHTING / RENDER SETTINGS
+   ================================================================ */
+
+export function setupReferenceLighting(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
+  scene.background = new THREE.Color(0x031b2d);
+
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
+
+  const hemi = new THREE.HemisphereLight(0xbad8f3, 0x061522, 1.35);
+  scene.add(hemi);
+
+  const key = new THREE.DirectionalLight(0xffdfb1, 3.4);
+  key.position.set(8, 13, 8);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.left = -15;
+  key.shadow.camera.right = 15;
+  key.shadow.camera.top = 15;
+  key.shadow.camera.bottom = -15;
+  scene.add(key);
+
+  const cool = new THREE.DirectionalLight(0x65b7ed, 1.0);
+  cool.position.set(-9, 7, -6);
+  scene.add(cool);
+
+  const rim = new THREE.PointLight(0x2b82b5, 0.8, 18);
+  rim.position.set(-3, 4, -5);
+  scene.add(rim);
 }
