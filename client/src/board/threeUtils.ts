@@ -9,7 +9,7 @@
 // - Desert: Desert oasis with blue pool, palm trees, and saguaro cacti.
 
 import * as THREE from 'three';
-import type { Terrain } from '@catan/shared';
+import type { Harbor, Terrain } from '@catan/shared';
 
 export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D units
 export const HEX_RADIUS = 4.76;
@@ -612,6 +612,240 @@ export function createRobberMesh(): THREE.Group {
   head.position.y = 2.15;
   head.castShadow = true;
   group.add(head);
+
+  return group;
+}
+
+// ---------------------------------------------------------------------------
+// 3D Harbor Ports (Wooden Pier, Pilings, Moored Sloop with Sail, Cargo & Badge)
+// ---------------------------------------------------------------------------
+
+const harborTextureCache = new Map<string, THREE.CanvasTexture>();
+
+export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
+  const key = `${harbor.type}:${harbor.resource ?? 'any'}`;
+  const cached = harborTextureCache.get(key);
+  if (cached) return cached;
+
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas unavailable');
+
+  const isGeneric = harbor.type === 'generic';
+
+  // Outer badge background
+  ctx.fillStyle = isGeneric ? '#0369a1' : '#b45309';
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Golden / Brass border ring
+  ctx.strokeStyle = isGeneric ? '#38bdf8' : '#fbbf24';
+  ctx.lineWidth = 14;
+  ctx.stroke();
+
+  // Inner subtle ring
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 24, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Text: Ratio (3:1 or 2:1)
+  ctx.font = 'bold 76px Rubik, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(isGeneric ? '3:1' : '2:1', size / 2, size / 2 - 24);
+
+  // Icon / symbol on bottom
+  ctx.font = '54px Rubik, sans-serif';
+  const icon = isGeneric
+    ? '⚓'
+    : harbor.resource === 'wood'
+      ? '🌲'
+      : harbor.resource === 'brick'
+        ? '🧱'
+        : harbor.resource === 'sheep'
+          ? '🐑'
+          : harbor.resource === 'wheat'
+            ? '🌾'
+            : '⛰';
+  ctx.fillText(icon, size / 2, size / 2 + 50);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.anisotropy = 4;
+  harborTextureCache.set(key, texture);
+  return texture;
+}
+
+/** Creates a full 3D miniature harbor port: wooden pier on stilts, moored sailboat, cargo, and signpost */
+export function createHarborPortMesh(harbor: Harbor): THREE.Group {
+  const port = new THREE.Group();
+
+  const woodDark = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.9 });
+  const woodLight = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.8 });
+  const plankMat = new THREE.MeshStandardMaterial({ color: 0x854d0e, roughness: 0.75 });
+  const sailMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.45, side: THREE.DoubleSide });
+
+  // 1. Wooden Pier Boardwalk (extending out into the water along Z)
+  const pierDeck = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.18, 2.6), plankMat);
+  pierDeck.position.set(0, 0.28, 1.3);
+  pierDeck.castShadow = true;
+  pierDeck.receiveShadow = true;
+  port.add(pierDeck);
+
+  // 4 Vertical Pier Pilings / Stilts extending down into ocean bed
+  const pilingGeom = new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8);
+  const pilingPositions = [
+    { x: -0.4, z: 0.4 },
+    { x: 0.4, z: 0.4 },
+    { x: -0.4, z: 2.2 },
+    { x: 0.4, z: 2.2 },
+  ];
+  for (const pos of pilingPositions) {
+    const piling = new THREE.Mesh(pilingGeom, woodDark);
+    piling.position.set(pos.x, -0.3, pos.z);
+    piling.castShadow = true;
+    port.add(piling);
+  }
+
+  // 2 Mooring Bollards on pier deck
+  const bollardGeom = new THREE.CylinderGeometry(0.07, 0.07, 0.25, 8);
+  const b1 = new THREE.Mesh(bollardGeom, woodDark);
+  b1.position.set(-0.4, 0.45, 1.8);
+  port.add(b1);
+
+  const b2 = new THREE.Mesh(bollardGeom, woodDark);
+  b2.position.set(-0.4, 0.45, 0.8);
+  port.add(b2);
+
+  // 2. Miniature 3D Merchant Trading Ship (moored on left side of the pier)
+  const ship = new THREE.Group();
+  ship.position.set(-1.1, -0.05, 1.4);
+  ship.rotation.y = 0.08; // Slight natural bobbing angle
+
+  // Wooden Hull with tapered bow & stern
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.42, 1.9), woodLight);
+  hull.position.y = 0.21;
+  hull.castShadow = true;
+  ship.add(hull);
+
+  // Deck
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.08, 1.8), plankMat);
+  deck.position.y = 0.44;
+  ship.add(deck);
+
+  // Mast
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 8), woodDark);
+  mast.position.set(0, 1.4, -0.1);
+  mast.castShadow = true;
+  ship.add(mast);
+
+  // Yardarm spar
+  const spar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8), woodDark);
+  spar.rotation.z = Math.PI / 2;
+  spar.position.set(0, 2.1, -0.05);
+  ship.add(spar);
+
+  // Billowing White Canvas Sail
+  const sail = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 1.3), sailMat);
+  sail.position.set(0, 1.45, 0.05);
+  sail.rotation.y = -0.15;
+  sail.castShadow = true;
+  ship.add(sail);
+
+  port.add(ship);
+
+  // 3. Cargo on the Pier: stacked wooden barrels and cargo crate
+  const barrelGeom = new THREE.CylinderGeometry(0.2, 0.22, 0.4, 10);
+  const barrel1 = new THREE.Mesh(barrelGeom, woodDark);
+  barrel1.position.set(0.25, 0.48, 1.9);
+  barrel1.castShadow = true;
+  port.add(barrel1);
+
+  const barrel2 = new THREE.Mesh(barrelGeom, woodDark);
+  barrel2.position.set(0.22, 0.48, 1.4);
+  barrel2.castShadow = true;
+  port.add(barrel2);
+
+  const crate = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), woodLight);
+  crate.position.set(0.24, 0.46, 0.85);
+  crate.castShadow = true;
+  port.add(crate);
+
+  // 4. 3D Trade Ratio Badge Signpost (elevated at end of pier)
+  const signpost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 8), woodDark);
+  signpost.position.set(0, 0.9, 2.45);
+  signpost.castShadow = true;
+  port.add(signpost);
+
+  const badgeTex = createHarborBadgeTexture(harbor);
+  const badgeMat = new THREE.MeshStandardMaterial({ map: badgeTex, roughness: 0.4 });
+  const badgeGeom = new THREE.CylinderGeometry(0.65, 0.65, 0.1, 24);
+  const badge = new THREE.Mesh(badgeGeom, [woodDark, badgeMat, woodDark]);
+  badge.rotation.x = Math.PI / 4; // Tilted toward camera
+  badge.position.set(0, 1.6, 2.45);
+  badge.castShadow = true;
+  port.add(badge);
+
+  return port;
+}
+
+// ---------------------------------------------------------------------------
+// 3D Solid Beveled Wooden Board Frame & Tabletop
+// ---------------------------------------------------------------------------
+
+/** Creates a rich physical wooden tabletop and a 3D hexagonal frame with depth and bevels */
+export function create3DTabletopAndFrame(): THREE.Group {
+  const group = new THREE.Group();
+
+  // 1. Warm Walnut Wooden Tabletop surface underneath the ocean
+  const tableMat = new THREE.MeshStandardMaterial({
+    color: 0x1c120c, // Deep dark walnut
+    roughness: 0.6,
+    metalness: 0.1,
+  });
+  const tableGeom = new THREE.CylinderGeometry(45, 45, 1.5, 64);
+  const table = new THREE.Mesh(tableGeom, tableMat);
+  table.position.y = -1.2;
+  table.receiveShadow = true;
+  group.add(table);
+
+  // 2. 3D Beveled Wooden Frame around the island
+  const woodFrameMat = new THREE.MeshStandardMaterial({
+    color: 0x3e2312, // Rich carved mahogany/oak
+    roughness: 0.65,
+    metalness: 0.15,
+  });
+
+  // Hexagonal wooden rim segments with actual height/thickness
+  const frameGeom = new THREE.CylinderGeometry(25.5, 26.2, 1.3, 6);
+  const innerCutterGeom = new THREE.CylinderGeometry(19.2, 19.2, 1.6, 6);
+  void innerCutterGeom;
+
+  // Outer solid wooden frame ring
+  const frameBase = new THREE.Mesh(frameGeom, woodFrameMat);
+  frameBase.rotation.y = Math.PI / 6;
+  frameBase.position.y = 0.35;
+  frameBase.castShadow = true;
+  frameBase.receiveShadow = true;
+  group.add(frameBase);
+
+  // 3. Sandy Shoreline Shelf inside the frame
+  const sandShelfMat = new THREE.MeshStandardMaterial({
+    color: 0xd97706, // Warm golden shoreline sand
+    roughness: 0.95,
+  });
+  const sandGeom = new THREE.CylinderGeometry(19.2, 19.2, 0.4, 6);
+  const sandShelf = new THREE.Mesh(sandGeom, sandShelfMat);
+  sandShelf.rotation.y = Math.PI / 6;
+  sandShelf.position.y = 0.55;
+  sandShelf.receiveShadow = true;
+  group.add(sandShelf);
 
   return group;
 }

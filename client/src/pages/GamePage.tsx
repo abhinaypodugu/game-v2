@@ -11,7 +11,7 @@ import type { GameAction } from '@catan/shared';
 import { legalRobberHexes } from '@catan/shared';
 import { ThreeBoard } from '../board/ThreeBoard';
 import { CardHandTray } from '../components/CardHandTray';
-import { DiceDisplay } from '../components/DiceDisplay';
+import { ThreeDiceDisplay } from '../components/ThreeDiceDisplay';
 import { PlayerBadges } from '../components/PlayerBadges';
 import { CollapsibleLog } from '../components/CollapsibleLog';
 import { DiscardModal, VictimPicker } from '../components/RobberFlow';
@@ -197,7 +197,7 @@ export function GamePage(): React.JSX.Element {
 
             <div className="h-6 w-px bg-sky-800/80 mx-1" />
 
-            <DiceDisplay
+            <ThreeDiceDisplay
               die1={snap.dice?.die1 ?? null}
               die2={snap.dice?.die2 ?? null}
               rolling={rolling}

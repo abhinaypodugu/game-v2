@@ -9,10 +9,12 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { PersonalSnapshot } from '../types';
 import { hexToPixel, parseHexId, PIPS } from '@catan/shared';
 import {
+  create3DTabletopAndFrame,
   createCityMesh,
   createDesertProps,
   createFieldsProps,
   createForestProps,
+  createHarborPortMesh,
   createHillsProps,
   createMountainProps,
   createPastureProps,
@@ -26,7 +28,6 @@ import {
   SCALE,
   TERRAIN_COLORS,
 } from './threeUtils';
-import { createDiceTrayMesh, createDieMesh, getDieTargetRotation } from './threeDice';
 
 export interface ThreeBoardProps {
   snap: PersonalSnapshot;
@@ -54,7 +55,6 @@ export const ThreeBoard = memo(function ThreeBoard({
   const [cameraMode, setCameraMode] = useState<'3d' | 'top'>('3d');
 
   // Stable ref holders for props accessed during mouse events/animations.
-  const diceMeshesRef = useRef<{ die1: THREE.Mesh; die2: THREE.Mesh } | null>(null);
   const propsRef = useRef({
     snap,
     legalVertices,
@@ -295,33 +295,12 @@ export const ThreeBoard = memo(function ThreeBoard({
         const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT, pb.y * SCALE);
         const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
 
-        // Pull outward into the sea
+        // Direction pointing outward into the sea
         const dirFromCenter = new THREE.Vector3(mid.x, 0, mid.z).normalize();
-        const pierEnd = new THREE.Vector3().addVectors(mid, dirFromCenter.clone().multiplyScalar(2.4));
-        pierEnd.y = 0.15;
-
-        // Wooden pier plank
-        const pierDir = new THREE.Vector3().subVectors(pierEnd, mid);
-        const pierLen = pierDir.length();
-        const plankGeom = new THREE.BoxGeometry(0.65, 0.22, pierLen);
-        const plankMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.8 });
-        const plank = new THREE.Mesh(plankGeom, plankMat);
-        plank.position.addVectors(mid, pierEnd).multiplyScalar(0.5);
-        plank.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pierDir.normalize());
-        plank.castShadow = true;
-        boardGroup.add(plank);
-
-        // Floating buoy with harbor type
-        const buoyGeom = new THREE.CylinderGeometry(0.8, 0.8, 0.35, 16);
-        const buoyMat = new THREE.MeshStandardMaterial({
-          color: harbor.type === 'generic' ? 0x0284c7 : 0xd97706,
-          roughness: 0.3,
-        });
-        const buoy = new THREE.Mesh(buoyGeom, buoyMat);
-        buoy.position.copy(pierEnd);
-        buoy.position.y = 0.2;
-        buoy.castShadow = true;
-        boardGroup.add(buoy);
+        const port = createHarborPortMesh(harbor);
+        port.position.copy(mid);
+        port.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
+        boardGroup.add(port);
       }
       // --- C. Road Path Bed Strips Along All Edges ---
       const trailMat = new THREE.MeshStandardMaterial({
@@ -485,46 +464,9 @@ export const ThreeBoard = memo(function ThreeBoard({
           hitMeshes.push({ mesh: hitMesh, kind: 'vertex', id: vid });
         }
       }
-      // --- H. Hexagonal Coastal Interlocking Ocean Frame & Sandy Beach ---
-      // Sandy beach shoreline
-      const beachGeom = new THREE.RingGeometry(18.8, 19.8, 6);
-      const beachMat = new THREE.MeshStandardMaterial({
-        color: 0xd97706,
-        roughness: 0.9,
-      });
-      const beach = new THREE.Mesh(beachGeom, beachMat);
-      beach.rotation.x = -Math.PI / 2;
-      beach.rotation.z = Math.PI / 6;
-      beach.position.y = 0.06;
-      beach.receiveShadow = true;
-      boardGroup.add(beach);
-
-      // Outer interlocking sea frame
-      const frameGeom = new THREE.RingGeometry(19.8, 25.5, 6);
-      const frameMat = new THREE.MeshStandardMaterial({
-        color: 0x0284c7,
-        roughness: 0.35,
-        metalness: 0.25,
-      });
-      const frame = new THREE.Mesh(frameGeom, frameMat);
-      frame.rotation.x = -Math.PI / 2;
-      frame.rotation.z = Math.PI / 6;
-      frame.position.y = 0.08;
-      frame.receiveShadow = true;
-      boardGroup.add(frame);
-
-      // --- I. 3D Wooden Rolling Tray & Animated Dice ---
-      const tray = createDiceTrayMesh();
-      tray.position.set(16.5, 0, 13.5);
-      boardGroup.add(tray);
-
-      const die1 = createDieMesh(1.15);
-      const die2 = createDieMesh(1.15);
-      die1.position.set(15.7, 0.7, 13.5);
-      die2.position.set(17.3, 0.7, 13.5);
-      boardGroup.add(die1);
-      boardGroup.add(die2);
-      diceMeshesRef.current = { die1, die2 };
+      // --- H. Real 3D Solid Beveled Wooden Board Frame & Tabletop ---
+      const tabletopAndFrame = create3DTabletopAndFrame();
+      boardGroup.add(tabletopAndFrame);
     }
 
     // Initial build
@@ -584,41 +526,6 @@ export const ThreeBoard = memo(function ThreeBoard({
 
       // Gentle water ripple rotation
       foam.rotation.z = elapsed * 0.05;
-
-      // 3D Dice physics & tumble animation
-      if (diceMeshesRef.current) {
-        const { die1, die2 } = diceMeshesRef.current;
-        const isRolling = propsRef.current.rolling;
-        const currentDice = propsRef.current.snap.dice;
-        const val1 = currentDice?.die1 ?? 4;
-        const val2 = currentDice?.die2 ?? 2;
-        const targetRot1 = getDieTargetRotation(val1);
-        const targetRot2 = getDieTargetRotation(val2);
-
-        if (isRolling) {
-          // Rapid 3D tumble + bounce
-          die1.rotation.x += 0.35;
-          die1.rotation.y += 0.45;
-          die1.rotation.z += 0.25;
-          die1.position.y = 1.2 + Math.abs(Math.sin(elapsed * 18)) * 1.5;
-
-          die2.rotation.x += 0.42;
-          die2.rotation.y += 0.38;
-          die2.rotation.z += 0.32;
-          die2.position.y = 1.2 + Math.abs(Math.cos(elapsed * 16)) * 1.5;
-        } else {
-          // Smoothly interpolate to settled orientation
-          die1.rotation.x = THREE.MathUtils.lerp(die1.rotation.x, targetRot1.x, 0.15);
-          die1.rotation.y = THREE.MathUtils.lerp(die1.rotation.y, targetRot1.y, 0.15);
-          die1.rotation.z = THREE.MathUtils.lerp(die1.rotation.z, targetRot1.z, 0.15);
-          die1.position.y = THREE.MathUtils.lerp(die1.position.y, 0.7, 0.15);
-
-          die2.rotation.x = THREE.MathUtils.lerp(die2.rotation.x, targetRot2.x, 0.15);
-          die2.rotation.y = THREE.MathUtils.lerp(die2.rotation.y, targetRot2.y, 0.15);
-          die2.rotation.z = THREE.MathUtils.lerp(die2.rotation.z, targetRot2.z, 0.15);
-          die2.position.y = THREE.MathUtils.lerp(die2.position.y, 0.7, 0.15);
-        }
-      }
 
       controls.update();
       renderer.render(scene, camera);
