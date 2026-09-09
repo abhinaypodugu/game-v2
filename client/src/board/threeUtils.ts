@@ -31,12 +31,12 @@ export const TERRAIN_COLORS: Record<Terrain, { top: string; side: string; rough:
 };
 
 export const PLAYER_3D_COLORS: Record<string, { main: number; dark: number; light: number }> = {
-  red: { main: 0xef4444, dark: 0x991b1b, light: 0xf87171 },
-  blue: { main: 0x3b82f6, dark: 0x1e40af, light: 0x60a5fa },
-  orange: { main: 0xf97316, dark: 0x9a3412, light: 0xfb923c },
-  white: { main: 0xf8fafc, dark: 0x94a3b8, light: 0xffffff },
-  green: { main: 0x22c55e, dark: 0x166534, light: 0x4ade80 },
-  brown: { main: 0x854d0e, dark: 0x543007, light: 0xa16207 },
+  red: { main: 0xdc2626, dark: 0x7f1d1d, light: 0xf87171 },
+  blue: { main: 0x2563eb, dark: 0x1e3a8a, light: 0x60a5fa },
+  orange: { main: 0xea580c, dark: 0x7c2d12, light: 0xfb923c },
+  white: { main: 0x94a3b8, dark: 0x475569, light: 0xcbd5e1 }, // Silver-platinum tone (distinct from white stone paths)
+  green: { main: 0x16a34a, dark: 0x14532d, light: 0x4ade80 },
+  brown: { main: 0x854d0e, dark: 0x451a03, light: 0xb45309 },
 };
 
 // ---------------------------------------------------------------------------
@@ -503,60 +503,67 @@ export function createDesertProps(): THREE.Group {
   return group;
 }
 
-// ---------------------------------------------------------------------------
-// 3D Playing Pieces Builders
-// ---------------------------------------------------------------------------
-
-/** Settlement: 1.35x calibrated, towering glowing gabled cottage with dark plinth, white walls, and emissive player roof */
+/** Settlement: monochromatic in player color tonal shades (zero white), glowing roof and plinth */
 export function createSettlementMesh(color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
 
-  const plinthMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
-  const playerGlowMat = new THREE.MeshStandardMaterial({
+  const plinthMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.75 });
+  const playerRingMat = new THREE.MeshStandardMaterial({
     color: pal.main,
     emissive: pal.main,
     emissiveIntensity: 0.7,
-    roughness: 0.18,
+    roughness: 0.2,
+  });
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: pal.main,
+    emissive: pal.main,
+    emissiveIntensity: 0.25,
+    roughness: 0.35,
+  });
+  const timberMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.8 });
+  const roofMat = new THREE.MeshStandardMaterial({
+    color: pal.dark,
+    emissive: pal.main,
+    emissiveIntensity: 0.65,
+    roughness: 0.2,
     metalness: 0.15,
   });
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-  const timberMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
-  const chimneyMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.6 });
-  const smokeMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.9, transparent: true, opacity: 0.9 });
+  const chimneyMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.6 });
+  const smokeMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.9, transparent: true, opacity: 0.75 });
 
-  // 1. Dark charcoal beveled base plinth (1.35x scale)
+  // 1. Base plinth in deep player dark shade
   const plinth = new THREE.Mesh(new THREE.CylinderGeometry(1.30, 1.48, 0.32, 16), plinthMat);
   plinth.position.y = 0.16;
   plinth.receiveShadow = true;
   group.add(plinth);
 
-  // Saturated glowing player color ring around the plinth
-  const playerRing = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.40, 16), playerGlowMat);
+  // Glowing player color ring around plinth
+  const playerRing = new THREE.Mesh(new THREE.RingGeometry(1.05, 1.40, 16), playerRingMat);
   playerRing.rotation.x = -Math.PI / 2;
   playerRing.position.y = 0.33;
   group.add(playerRing);
 
-  // 2. Tall crisp white cottage walls (1.35x scale)
+  // 2. Cottage walls in vibrant player primary color (no white!)
   const walls = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.35, 1.35), wallMat);
   walls.position.y = 1.0;
   walls.castShadow = true;
   walls.receiveShadow = true;
   group.add(walls);
 
-  // Dark corner timber framing
+  // Corner timber framing in deep player shade
   const cornerTrim = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.10, 1.42), timberMat);
   cornerTrim.position.y = 1.68;
   group.add(cornerTrim);
 
-  // 3. Steep, towering glowing player-colored gable roof (1.35x scale)
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.40, 1.50, 4), playerGlowMat);
+  // 3. Steep gable roof in rich darker player shade with emissive glow
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(1.40, 1.50, 4), roofMat);
   roof.rotation.y = Math.PI / 4;
   roof.position.y = 2.40;
   roof.castShadow = true;
   group.add(roof);
 
-  // 4. Tall chimney with smoke puff (rising to height ~3.7)
+  // 4. Chimney stack in deep player shade
   const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.95, 0.26), chimneyMat);
   chimney.position.set(0.44, 2.60, 0.28);
   chimney.castShadow = true;
@@ -573,89 +580,94 @@ export function createSettlementMesh(color: string): THREE.Group {
   return group;
 }
 
-/** City: 1.35x calibrated monumental double-tower fortress (height ~5.5) with glowing battlements and heraldic pennant */
+/** City: monochromatic in player color tonal shades (zero white), double-tower fortress with battlements */
 export function createCityMesh(color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
 
-  const plinthMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
-  const stoneMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.4 });
-  const playerGlowMat = new THREE.MeshStandardMaterial({
+  const plinthMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.8 });
+  const wallMat = new THREE.MeshStandardMaterial({
     color: pal.main,
     emissive: pal.main,
-    emissiveIntensity: 0.75,
-    roughness: 0.18,
+    emissiveIntensity: 0.25,
+    roughness: 0.35,
+  });
+  const battlementsMat = new THREE.MeshStandardMaterial({
+    color: pal.dark,
+    emissive: pal.main,
+    emissiveIntensity: 0.7,
+    roughness: 0.2,
     metalness: 0.15,
   });
-  const windowMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
-  const goldPoleMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, roughness: 0.2, metalness: 0.8 });
+  const flagMat = new THREE.MeshStandardMaterial({
+    color: pal.light,
+    emissive: pal.main,
+    emissiveIntensity: 0.5,
+    side: THREE.DoubleSide,
+  });
+  const goldPoleMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.3, metalness: 0.6 });
 
-  // 1. Dark charcoal plinth foundation (1.35x scale)
+  // 1. Plinth foundation in deep player dark shade
   const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.45, 0.34, 1.9), plinthMat);
   plinth.position.y = 0.17;
   plinth.receiveShadow = true;
   group.add(plinth);
 
   // Glowing player-colored border
-  const playerBorder = new THREE.Mesh(new THREE.BoxGeometry(2.30, 0.40, 1.75), playerGlowMat);
+  const playerBorder = new THREE.Mesh(new THREE.BoxGeometry(2.30, 0.40, 1.75), battlementsMat);
   playerBorder.position.y = 0.20;
   group.add(playerBorder);
 
-  // 2. Main castle keep (limestone, 1.35x scale)
-  const keep = new THREE.Mesh(new THREE.BoxGeometry(1.75, 1.9, 1.35), stoneMat);
+  // 2. Main castle keep in vibrant player primary color (no white!)
+  const keep = new THREE.Mesh(new THREE.BoxGeometry(1.75, 1.9, 1.35), wallMat);
   keep.position.set(0.30, 1.22, 0);
   keep.castShadow = true;
   keep.receiveShadow = true;
   group.add(keep);
 
-  // Keep battlements in radiant glowing player color
-  const keepBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.42, 1.48), playerGlowMat);
+  // Keep battlements in deep player shade with glow
+  const keepBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.42, 1.48), battlementsMat);
   keepBattlements.position.set(0.30, 2.25, 0);
   keepBattlements.castShadow = true;
   group.add(keepBattlements);
 
-  // 3. Tall observation watchtower (rising to height ~3.6)
-  const tower = new THREE.Mesh(new THREE.BoxGeometry(1.1, 3.4, 1.1), stoneMat);
+  // 3. Tall observation watchtower in player primary color
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(1.1, 3.4, 1.1), wallMat);
   tower.position.set(-0.68, 1.85, 0);
   tower.castShadow = true;
   tower.receiveShadow = true;
   group.add(tower);
 
-  // Tower battlements in glowing player color
-  const towerBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.48, 1.26), playerGlowMat);
+  // Tower battlements in deep player shade with glow
+  const towerBattlements = new THREE.Mesh(new THREE.BoxGeometry(1.26, 0.48, 1.26), battlementsMat);
   towerBattlements.position.set(-0.68, 3.70, 0);
   towerBattlements.castShadow = true;
   group.add(towerBattlements);
 
-  // Conical turret roof (rising to height ~4.4)
-  const turretRoof = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.1, 8), playerGlowMat);
+  // Conical turret roof in deep player shade
+  const turretRoof = new THREE.Mesh(new THREE.ConeGeometry(0.9, 1.1, 8), battlementsMat);
   turretRoof.position.set(-0.68, 4.40, 0);
   turretRoof.castShadow = true;
   group.add(turretRoof);
 
-  // 4. Gold flagpole with waving heraldic pennant (rising to height ~5.5!)
+  // 4. Flagpole with heraldic pennant in player light shade
   const flagPole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6), goldPoleMat);
   flagPole.position.set(-0.68, 5.10, 0);
   group.add(flagPole);
 
-  const flagMat = new THREE.MeshBasicMaterial({ color: pal.main, side: THREE.DoubleSide });
   const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 0.50), flagMat);
   flag.position.set(-0.25, 5.35, 0);
   group.add(flag);
 
-  // 5. Arched windows with warm lantern glow
-  const win1 = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.40), windowMat);
-  win1.position.set(0.30, 1.30, 0.70);
-  group.add(win1);
-
   return group;
 }
 
-/** Road: 1.35x calibrated wide timber highway lying completely flat on the ground with dark chassis and glowing core */
+/** Road: completely in one player color with tonal chassis, glowing core, and light accent (zero white) */
 export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
-  const chassisMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+
+  const chassisMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.8 });
   const coreMat = new THREE.MeshStandardMaterial({
     color: pal.main,
     emissive: pal.main,
@@ -664,10 +676,10 @@ export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: stri
     metalness: 0.15,
   });
   const highlightMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 0.85,
-    roughness: 0.2,
+    color: pal.light, // Player light shade (NO white!)
+    emissive: pal.main,
+    emissiveIntensity: 0.6,
+    roughness: 0.25,
   });
 
   const dx = p2.x - p1.x;
@@ -675,25 +687,25 @@ export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: stri
   const len = Math.hypot(dx, dz);
   const angle = Math.atan2(dx, dz);
 
-  // 1. 1.35x Wide dark outer chassis (width: 0.88, height: 0.30, length: len * 0.95)
+  // 1. Dark chassis in deep player dark tone
   const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.30, len * 0.95), chassisMat);
   chassis.position.y = 0.15;
   chassis.castShadow = true;
   chassis.receiveShadow = true;
   group.add(chassis);
 
-  // 2. 1.35x Wide glowing player-colored inner timber highway beam
+  // 2. Vibrant glowing player core beam
   const core = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.26, len * 0.92), coreMat);
   core.position.y = 0.18;
   core.castShadow = true;
   group.add(core);
 
-  // 3. Crisp illuminated white center highlight stripe
+  // 3. Center highlight stripe in player light tone (zero white!)
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, len * 0.88), highlightMat);
   stripe.position.y = 0.32;
   group.add(stripe);
 
-  // Position at midpoint and orient with flat horizontal yaw rotation ONLY!
+  // Position at midpoint and orient flat on ground
   group.position.addVectors(p1, p2).multiplyScalar(0.5);
   group.position.y += 0.19;
   group.rotation.set(0, angle, 0); // Flat on ground!

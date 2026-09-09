@@ -373,10 +373,14 @@ export const ThreeBoard = memo(function ThreeBoard({
         boardGroup.add(port);
       }
       // --- C. Road Path Bed Strips Along All Edges ---
+      // --- C. Road Path Bed Strips Along All Edges (White & Whitish Grey) ---
       const unbuiltTrailMat = new THREE.MeshStandardMaterial({
-        color: 0x44403c, // Dark stone gravel
-        roughness: 0.95,
+        color: 0xf8fafc, // Clean white-grey limestone roadbed
+        roughness: 0.85,
         flatShading: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
       });
       const legalTrailMat = new THREE.MeshStandardMaterial({
         color: 0xfacc15,
@@ -422,9 +426,12 @@ export const ThreeBoard = memo(function ThreeBoard({
       // --- D. Settlement Foundation Plazas at All Vertices ---
       const plazaGeom = new THREE.CylinderGeometry(1.12, 1.30, 0.16, 16);
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
-        color: 0x475569, // Dark slate foundation
+        color: 0xe2e8f0, // Carved whitish-grey stone plaza
         roughness: 0.85,
         flatShading: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
       });
       const legalPlazaMat = new THREE.MeshStandardMaterial({
         color: 0xfacc15,
