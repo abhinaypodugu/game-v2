@@ -18,6 +18,7 @@
     "react-dom": "catalog:",
     "react-zoom-pan-pinch": "catalog:",
     "socket.io-client": "catalog:",
+    "three": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {
@@ -31,6 +32,7 @@
     "@types/canvas-confetti": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@types/three": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
