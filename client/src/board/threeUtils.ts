@@ -12,11 +12,11 @@ import * as THREE from 'three';
 import type { Harbor, Terrain } from '@catan/shared';
 
 export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D units
-export const HEX_RADIUS = 4.45; // True pointy-top edge-to-edge alignment with clean parallel street gap
-export const HEX_BASE_RADIUS = 4.47;
-export const STREET_Y = 0.04; // Street base level where connector pathways, roads, and settlements sit
-export const HEX_ELEVATION = 0.20; // Hex tiles elevated ~0.20 above the road path
-export const TOP_Y = STREET_Y + HEX_ELEVATION; // 0.24 - Top deck height where biomes, tokens, and robber sit
+export const HEX_RADIUS = 4.42; // True pointy-top edge-to-edge alignment with clean parallel street gap
+export const HEX_BASE_RADIUS = 4.45;
+export const STREET_Y = 0.05; // Street base level where connector pathways, roads, and settlements sit
+export const HEX_ELEVATION = 0.72; // Reduced by 60% (keeping 40% of original height: ~0.72 above road path)
+export const TOP_Y = STREET_Y + HEX_ELEVATION; // 0.77 - Top deck height where biomes, tokens, and robber sit
 export const HEX_HEIGHT = TOP_Y; // Elevated top deck height
 export const WELL_RADIUS = 1.65; // Sunken circular well for number tokens
 // ---------------------------------------------------------------------------
