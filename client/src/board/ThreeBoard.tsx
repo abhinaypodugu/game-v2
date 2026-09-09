@@ -88,10 +88,10 @@ export const ThreeBoard = memo(function ThreeBoard({
     // 1. Scene & Renderer setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#071828');
-    scene.fog = new THREE.FogExp2('#071828', 0.012);
+    scene.fog = new THREE.FogExp2('#071828', 0.0035);
 
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 300);
-    camera.position.set(0, 32, 28);
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 800);
+    camera.position.set(0, 36, 32);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -107,10 +107,10 @@ export const ThreeBoard = memo(function ThreeBoard({
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
-    controls.minDistance = 12;
-    controls.maxDistance = 65;
-    controls.minPolarAngle = Math.PI / 10; // Allow looking almost straight down
-    controls.maxPolarAngle = Math.PI / 2.3; // Prevent dipping under water
+    controls.minDistance = 8;
+    controls.maxDistance = 180;
+    controls.minPolarAngle = Math.PI / 10;
+    controls.maxPolarAngle = Math.PI / 2.25;
     controls.target.set(0, 0, 0);
     controlsRef.current = controls;
 
@@ -138,7 +138,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     scene.add(oceanLight);
 
     // 4. Ocean
-    const oceanGeom = new THREE.CylinderGeometry(75, 75, 1.2, 64);
+    const oceanGeom = new THREE.CylinderGeometry(200, 200, 2.0, 64);
     const oceanMat = new THREE.MeshStandardMaterial({
       color: 0x093354,
       roughness: 0.15,
@@ -763,7 +763,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
-    camera.position.set(0, 48, 0.1);
+    camera.position.set(0, 58, 0.1);
     controls.target.set(0, 0, 0);
     controls.update();
     setCameraMode('top');
@@ -773,7 +773,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
-    camera.position.set(0, 32, 28);
+    camera.position.set(0, 36, 32);
     controls.target.set(0, 0, 0);
     controls.update();
     setCameraMode('3d');

@@ -906,47 +906,20 @@ export function createHarborPortMesh(harbor: Harbor): THREE.Group {
 // 3D Solid Beveled Wooden Board Frame & Tabletop
 // ---------------------------------------------------------------------------
 
-/** Creates a rich physical wooden tabletop and a 3D hexagonal frame with depth and bevels */
+/** Creates an expansive, seamless deep ocean water basin */
 export function createOceanBase(): THREE.Group {
   const group = new THREE.Group();
 
-  // 1. Deep turquoise/navy ocean water basin
+  // Expansive deep turquoise/navy ocean water basin (radius 200 supports wide zoom out)
   const oceanMat = new THREE.MeshStandardMaterial({
     color: 0x052f52,
-    roughness: 0.12,
+    roughness: 0.15,
     metalness: 0.35,
   });
-  const ocean = new THREE.Mesh(new THREE.CylinderGeometry(85, 85, 1.4, 64), oceanMat);
-  ocean.position.y = -0.7;
+  const ocean = new THREE.Mesh(new THREE.CylinderGeometry(200, 200, 2.0, 64), oceanMat);
+  ocean.position.y = -1.0;
   ocean.receiveShadow = true;
   group.add(ocean);
-
-  // 2. Shallow azure coastal shelf
-  const shelfMat = new THREE.MeshStandardMaterial({
-    color: 0x0284c7,
-    roughness: 0.25,
-    metalness: 0.2,
-    transparent: true,
-    opacity: 0.75,
-  });
-  const shelf = new THREE.Mesh(new THREE.RingGeometry(18.2, 24.5, 6), shelfMat);
-  shelf.rotation.x = -Math.PI / 2;
-  shelf.rotation.z = Math.PI / 6;
-  shelf.position.y = 0.05;
-  shelf.receiveShadow = true;
-  group.add(shelf);
-
-  // 3. Sandy golden shoreline fringe
-  const beachMat = new THREE.MeshStandardMaterial({
-    color: 0xf59e0b,
-    roughness: 0.95,
-  });
-  const beach = new THREE.Mesh(new THREE.RingGeometry(18.0, 18.6, 6), beachMat);
-  beach.rotation.x = -Math.PI / 2;
-  beach.rotation.z = Math.PI / 6;
-  beach.position.y = 0.08;
-  beach.receiveShadow = true;
-  group.add(beach);
 
   return group;
 }
