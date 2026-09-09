@@ -12,11 +12,11 @@ import * as THREE from 'three';
 import type { Harbor, Terrain } from '@catan/shared';
 
 export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D units
-export const HEX_RADIUS = 4.22; // Calibrated for visible street canyon gap between hex building blocks
-export const HEX_BASE_RADIUS = 4.26;
-export const STREET_Y = 0.28; // Base street level where connector pathways, roads, and settlements sit
-export const HEX_ELEVATION = 0.75; // Distinct elevation step: hex tiles rise 0.75 above the street level
-export const TOP_Y = STREET_Y + HEX_ELEVATION; // Elevated top deck height where 3D biomes, tokens, and robber sit
+export const HEX_RADIUS = 4.45; // True pointy-top edge-to-edge alignment with clean parallel street gap
+export const HEX_BASE_RADIUS = 4.47;
+export const STREET_Y = 0.04; // Street base level where connector pathways, roads, and settlements sit
+export const HEX_ELEVATION = 0.20; // Hex tiles elevated ~0.20 above the road path
+export const TOP_Y = STREET_Y + HEX_ELEVATION; // 0.24 - Top deck height where biomes, tokens, and robber sit
 export const HEX_HEIGHT = TOP_Y; // Elevated top deck height
 export const WELL_RADIUS = 1.65; // Sunken circular well for number tokens
 // ---------------------------------------------------------------------------
@@ -850,27 +850,27 @@ export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: stri
   const len = Math.hypot(dx, dz);
   const angle = Math.atan2(dx, dz);
 
-  // 1. Dark chassis in deep player dark tone (calibrated narrower width: 0.66)
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.30, len * 0.95), chassisMat);
-  chassis.position.y = 0.15;
+  // 1. Dark chassis in deep player dark tone (width: 0.52)
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, len * 0.94), chassisMat);
+  chassis.position.y = 0.08;
   chassis.castShadow = true;
   chassis.receiveShadow = true;
   group.add(chassis);
 
-  // 2. Vibrant glowing player core beam (narrower: 0.54)
-  const core = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.26, len * 0.92), coreMat);
-  core.position.y = 0.18;
+  // 2. Vibrant glowing player core beam (width: 0.42)
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, len * 0.90), coreMat);
+  core.position.y = 0.10;
   core.castShadow = true;
   group.add(core);
 
   // 3. Center highlight stripe in player light tone (zero white!)
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, len * 0.88), highlightMat);
-  stripe.position.y = 0.32;
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, len * 0.86), highlightMat);
+  stripe.position.y = 0.18;
   group.add(stripe);
 
   // Position at midpoint and orient flat on ground
   group.position.addVectors(p1, p2).multiplyScalar(0.5);
-  group.position.y += 0.19;
+  group.position.y += 0.06;
   group.rotation.set(0, angle, 0); // Flat on ground!
   return group;
 }

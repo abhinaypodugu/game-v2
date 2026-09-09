@@ -149,7 +149,7 @@ export const ThreeBoard = memo(function ThreeBoard({
       metalness: 0.28,
     });
     const ocean = new THREE.Mesh(oceanGeom, oceanMat);
-    ocean.position.y = -0.6;
+    ocean.position.y = -1.15; // Water surface sits at y = -0.15, well below ground and river
     ocean.receiveShadow = true;
     scene.add(ocean);
 
@@ -165,7 +165,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     });
     const innerBank = new THREE.Mesh(innerBankGeom, innerBankMat);
     innerBank.rotation.x = -Math.PI / 2;
-    innerBank.position.y = 0.12;
+    innerBank.position.y = -0.01;
     innerBank.receiveShadow = true;
     scene.add(innerBank);
 
@@ -183,7 +183,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     });
     const river = new THREE.Mesh(riverGeom, riverMat);
     river.rotation.x = -Math.PI / 2;
-    river.position.y = 0.22; // Well below elevated hex tiles (HEX_HEIGHT = 1.70)
+    river.position.y = -0.02; // Sits below street level (STREET_Y = 0.04)
     river.receiveShadow = true;
     scene.add(river);
 
@@ -196,7 +196,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     });
     const outerBank = new THREE.Mesh(outerBankGeom, outerBankMat);
     outerBank.rotation.x = -Math.PI / 2;
-    outerBank.position.y = 0.28;
+    outerBank.position.y = 0.00;
     outerBank.receiveShadow = true;
     scene.add(outerBank);
     // 5. Board Dynamic Container (Hexes, props, tokens, pieces, hit targets)
@@ -262,11 +262,24 @@ export const ThreeBoard = memo(function ThreeBoard({
         const materials = [hexSideMat, topMat, hexSideMat];
         const hexGeom = new THREE.CylinderGeometry(HEX_RADIUS, HEX_BASE_RADIUS, HEX_ELEVATION, 6);
         const slab = new THREE.Mesh(hexGeom, materials);
-        slab.rotation.y = Math.PI / 6; // Orient points/edges to match 2D layout
-        slab.position.y = STREET_Y + HEX_ELEVATION / 2; // Elevates block from STREET_Y up to TOP_Y!
+        slab.rotation.y = 0; // True pointy-top orientation: connects by edges with NO triangle gaps!
+        slab.position.y = STREET_Y + HEX_ELEVATION / 2; // Subtle elevation above road path
         slab.receiveShadow = true;
         slab.castShadow = true;
         hexObj.add(slab);
+
+        // Hexagonal perimeter boundary frame ring (dark walnut rim isolating hex top from street)
+        const borderRingGeom = new THREE.RingGeometry(HEX_RADIUS * 0.90, HEX_RADIUS, 6, 1, Math.PI / 6);
+        const borderRingMat = new THREE.MeshStandardMaterial({
+          color: 0x2e1e14, // Dark walnut boundary frame
+          roughness: 0.85,
+          side: THREE.DoubleSide,
+        });
+        const hexBorderRing = new THREE.Mesh(borderRingGeom, borderRingMat);
+        hexBorderRing.rotation.x = -Math.PI / 2;
+        hexBorderRing.position.y = TOP_Y + 0.005;
+        hexBorderRing.receiveShadow = true;
+        hexObj.add(hexBorderRing);
 
         // Biome props
         let props: THREE.Group | null = null;
@@ -313,10 +326,9 @@ export const ThreeBoard = memo(function ThreeBoard({
 
         // Highlight ring if legal hex
         if (propsRef.current.legalHexes?.has(hexId)) {
-          const ringGeom = new THREE.RingGeometry(HEX_RADIUS * 0.4, HEX_RADIUS * 0.95, 6);
+          const ringGeom = new THREE.RingGeometry(HEX_RADIUS * 0.4, HEX_RADIUS * 0.95, 6, 1, Math.PI / 6);
           const ring = new THREE.Mesh(ringGeom, hexHighlightMat);
           ring.rotation.x = -Math.PI / 2;
-          ring.rotation.z = Math.PI / 6;
           ring.position.y = TOP_Y + 0.15;
           hexObj.add(ring);
         }
@@ -470,23 +482,22 @@ export const ThreeBoard = memo(function ThreeBoard({
         trailGroup.position.y = STREET_Y + 0.04;
         trailGroup.rotation.set(0, angle, 0);
 
-        // 1. Dark walnut timber outer frame (calibrated narrower width: 0.94)
-        const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.05, len * 0.94), trailBorderMat);
+        // 1. Dark walnut timber outer frame (calibrated width: 0.72)
+        const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.04, len * 0.94), trailBorderMat);
         borderMesh.receiveShadow = true;
         trailGroup.add(borderMesh);
 
-        // 2. Warm wooden inner boardwalk pathway (calibrated narrower width: 0.72)
-        const innerTrail = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.07, len * 0.92), edgeMat);
+        // 2. Warm wooden inner boardwalk pathway (calibrated width: 0.54)
+        const innerTrail = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.05, len * 0.92), edgeMat);
         innerTrail.position.y = 0.01;
         innerTrail.receiveShadow = true;
         trailGroup.add(innerTrail);
-
         boardGroup.add(trailGroup);
       }
 
       // --- D. Settlement Foundation Plazas at All Vertices (Circular Wooden Decking Discs) ---
-      const plazaBorderGeom = new THREE.CylinderGeometry(0.96, 1.10, 0.16, 16);
-      const innerPlazaGeom = new THREE.CylinderGeometry(0.78, 0.90, 0.20, 16);
+      const plazaBorderGeom = new THREE.CylinderGeometry(0.74, 0.86, 0.10, 16);
+      const innerPlazaGeom = new THREE.CylinderGeometry(0.58, 0.68, 0.12, 16);
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
         color: 0xd99864, // Warm circular timber deck
         map: getWoodPlazaTexture(),
@@ -574,7 +585,7 @@ export const ThreeBoard = memo(function ThreeBoard({
         const color = playerColorMap.get(building.seat) ?? 'white';
         const piece =
           building.type === 'city' ? createCityMesh(color) : createSettlementMesh(color);
-        piece.position.set(vx, STREET_Y + 0.12, vz);
+        piece.position.set(vx, STREET_Y + 0.08, vz);
         boardGroup.add(piece);
         hitMeshes.push({ mesh: piece, kind: 'builtBuilding' as never, id: vid });
       }
@@ -606,7 +617,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const angle = Math.atan2(dx, dz);
 
           // Visual glowing ghost road (flat on the ground, 2x wide!)
-          const ghostGeom = new THREE.BoxGeometry(0.66, 0.28, len * 0.94);
+          const ghostGeom = new THREE.BoxGeometry(0.54, 0.20, len * 0.94);
           const ghost = new THREE.Mesh(ghostGeom, roadGhostMat);
           ghost.position.addVectors(p1, p2).multiplyScalar(0.5);
           ghost.position.y = STREET_Y + 0.22;
@@ -614,7 +625,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           boardGroup.add(ghost);
 
           // Fat raycast hit target
-          const hitGeom = new THREE.BoxGeometry(1.05, 0.65, len);
+          const hitGeom = new THREE.BoxGeometry(0.88, 0.55, len);
           const hitMesh = new THREE.Mesh(hitGeom, new THREE.MeshBasicMaterial({ visible: false }));
           hitMesh.position.copy(ghost.position);
           hitMesh.rotation.set(0, angle, 0);
@@ -777,7 +788,7 @@ export const ThreeBoard = memo(function ThreeBoard({
               const len = Math.hypot(dx, dz);
               const angle = Math.atan2(dx, dz);
 
-              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.28, len * 0.94), hoverGlowMat);
+              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.20, len * 0.94), hoverGlowMat);
               ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
               ghostRoad.position.y = STREET_Y + 0.28;
               ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
@@ -790,9 +801,9 @@ export const ThreeBoard = memo(function ThreeBoard({
           const hx = center2d.x * SCALE;
           const hz = center2d.y * SCALE;
 
-          const ring = new THREE.Mesh(new THREE.RingGeometry(HEX_RADIUS * 0.3, HEX_RADIUS * 0.96, 6), hoverHexMat);
+          const ring = new THREE.Mesh(new THREE.RingGeometry(HEX_RADIUS * 0.3, HEX_RADIUS * 0.96, 6, 1, Math.PI / 6), hoverHexMat);
           ring.rotation.x = -Math.PI / 2;
-          ring.position.set(hx, TOP_Y + 0.20, hz);
+          ring.position.set(hx, TOP_Y + 0.02, hz);
           hoverGroup.add(ring);
         } else if (hit.kind === 'builtBuilding' || hit.kind === 'builtRoad') {
           // Dynamic hover glow on built piece!
