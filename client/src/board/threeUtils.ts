@@ -12,8 +12,9 @@ import * as THREE from 'three';
 import type { Terrain } from '@catan/shared';
 
 export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D units
-export const HEX_RADIUS = 4.1;
-export const HEX_HEIGHT = 1.1;
+export const HEX_RADIUS = 4.76;
+export const HEX_BASE_RADIUS = 4.80;
+export const HEX_HEIGHT = 1.15;
 export const WELL_RADIUS = 1.35; // Sunken circular well for number tokens
 
 // ---------------------------------------------------------------------------

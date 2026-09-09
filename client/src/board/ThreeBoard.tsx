@@ -20,6 +20,7 @@ import {
   createRobberMesh,
   createSettlementMesh,
   getNumberTokenTexture,
+  HEX_BASE_RADIUS,
   HEX_HEIGHT,
   HEX_RADIUS,
   SCALE,
@@ -217,7 +218,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           flatShading: true,
         });
         const materials = [hexSideMat, topMat, hexSideMat];
-        const hexGeom = new THREE.CylinderGeometry(HEX_RADIUS, HEX_RADIUS * 1.03, HEX_HEIGHT, 6);
+        const hexGeom = new THREE.CylinderGeometry(HEX_RADIUS, HEX_BASE_RADIUS, HEX_HEIGHT, 6);
         const slab = new THREE.Mesh(hexGeom, materials);
         slab.rotation.y = Math.PI / 6; // Orient points/edges to match 2D layout
         slab.position.y = HEX_HEIGHT / 2;
@@ -322,8 +323,65 @@ export const ThreeBoard = memo(function ThreeBoard({
         buoy.castShadow = true;
         boardGroup.add(buoy);
       }
+      // --- C. Road Path Bed Strips Along All Edges ---
+      const trailMat = new THREE.MeshStandardMaterial({
+        color: 0x57534e,
+        roughness: 0.95,
+        flatShading: true,
+      });
+      const legalTrailMat = new THREE.MeshStandardMaterial({
+        color: 0xfacc15,
+        emissive: 0xca8a04,
+        emissiveIntensity: 0.4,
+        roughness: 0.5,
+      });
 
-      // --- C. Roads ---
+      for (const [eid, endpoints] of Object.entries(board.topology.edgeEndpoints)) {
+        const [a, b] = endpoints;
+        const pa = board.topology.vertexPos[a];
+        const pb = board.topology.vertexPos[b];
+        if (!pa || !pb) continue;
+
+        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.02, pa.y * SCALE);
+        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.02, pb.y * SCALE);
+        const dir = new THREE.Vector3().subVectors(p2, p1);
+        const len = dir.length();
+
+        const isLegal = propsRef.current.legalEdges?.has(eid);
+        const trailGeom = new THREE.BoxGeometry(0.38, 0.06, len * 0.92);
+        const trail = new THREE.Mesh(trailGeom, isLegal ? legalTrailMat : trailMat);
+        trail.position.addVectors(p1, p2).multiplyScalar(0.5);
+        trail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.normalize());
+        trail.receiveShadow = true;
+        boardGroup.add(trail);
+      }
+
+      // --- D. Settlement Foundation Plazas at All Vertices ---
+      const plazaGeom = new THREE.CylinderGeometry(0.72, 0.82, 0.12, 16);
+      const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
+        color: 0x64748b,
+        roughness: 0.85,
+        flatShading: true,
+      });
+      const legalPlazaMat = new THREE.MeshStandardMaterial({
+        color: 0xfacc15,
+        emissive: 0xca8a04,
+        emissiveIntensity: 0.45,
+        roughness: 0.4,
+      });
+
+      for (const [vidStr, pos] of Object.entries(board.topology.vertexPos)) {
+        const vid = Number(vidStr);
+        const vx = pos.x * SCALE;
+        const vz = pos.y * SCALE;
+        const isLegal = propsRef.current.legalVertices?.has(vid);
+        const plaza = new THREE.Mesh(plazaGeom, isLegal ? legalPlazaMat : unbuiltPlazaMat);
+        plaza.position.set(vx, HEX_HEIGHT + 0.06, vz);
+        plaza.receiveShadow = true;
+        boardGroup.add(plaza);
+      }
+
+      // --- E. Roads ---
       for (const [eid, ownerSeat] of Object.entries(roads)) {
         const endpoints = board.topology.edgeEndpoints[eid];
         if (!endpoints) continue;
@@ -332,14 +390,14 @@ export const ThreeBoard = memo(function ThreeBoard({
         const pb = board.topology.vertexPos[b];
         if (!pa || !pb) continue;
 
-        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT, pa.y * SCALE);
-        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT, pb.y * SCALE);
+        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.04, pa.y * SCALE);
+        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.04, pb.y * SCALE);
         const color = playerColorMap.get(ownerSeat) ?? 'white';
         const road = createRoadMesh(p1, p2, color);
         boardGroup.add(road);
       }
 
-      // --- D. Buildings (Settlements & Cities) ---
+      // --- F. Buildings (Settlements & Cities) ---
       for (const [vidStr, building] of Object.entries(buildings)) {
         const vid = Number(vidStr);
         const vPos = board.topology.vertexPos[vid];
@@ -350,7 +408,7 @@ export const ThreeBoard = memo(function ThreeBoard({
         const color = playerColorMap.get(building.seat) ?? 'white';
         const piece =
           building.type === 'city' ? createCityMesh(color) : createSettlementMesh(color);
-        piece.position.set(vx, HEX_HEIGHT, vz);
+        piece.position.set(vx, HEX_HEIGHT + 0.12, vz);
         boardGroup.add(piece);
       }
 
@@ -427,10 +485,24 @@ export const ThreeBoard = memo(function ThreeBoard({
           hitMeshes.push({ mesh: hitMesh, kind: 'vertex', id: vid });
         }
       }
-      // --- H. Hexagonal Coastal Interlocking Ocean Frame ---
-      const frameGeom = new THREE.RingGeometry(18.5, 23.5, 6);
+      // --- H. Hexagonal Coastal Interlocking Ocean Frame & Sandy Beach ---
+      // Sandy beach shoreline
+      const beachGeom = new THREE.RingGeometry(18.8, 19.8, 6);
+      const beachMat = new THREE.MeshStandardMaterial({
+        color: 0xd97706,
+        roughness: 0.9,
+      });
+      const beach = new THREE.Mesh(beachGeom, beachMat);
+      beach.rotation.x = -Math.PI / 2;
+      beach.rotation.z = Math.PI / 6;
+      beach.position.y = 0.06;
+      beach.receiveShadow = true;
+      boardGroup.add(beach);
+
+      // Outer interlocking sea frame
+      const frameGeom = new THREE.RingGeometry(19.8, 25.5, 6);
       const frameMat = new THREE.MeshStandardMaterial({
-        color: 0x075985,
+        color: 0x0284c7,
         roughness: 0.35,
         metalness: 0.25,
       });
