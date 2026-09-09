@@ -1,28 +1,33 @@
-// Full 3D WebGL Board for Catan — assembled from the reference asset pack
-// (threeUtils.ts) to match the stylized reference images:
-// - warm beveled hex frames with rich miniature terrain
-// - cream number chips (red 6/8 ink + probability pips)
-// - cream wooden nodes at every vertex + chunky roads
-// - detailed wooden harbours (piers, boats, sails, lamps, crates, trade signs)
-// - deep blue water with wave rings
-// - cinematic warm/cool lighting rig
+// Full 3D WebGL Board for Catan using Three.js.
+// Features: real-time shadows, procedural hex tiles with biome props,
+// carved number tokens, wooden harbors, 3D pieces, robber pawn, raycasted
+// selection beacons, and smooth orbit/pan/zoom camera controls.
 
 import { memo, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { PersonalSnapshot } from '../types';
-import { hexToPixel, parseHexId } from '@catan/shared';
+import { hexToPixel, parseHexId, PIPS } from '@catan/shared';
 import {
-  createCity,
-  createHarbour,
-  createNode,
-  createNumberToken,
-  createRobber,
-  createRoad,
-  createSettlement,
-  createTerrainTile,
-  createWaterTile,
-  setupReferenceLighting,
+  createOceanBase,
+  createCityMesh,
+  createDesertProps,
+  createFieldsProps,
+  createForestProps,
+  createHarborPortMesh,
+  createHillsProps,
+  createMountainProps,
+  createPastureProps,
+  createRoadMesh,
+  createRobberMesh,
+  createSettlementMesh,
+  getNumberTokenTexture,
+  HEX_BASE_RADIUS,
+  HEX_HEIGHT,
+  HEX_RADIUS,
+  PLAYER_3D_COLORS,
+  SCALE,
+  TERRAIN_COLORS,
 } from './threeUtils';
 
 export interface ThreeBoardProps {
@@ -35,21 +40,6 @@ export interface ThreeBoardProps {
   onVertexClick?: (vertex: number) => void;
   onEdgeClick?: (edge: string) => void;
   onHexClick?: (hex: string) => void;
-}
-
-/** Tile radius in reference (pack) units. */
-const TILE_R = 2.0;
-/** Uniform scale from shared pixel space (HEX_SIZE=100, pointy-top) to pack
- *  units, combined with a 30° rotation so the pointy-top lattice becomes the
- *  flat-top lattice the pack's hex frames are built for. */
-const K = TILE_R / 100;
-const COS30 = Math.cos(Math.PI / 6);
-const SIN30 = Math.sin(Math.PI / 6);
-
-function toBoard3D(x2d: number, y2d: number): { x: number; z: number } {
-  const rx = (x2d * COS30 - y2d * SIN30) * K;
-  const rz = (x2d * SIN30 + y2d * COS30) * K;
-  return { x: rx, z: rz };
 }
 
 export const ThreeBoard = memo(function ThreeBoard({
@@ -65,6 +55,7 @@ export const ThreeBoard = memo(function ThreeBoard({
   const containerRef = useRef<HTMLDivElement>(null);
   const [cameraMode, setCameraMode] = useState<'3d' | 'top'>('3d');
 
+  // Stable ref holders for props accessed during mouse events/animations.
   const propsRef = useRef({
     snap,
     legalVertices,
@@ -85,11 +76,8 @@ export const ThreeBoard = memo(function ThreeBoard({
     onEdgeClick,
     onHexClick,
   };
-
-  const rebuildBoardRef = useRef<((s: PersonalSnapshot) => void) | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -97,45 +85,124 @@ export const ThreeBoard = memo(function ThreeBoard({
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
+    // 1. Scene & Renderer setup
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(34, width / height, 0.1, 500);
-    camera.position.set(0, 18, 16);
-    camera.lookAt(0, 0, 0);
+    scene.background = new THREE.Color('#071828');
+    scene.fog = new THREE.FogExp2('#071828', 0.0035);
+
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 800);
+    camera.position.set(0, 36, 32);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      logarithmicDepthBuffer: true,
-      powerPreference: 'high-performance',
-    });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
     container.appendChild(renderer.domElement);
 
-    setupReferenceLighting(scene, renderer);
-
+    // 2. Camera Controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.dampingFactor = 0.08;
-    controls.minDistance = 6;
-    controls.maxDistance = 60;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 8;
+    controls.maxDistance = 180;
     controls.minPolarAngle = Math.PI / 10;
-    controls.maxPolarAngle = Math.PI / 2.05;
+    controls.maxPolarAngle = Math.PI / 2.25;
     controls.target.set(0, 0, 0);
     controlsRef.current = controls;
 
+    // 3. Lighting
+    const ambientLight = new THREE.AmbientLight(0xfff8ee, 1.2);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfff5e6, 2.4);
+    sunLight.position.set(24, 45, 18);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 5;
+    sunLight.shadow.camera.far = 120;
+    sunLight.shadow.camera.left = -26;
+    sunLight.shadow.camera.right = 26;
+    sunLight.shadow.camera.top = 26;
+    sunLight.shadow.camera.bottom = -26;
+    sunLight.shadow.bias = -0.0003;
+    scene.add(sunLight);
+
+    // Ocean cyan bounce light
+    const oceanLight = new THREE.DirectionalLight(0x38bdf8, 0.5);
+    oceanLight.position.set(-20, -10, -20);
+    scene.add(oceanLight);
+
+    // 4. Ocean
+    const oceanGeom = new THREE.CylinderGeometry(200, 200, 2.0, 64);
+    const oceanMat = new THREE.MeshStandardMaterial({
+      color: 0x093354,
+      roughness: 0.15,
+      metalness: 0.35,
+    });
+    const ocean = new THREE.Mesh(oceanGeom, oceanMat);
+    ocean.position.y = -0.6;
+    ocean.receiveShadow = true;
+    scene.add(ocean);
+
+    // Subtle foam ring around island
+    const foamGeom = new THREE.RingGeometry(18, 20.5, 48);
+    const foamMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.18,
+      side: THREE.DoubleSide,
+    });
+    const foam = new THREE.Mesh(foamGeom, foamMat);
+    foam.rotation.x = -Math.PI / 2;
+    foam.position.y = 0.02;
+    scene.add(foam);
+
+    // 5. Board Dynamic Container (Hexes, props, tokens, pieces, hit targets)
     const boardGroup = new THREE.Group();
     scene.add(boardGroup);
 
+    // Raycast hit targets map
     const hitMeshes: Array<{
       mesh: THREE.Object3D;
       kind: 'vertex' | 'edge' | 'hex' | 'builtBuilding' | 'builtRoad';
       id: number | string;
     }> = [];
 
+    // Reusable Materials (80% tactile opacity with depthWrite for crystalline depth)
+    const hexSideMat = new THREE.MeshStandardMaterial({
+      color: 0x947250,
+      roughness: 0.85,
+      transparent: true,
+      opacity: 0.80,
+      depthWrite: true,
+    });
+    const beaconMat = new THREE.MeshBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.85 });
+    const beaconRingMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+    const roadGhostMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 0.8,
+      transparent: true,
+      opacity: 0.85,
+      roughness: 0.3,
+    });
+    const hexHighlightMat = new THREE.MeshBasicMaterial({
+      color: 0xef4444,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+    });
+
     function rebuildBoard(currentSnap: PersonalSnapshot): void {
+      // Clear prior board elements
       while (boardGroup.children.length > 0) {
-        boardGroup.remove(boardGroup.children[0]!);
+        const obj = boardGroup.children[0]!;
+        boardGroup.remove(obj);
       }
       hitMeshes.length = 0;
 
@@ -143,45 +210,126 @@ export const ThreeBoard = memo(function ThreeBoard({
       const playerColorMap = new Map<number, string>();
       for (const p of players) playerColorMap.set(p.seat, p.color);
 
-      // --- A. Terrain tiles + number tokens + hex hit targets ---
+      // --- A. Hexes, Biome Props, and Number Tokens ---
       for (const [hexId, hexData] of Object.entries(board.hexes)) {
         const { q, r } = parseHexId(hexId);
-        const c2d = hexToPixel(q, r);
-        const c3d = toBoard3D(c2d.x, c2d.y);
+        const center2d = hexToPixel(q, r);
+        const hx = center2d.x * SCALE;
+        const hz = center2d.y * SCALE;
+        const hexObj = new THREE.Group();
+        hexObj.position.set(hx, 0, hz);
+        const col = TERRAIN_COLORS[hexData.terrain];
+        const topMat = new THREE.MeshStandardMaterial({
+          color: col.top,
+          roughness: col.rough,
+          flatShading: true,
+          transparent: true,
+          opacity: 0.80,
+          depthWrite: true,
+        });
+        const materials = [hexSideMat, topMat, hexSideMat];
+        const hexGeom = new THREE.CylinderGeometry(HEX_RADIUS, HEX_BASE_RADIUS, HEX_HEIGHT, 6);
+        const slab = new THREE.Mesh(hexGeom, materials);
+        slab.rotation.y = Math.PI / 6; // Orient points/edges to match 2D layout
+        slab.position.y = HEX_HEIGHT / 2;
+        slab.receiveShadow = true;
+        slab.castShadow = true;
+        hexObj.add(slab);
 
-        const tile = createTerrainTile(hexData.terrain, TILE_R);
-        tile.position.set(c3d.x, 0, c3d.z);
-        tile.rotation.y = Math.PI / 6; // align faces to neighbor directions
-        boardGroup.add(tile);
+        // Biome props
+        let props: THREE.Group | null = null;
+        if (hexData.terrain === 'forest') props = createForestProps();
+        else if (hexData.terrain === 'mountains') props = createMountainProps();
+        else if (hexData.terrain === 'pasture') props = createPastureProps();
+        else if (hexData.terrain === 'fields') props = createFieldsProps();
+        else if (hexData.terrain === 'hills') props = createHillsProps();
+        else if (hexData.terrain === 'desert') props = createDesertProps();
 
-        if (hexData.token !== null) {
-          const token = createNumberToken(hexData.token, 0.55);
-          token.position.set(c3d.x, 0.3, c3d.z);
-          boardGroup.add(token);
+        if (props) {
+          props.position.y = HEX_HEIGHT;
+          hexObj.add(props);
         }
 
-        const hexHit = new THREE.Mesh(
-          new THREE.CylinderGeometry(TILE_R * 0.94, TILE_R * 0.94, 0.5, 6),
-          new THREE.MeshBasicMaterial({ visible: false }),
-        );
-        hexHit.position.set(c3d.x, 0.3, c3d.z);
-        hexHit.rotation.y = Math.PI / 6;
-        boardGroup.add(hexHit);
-        hitMeshes.push({ mesh: hexHit, kind: 'hex', id: hexId });
-      }
+        // Recessed circular token well bezel in the tile top
+        if (hexData.token !== null) {
+          const wellRingGeom = new THREE.RingGeometry(1.65, 1.95, 32);
+          const wellRingMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.8 });
+          const wellRing = new THREE.Mesh(wellRingGeom, wellRingMat);
+          wellRing.rotation.x = -Math.PI / 2;
+          wellRing.position.y = HEX_HEIGHT + 0.01;
+          hexObj.add(wellRing);
 
-      // --- B. Island base slab (cream wood, fills junction seams) ---
-      let islandR = 8;
-      for (const pos of Object.values(board.topology.vertexPos)) {
-        const p = toBoard3D(pos.x, pos.y);
-        islandR = Math.max(islandR, Math.hypot(p.x, p.z));
+          // Number token sitting flush inside the well (enlarged 3D disc!)
+          const pips = PIPS[hexData.token] ?? 0;
+          const tokenTex = getNumberTokenTexture(hexData.token, pips);
+          const tokenTopMat = new THREE.MeshBasicMaterial({ map: tokenTex });
+          const tokenSideMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.4 });
+          const tokenGeom = new THREE.CylinderGeometry(1.65, 1.65, 0.20, 32);
+          const tokenMesh = new THREE.Mesh(tokenGeom, [tokenSideMat, tokenTopMat, tokenSideMat]);
+          tokenMesh.position.y = HEX_HEIGHT + 0.10;
+          tokenMesh.castShadow = true;
+          hexObj.add(tokenMesh);
+        }
+
+        // Invisible raycast hit-disc for hex selection (e.g. robber move)
+        const hitGeom = new THREE.CylinderGeometry(HEX_RADIUS * 0.9, HEX_RADIUS * 0.9, 0.4, 6);
+        const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+        const hexHit = new THREE.Mesh(hitGeom, hitMat);
+        hexHit.position.y = HEX_HEIGHT + 0.2;
+        hexObj.add(hexHit);
+        hitMeshes.push({ mesh: hexHit, kind: 'hex', id: hexId });
+
+        // Highlight ring if legal hex
+        if (propsRef.current.legalHexes?.has(hexId)) {
+          const ringGeom = new THREE.RingGeometry(HEX_RADIUS * 0.4, HEX_RADIUS * 0.95, 6);
+          const ring = new THREE.Mesh(ringGeom, hexHighlightMat);
+          ring.rotation.x = -Math.PI / 2;
+          ring.rotation.z = Math.PI / 6;
+          ring.position.y = HEX_HEIGHT + 0.15;
+          hexObj.add(ring);
+        }
+        boardGroup.add(hexObj);
       }
-      const slab = new THREE.Mesh(
-        new THREE.CylinderGeometry(islandR + 0.55, islandR + 0.7, 0.5, 48),
-        new THREE.MeshStandardMaterial({ color: 0xd9c8a4, roughness: 0.8 }),
-      );
-      slab.position.y = -0.27;
-      // --- C. Harbour piers beyond occupied border edges ---
+      // --- B. 3D Miniature Harbor Ports & Natural Flowing River Inlets ---
+      // Create procedural flowing water ripple texture
+      const riverCanvas = document.createElement('canvas');
+      riverCanvas.width = 128;
+      riverCanvas.height = 128;
+      const rCtx = riverCanvas.getContext('2d')!;
+      const rGrad = rCtx.createLinearGradient(0, 0, 0, 128);
+      rGrad.addColorStop(0, '#06b6d4');
+      rGrad.addColorStop(0.5, '#38bdf8');
+      rGrad.addColorStop(1, '#0284c7');
+      rCtx.fillStyle = rGrad;
+      rCtx.fillRect(0, 0, 128, 128);
+      rCtx.strokeStyle = 'rgba(255,255,255,0.4)';
+      rCtx.lineWidth = 3;
+      for (let y = 12; y < 128; y += 24) {
+        rCtx.beginPath();
+        rCtx.moveTo(0, y);
+        rCtx.bezierCurveTo(32, y + 6, 96, y - 6, 128, y);
+        rCtx.stroke();
+      }
+      const riverWaterTex = new THREE.CanvasTexture(riverCanvas);
+      riverWaterTex.wrapS = THREE.RepeatWrapping;
+      riverWaterTex.wrapT = THREE.RepeatWrapping;
+      riverWaterTex.repeat.set(1, 2);
+
+      const riverWaterMat = new THREE.MeshStandardMaterial({
+        map: riverWaterTex,
+        color: 0x06b6d4,
+        roughness: 0.08,
+        metalness: 0.35,
+        transparent: true,
+        opacity: 0.76, // Beautifully balanced with 80% tile opacity
+        depthWrite: false,
+      });
+      (scene as unknown as { __riverTex?: THREE.CanvasTexture }).__riverTex = riverWaterTex;
+      const riverBankMat = new THREE.MeshStandardMaterial({
+        color: 0xd97706,
+        roughness: 0.9,
+      });
+
       for (const [eid, harbor] of Object.entries(board.harbors)) {
         const endpoints = board.topology.edgeEndpoints[eid];
         if (!endpoints) continue;
@@ -190,39 +338,66 @@ export const ThreeBoard = memo(function ThreeBoard({
         const pb = board.topology.vertexPos[b];
         if (!pa || !pb) continue;
 
-        const pa3 = toBoard3D(pa.x, pa.y);
-        const pb3 = toBoard3D(pb.x, pb.y);
-        const mx = (pa3.x + pb3.x) / 2;
-        const mz = (pa3.z + pb3.z) / 2;
-        const ox = mx;
-        const oz = mz;
-        const len = Math.hypot(ox, oz);
-        const outX = len > 0.001 ? ox / len : 0;
-        const outZ = len > 0.001 ? oz / len : 1;
+        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT, pa.y * SCALE);
+        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT, pb.y * SCALE);
+        const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
 
-        // Pier's long axis (local +X) runs radially from the shore outward.
-        const harbour = createHarbour(harbor.type === 'specialty' ? harbor.resource : undefined, 1.1);
-        harbour.position.set(mx + outX * 0.85, -0.02, mz + outZ * 0.85);
-        harbour.rotation.y = Math.atan2(-outZ, outX);
-        boardGroup.add(harbour);
+        // Direction pointing outward into the sea
+        const dirFromCenter = new THREE.Vector3(mid.x, 0, mid.z).normalize();
+
+        // Natural coastal river inlet bay
+        const inlet = new THREE.Group();
+        inlet.position.copy(mid);
+        inlet.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
+
+        // Turquoise river channel cutting into the coast
+        const waterChannel = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.14, 3.2), riverWaterMat);
+        waterChannel.position.set(0, -0.32, 1.2);
+        inlet.add(waterChannel);
+
+        // Sandy bank berms on left and right
+        const bankL = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.28, 10), riverBankMat);
+        bankL.position.set(-1.3, -0.2, 1.2);
+        inlet.add(bankL);
+
+        const bankR = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.28, 10), riverBankMat);
+        bankR.position.set(1.3, -0.2, 1.2);
+        inlet.add(bankR);
+
+        boardGroup.add(inlet);
+
+        // 3D Wooden Pier, Moored Ship, and Camera-Facing Sprite Badge
+        const port = createHarborPortMesh(harbor);
+        port.position.copy(mid);
+        port.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
+        boardGroup.add(port);
       }
-
-      // --- C. Nodes at every vertex + edge hit targets ---
-      for (const [vidStr, pos] of Object.entries(board.topology.vertexPos)) {
-        const vid = Number(vidStr);
-        const v3d = toBoard3D(pos.x, pos.y);
-        const node = createNode('standard');
-        node.position.set(v3d.x, 0.12, v3d.z);
-        boardGroup.add(node);
-
-        const nodeHit = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.45, 0.45, 0.6, 12),
-          new THREE.MeshBasicMaterial({ visible: false }),
-        );
-        nodeHit.position.set(v3d.x, 0.5, v3d.z);
-        boardGroup.add(nodeHit);
-        hitMeshes.push({ mesh: nodeHit, kind: 'vertex', id: vid });
-      }
+      // --- C. Road Path Bed Strips Along All Edges (Black Border + Soft Greyish-White Path) ---
+      const trailBorderMat = new THREE.MeshStandardMaterial({
+        color: 0x09090b, // Crisp black border outline
+        roughness: 0.9,
+        flatShading: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+      });
+      const unbuiltTrailMat = new THREE.MeshStandardMaterial({
+        color: 0xd1d5db, // Soft greyish white limestone
+        roughness: 0.85,
+        flatShading: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+      });
+      const legalTrailMat = new THREE.MeshStandardMaterial({
+        color: 0xfacc15,
+        emissive: 0xca8a04,
+        emissiveIntensity: 0.45,
+        roughness: 0.5,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+      });
 
       for (const [eid, endpoints] of Object.entries(board.topology.edgeEndpoints)) {
         const [a, b] = endpoints;
@@ -230,23 +405,106 @@ export const ThreeBoard = memo(function ThreeBoard({
         const pb = board.topology.vertexPos[b];
         if (!pa || !pb) continue;
 
-        const pa3 = toBoard3D(pa.x, pa.y);
-        const pb3 = toBoard3D(pb.x, pb.y);
-        const dx = pb3.x - pa3.x;
-        const dz = pb3.z - pa3.z;
+        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.02, pa.y * SCALE);
+        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.02, pb.y * SCALE);
+        const dx = p2.x - p1.x;
+        const dz = p2.z - p1.z;
         const len = Math.hypot(dx, dz);
+        const angle = Math.atan2(dx, dz);
 
-        const edgeHit = new THREE.Mesh(
-          new THREE.BoxGeometry(len * 0.9, 0.5, 0.55),
-          new THREE.MeshBasicMaterial({ visible: false }),
-        );
-        edgeHit.position.set((pa3.x + pb3.x) / 2, 0.4, (pa3.z + pb3.z) / 2);
-        edgeHit.rotation.y = -Math.atan2(dz, dx);
-        boardGroup.add(edgeHit);
-        hitMeshes.push({ mesh: edgeHit, kind: 'edge', id: eid });
+        const isLegal = propsRef.current.legalEdges?.has(eid);
+        const ownerSeat = roads[eid];
+        let edgeMat = isLegal ? legalTrailMat : unbuiltTrailMat;
+        if (ownerSeat !== undefined) {
+          const pCol = playerColorMap.get(ownerSeat) ?? 'white';
+          const hexCol = PLAYER_3D_COLORS[pCol]?.main ?? 0xffffff;
+          edgeMat = new THREE.MeshStandardMaterial({
+            color: hexCol,
+            roughness: 0.35,
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -2,
+          });
+        }
+
+        const trailGroup = new THREE.Group();
+        trailGroup.position.addVectors(p1, p2).multiplyScalar(0.5);
+        trailGroup.position.y = HEX_HEIGHT + 0.04;
+        trailGroup.rotation.set(0, angle, 0);
+
+        // 1. Black outer border frame (crisp outline against all tiles)
+        const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.05, len * 0.94), trailBorderMat);
+        borderMesh.receiveShadow = true;
+        trailGroup.add(borderMesh);
+
+        // 2. Soft greyish-white inner pathbed (or player color if built!)
+        const innerTrail = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.07, len * 0.92), edgeMat);
+        innerTrail.position.y = 0.01;
+        innerTrail.receiveShadow = true;
+        trailGroup.add(innerTrail);
+
+        boardGroup.add(trailGroup);
       }
 
-      // --- D. Roads ---
+      // --- D. Settlement Foundation Plazas at All Vertices (Black Border + Greyish-White Plaza) ---
+      const plazaBorderGeom = new THREE.CylinderGeometry(1.28, 1.48, 0.16, 16);
+      const innerPlazaGeom = new THREE.CylinderGeometry(1.06, 1.22, 0.20, 16);
+      const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
+        color: 0xd1d5db, // Soft greyish white carved stone
+        roughness: 0.85,
+        flatShading: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -3,
+      });
+      const legalPlazaMat = new THREE.MeshStandardMaterial({
+        color: 0xfacc15,
+        emissive: 0xca8a04,
+        emissiveIntensity: 0.5,
+        roughness: 0.4,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -3,
+      });
+
+      for (const [vidStr, pos] of Object.entries(board.topology.vertexPos)) {
+        const vid = Number(vidStr);
+        const vx = pos.x * SCALE;
+        const vz = pos.y * SCALE;
+        const isLegal = propsRef.current.legalVertices?.has(vid);
+        const building = buildings[vid];
+        let plazaMat = isLegal ? legalPlazaMat : unbuiltPlazaMat;
+        if (building !== undefined) {
+          const pCol = playerColorMap.get(building.seat) ?? 'white';
+          const hexCol = PLAYER_3D_COLORS[pCol]?.main ?? 0xffffff;
+          plazaMat = new THREE.MeshStandardMaterial({
+            color: hexCol,
+            roughness: 0.35,
+            polygonOffset: true,
+            polygonOffsetFactor: -3,
+            polygonOffsetUnits: -3,
+          });
+        }
+
+        const plazaGroup = new THREE.Group();
+        plazaGroup.position.set(vx, HEX_HEIGHT + 0.06, vz);
+
+        // 1. Black outer border ring
+        const borderRing = new THREE.Mesh(plazaBorderGeom, trailBorderMat);
+        borderRing.receiveShadow = true;
+        plazaGroup.add(borderRing);
+
+        // 2. Soft greyish-white inner stone plaza disc (or player color if built!)
+        const innerPlaza = new THREE.Mesh(innerPlazaGeom, plazaMat);
+        innerPlaza.position.y = 0.02;
+        innerPlaza.receiveShadow = true;
+        plazaGroup.add(innerPlaza);
+
+        boardGroup.add(plazaGroup);
+      }
+
+
+      // --- E. Roads ---
       for (const [eid, ownerSeat] of Object.entries(roads)) {
         const endpoints = board.topology.edgeEndpoints[eid];
         if (!endpoints) continue;
@@ -255,70 +513,124 @@ export const ThreeBoard = memo(function ThreeBoard({
         const pb = board.topology.vertexPos[b];
         if (!pa || !pb) continue;
 
-        const pa3 = toBoard3D(pa.x, pa.y);
-        const pb3 = toBoard3D(pb.x, pb.y);
-        const dx = pb3.x - pa3.x;
-        const dz = pb3.z - pa3.z;
-        const len = Math.hypot(dx, dz);
-
-        const road = createRoad(playerColorMap.get(ownerSeat) ?? 'red', len * 0.97);
-        road.position.set((pa3.x + pb3.x) / 2, 0.13, (pa3.z + pb3.z) / 2);
-        road.rotation.y = -Math.atan2(dz, dx);
+        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.04, pa.y * SCALE);
+        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.04, pb.y * SCALE);
+        const color = playerColorMap.get(ownerSeat) ?? 'white';
+        const road = createRoadMesh(p1, p2, color);
         boardGroup.add(road);
-        hitMeshes.push({ mesh: road, kind: 'builtRoad', id: eid });
+        hitMeshes.push({ mesh: road, kind: 'builtRoad' as never, id: eid });
       }
 
-      // --- E. Settlements & cities ---
+      // --- F. Buildings (Settlements & Cities) ---
       for (const [vidStr, building] of Object.entries(buildings)) {
         const vid = Number(vidStr);
-        const pos = board.topology.vertexPos[vid];
-        if (!pos) continue;
+        const vPos = board.topology.vertexPos[vid];
+        if (!vPos) continue;
 
-        const v3d = toBoard3D(pos.x, pos.y);
-        const color = playerColorMap.get(building.seat) ?? 'red';
-        const piece = building.type === 'city' ? createCity(color, 1.5) : createSettlement(color, 1.7);
-        piece.position.set(v3d.x, 0.12, v3d.z);
+        const vx = vPos.x * SCALE;
+        const vz = vPos.y * SCALE;
+        const color = playerColorMap.get(building.seat) ?? 'white';
+        const piece =
+          building.type === 'city' ? createCityMesh(color) : createSettlementMesh(color);
+        piece.position.set(vx, HEX_HEIGHT + 0.12, vz);
         boardGroup.add(piece);
-        hitMeshes.push({ mesh: piece, kind: 'builtBuilding', id: vid });
+        hitMeshes.push({ mesh: piece, kind: 'builtBuilding' as never, id: vid });
       }
 
-      // --- F. Robber ---
       const robberAxial = parseHexId(robber);
-      const rc2d = hexToPixel(robberAxial.q, robberAxial.r);
-      const rc3 = toBoard3D(rc2d.x, rc2d.y);
-      const robberPawn = createRobber(1.1);
-      robberPawn.position.set(rc3.x, 0.28, rc3.z);
+      const robberCenter = hexToPixel(robberAxial.q, robberAxial.r);
+      const rx = robberCenter.x * SCALE;
+      const rz = robberCenter.y * SCALE;
+      const robberPawn = createRobberMesh();
+      robberPawn.position.set(rx, HEX_HEIGHT + 0.18, rz);
       boardGroup.add(robberPawn);
 
-      // --- G. Water ---
-      const waterR = islandR + 9;
-      const water = new THREE.Mesh(
-        new THREE.CylinderGeometry(waterR, waterR, 0.6, 64),
-        new THREE.MeshStandardMaterial({ color: 0x063a5e, roughness: 0.23 }),
-      );
-      water.position.y = -0.32;
-      water.receiveShadow = true;
-      boardGroup.add(water);
+      // --- F. Legal Edge Highlights & Raycast Targets ---
+      const legalEdgesSet = propsRef.current.legalEdges;
+      if (legalEdgesSet && legalEdgesSet.size > 0) {
+        for (const eid of legalEdgesSet) {
+          const endpoints = board.topology.edgeEndpoints[eid];
+          if (!endpoints) continue;
+          const [a, b] = endpoints;
+          const pa = board.topology.vertexPos[a];
+          const pb = board.topology.vertexPos[b];
+          if (!pa || !pb) continue;
 
-      const waterTile = createWaterTile(waterR - 2);
-      waterTile.position.y = -0.02;
-      boardGroup.add(waterTile);
+          const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT, pa.y * SCALE);
+          const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT, pb.y * SCALE);
+          const dx = p2.x - p1.x;
+          const dz = p2.z - p1.z;
+          const len = Math.hypot(dx, dz);
+          const angle = Math.atan2(dx, dz);
+
+          // Visual glowing ghost road (flat on the ground, 2x wide!)
+          const ghostGeom = new THREE.BoxGeometry(0.88, 0.30, len * 0.94);
+          const ghost = new THREE.Mesh(ghostGeom, roadGhostMat);
+          ghost.position.addVectors(p1, p2).multiplyScalar(0.5);
+          ghost.position.y = HEX_HEIGHT + 0.22;
+          ghost.rotation.set(0, angle, 0);
+          boardGroup.add(ghost);
+
+          // Fat raycast hit target
+          const hitGeom = new THREE.BoxGeometry(1.25, 0.65, len);
+          const hitMesh = new THREE.Mesh(hitGeom, new THREE.MeshBasicMaterial({ visible: false }));
+          hitMesh.position.copy(ghost.position);
+          hitMesh.rotation.set(0, angle, 0);
+          boardGroup.add(hitMesh);
+          hitMeshes.push({ mesh: hitMesh, kind: 'edge', id: eid });
+        }
+      }
+      // --- G. Legal Vertex Beacons & Raycast Targets ---
+      const legalVerticesSet = propsRef.current.legalVertices;
+      if (legalVerticesSet && legalVerticesSet.size > 0) {
+        for (const vid of legalVerticesSet) {
+          const vPos = board.topology.vertexPos[vid];
+          if (!vPos) continue;
+
+          const vx = vPos.x * SCALE;
+          const vz = vPos.y * SCALE;
+
+          // Glowing vertical beacon
+          const beaconGeom = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 12);
+          const beacon = new THREE.Mesh(beaconGeom, beaconMat);
+          beacon.position.set(vx, HEX_HEIGHT + 1.1, vz);
+          boardGroup.add(beacon);
+
+          // Rotating white beacon ring
+          const ringGeom = new THREE.RingGeometry(0.6, 0.9, 16);
+          const ring = new THREE.Mesh(ringGeom, beaconRingMat);
+          ring.rotation.x = -Math.PI / 2;
+          ring.position.set(vx, HEX_HEIGHT + 1.8, vz);
+          boardGroup.add(ring);
+
+          // Raycast target sphere
+          const hitGeom = new THREE.SphereGeometry(1.2, 8, 8);
+          const hitMesh = new THREE.Mesh(hitGeom, new THREE.MeshBasicMaterial({ visible: false }));
+          hitMesh.position.set(vx, HEX_HEIGHT + 1.0, vz);
+          boardGroup.add(hitMesh);
+          hitMeshes.push({ mesh: hitMesh, kind: 'vertex', id: vid });
+        }
+      }
+      // --- H. Real Ocean Sea Base & Shallow Coastal Shelf ---
+      const oceanBase = createOceanBase();
+      boardGroup.add(oceanBase);
     }
 
+    // Initial build
     rebuildBoard(propsRef.current.snap);
 
-    // --- Raycasting ---
+    // 6. Raycaster & Mouse Click/Move Handling
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
-    const getHit = (event: MouseEvent) => {
+    const getRaycastHit = (event: MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
 
-      const targets = hitMeshes.map((h) => h.mesh);
-      const intersects = raycaster.intersectObjects(targets, true);
+      const targetObjects = hitMeshes.map((h) => h.mesh);
+      const intersects = raycaster.intersectObjects(targetObjects, true);
       if (intersects.length === 0) return null;
 
       const hitObj = intersects[0]!.object;
@@ -335,34 +647,181 @@ export const ThreeBoard = memo(function ThreeBoard({
       );
     };
 
+    const hoverGroup = new THREE.Group();
+    scene.add(hoverGroup);
+
+    const hoverGlowMat = new THREE.MeshStandardMaterial({
+      color: 0xfacc15,
+      emissive: 0xf59e0b,
+      emissiveIntensity: 1.1,
+      transparent: true,
+      opacity: 0.88,
+      roughness: 0.2,
+    });
+    const hoverRingMat = new THREE.MeshBasicMaterial({
+      color: 0xfffbeb,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+    });
+    const hoverHexMat = new THREE.MeshBasicMaterial({
+      color: 0xef4444,
+      transparent: true,
+      opacity: 0.6,
+      side: THREE.DoubleSide,
+    });
+
+    let lastHoveredPiece: THREE.Object3D | null = null;
+
     const onPointerMove = (event: MouseEvent) => {
-      const hit = getHit(event);
+      const hit = getRaycastHit(event);
       container.style.cursor = hit ? 'pointer' : 'default';
+
+      // Restore prior hovered built piece if any
+      if (lastHoveredPiece && (!hit || (hit.mesh !== lastHoveredPiece && !hit.mesh.children.includes(lastHoveredPiece)))) {
+        lastHoveredPiece.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const m = (child as THREE.Mesh).material;
+            if (m && 'emissiveIntensity' in m) {
+              (m as THREE.MeshStandardMaterial).emissiveIntensity = 0.7;
+            }
+          }
+        });
+        lastHoveredPiece = null;
+      }
+
+      // Clear prior hover preview
+      while (hoverGroup.children.length > 0) {
+        hoverGroup.remove(hoverGroup.children[0]!);
+      }
+      if (hit) {
+        const { snap, legalVertices, legalEdges, legalHexes } = propsRef.current;
+        const { board, you } = snap;
+        const myColor = snap.players[you.seat]?.color ?? 'red';
+
+        if (hit.kind === 'vertex' && typeof hit.id === 'number' && legalVertices?.has(hit.id)) {
+          const vPos = board.topology.vertexPos[hit.id];
+          if (vPos) {
+            const vx = vPos.x * SCALE;
+            const vz = vPos.y * SCALE;
+
+            // Glowing holographic ghost settlement
+            const ghostSettlement = createSettlementMesh(myColor);
+            ghostSettlement.position.set(vx, HEX_HEIGHT + 0.14, vz);
+            ghostSettlement.traverse((child) => {
+              if ((child as THREE.Mesh).isMesh) {
+                (child as THREE.Mesh).material = hoverGlowMat;
+              }
+            });
+            hoverGroup.add(ghostSettlement);
+
+            // Glowing rotating halo ring around the vertex (2x scale)
+            const halo = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.55, 24), hoverRingMat);
+            halo.rotation.x = -Math.PI / 2;
+            halo.position.set(vx, HEX_HEIGHT + 0.16, vz);
+            hoverGroup.add(halo);
+          }
+        } else if (hit.kind === 'edge' && typeof hit.id === 'string' && legalEdges?.has(hit.id)) {
+          const endpoints = board.topology.edgeEndpoints[hit.id];
+          if (endpoints) {
+            const [a, b] = endpoints;
+            const pa = board.topology.vertexPos[a];
+            const pb = board.topology.vertexPos[b];
+            if (pa && pb) {
+              const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.14, pa.y * SCALE);
+              const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.14, pb.y * SCALE);
+              const dx = p2.x - p1.x;
+              const dz = p2.z - p1.z;
+              const len = Math.hypot(dx, dz);
+              const angle = Math.atan2(dx, dz);
+
+              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.32, len * 0.94), hoverGlowMat);
+              ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
+              ghostRoad.position.y = HEX_HEIGHT + 0.28;
+              ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
+              hoverGroup.add(ghostRoad);
+            }
+          }
+        } else if (hit.kind === 'hex' && typeof hit.id === 'string' && legalHexes?.has(hit.id)) {
+          const axial = parseHexId(hit.id);
+          const center2d = hexToPixel(axial.q, axial.r);
+          const hx = center2d.x * SCALE;
+          const hz = center2d.y * SCALE;
+
+          const ring = new THREE.Mesh(new THREE.RingGeometry(HEX_RADIUS * 0.3, HEX_RADIUS * 0.96, 6), hoverHexMat);
+          ring.rotation.x = -Math.PI / 2;
+          ring.rotation.z = Math.PI / 6;
+          ring.position.set(hx, HEX_HEIGHT + 0.2, hz);
+          hoverGroup.add(ring);
+        } else if (hit.kind === 'builtBuilding' || hit.kind === 'builtRoad') {
+          // Dynamic hover glow on built piece!
+          lastHoveredPiece = hit.mesh;
+          hit.mesh.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const m = (child as THREE.Mesh).material;
+              if (m && 'emissiveIntensity' in m) {
+                (m as THREE.MeshStandardMaterial).emissiveIntensity = 1.4;
+              }
+            }
+          });
+          if (hit.kind === 'builtBuilding') {
+            const halo = new THREE.Mesh(new THREE.RingGeometry(1.4, 2.0, 24), hoverRingMat);
+            halo.rotation.x = -Math.PI / 2;
+            halo.position.set(hit.mesh.position.x, HEX_HEIGHT + 0.14, hit.mesh.position.z);
+            hoverGroup.add(halo);
+          }
+        }
+      }
     };
 
     const onClick = (event: MouseEvent) => {
-      const hit = getHit(event);
+      const hit = getRaycastHit(event);
       if (!hit) return;
 
-      const { onVertexClick: vcb, onEdgeClick: ecb, onHexClick: hcb } = propsRef.current;
-      if (hit.kind === 'vertex' && typeof hit.id === 'number') vcb?.(hit.id);
-      else if (hit.kind === 'edge' && typeof hit.id === 'string') ecb?.(hit.id);
-      else if (hit.kind === 'hex' && typeof hit.id === 'string') hcb?.(hit.id);
+      const { onVertexClick, onEdgeClick, onHexClick } = propsRef.current;
+      if (hit.kind === 'vertex' && typeof hit.id === 'number') {
+        onVertexClick?.(hit.id);
+      } else if (hit.kind === 'edge' && typeof hit.id === 'string') {
+        onEdgeClick?.(hit.id);
+      } else if (hit.kind === 'hex' && typeof hit.id === 'string') {
+        onHexClick?.(hit.id);
+      }
     };
 
     renderer.domElement.addEventListener('mousemove', onPointerMove);
     renderer.domElement.addEventListener('click', onClick);
 
-    // --- Animation loop ---
+    // 7. Animation Loop
     let animId = 0;
+    const clock = new THREE.Clock();
+
     const animate = () => {
       animId = requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+
+      // Gentle water ripple rotation
+      foam.rotation.z = elapsed * 0.05;
+
+      // Animated flowing river water toward the ocean
+      const riverTex = (scene as unknown as { __riverTex?: THREE.CanvasTexture }).__riverTex;
+      if (riverTex) {
+        riverTex.offset.y -= 0.007;
+      }
+
+      // Pulsing glow on hover preview
+      if (hoverGroup.children.length > 0) {
+        const pulse = 1.0 + Math.sin(elapsed * 8) * 0.25;
+        hoverGlowMat.emissiveIntensity = 0.9 * pulse;
+        hoverRingMat.opacity = 0.7 + Math.sin(elapsed * 8) * 0.3;
+      }
       controls.update();
       renderer.render(scene, camera);
     };
     animate();
 
+    // 8. Resize Observer
     const resizeObserver = new ResizeObserver(() => {
+      if (!container) return;
       const w = container.clientWidth;
       const h = container.clientHeight;
       if (w === 0 || h === 0) return;
@@ -372,7 +831,9 @@ export const ThreeBoard = memo(function ThreeBoard({
     });
     resizeObserver.observe(container);
 
-    rebuildBoardRef.current = rebuildBoard;
+    // Store rebuildBoard trigger for prop changes
+    (container as unknown as { __rebuildBoard?: (s: PersonalSnapshot) => void }).__rebuildBoard =
+      rebuildBoard;
 
     return () => {
       cancelAnimationFrame(animId);
@@ -387,15 +848,21 @@ export const ThreeBoard = memo(function ThreeBoard({
     };
   }, []);
 
+  // Update scene whenever snap or legal sets change
   useEffect(() => {
-    rebuildBoardRef.current?.(snap);
+    const container = containerRef.current;
+    if (!container) return;
+    const trigger = (container as unknown as { __rebuildBoard?: (s: PersonalSnapshot) => void })
+      .__rebuildBoard;
+    trigger?.(snap);
   }, [snap, legalVertices, legalEdges, legalHexes]);
 
+  // Camera view presets
   const setTopDownView = () => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
-    camera.position.set(0, 30, 0.01);
+    camera.position.set(0, 58, 0.1);
     controls.target.set(0, 0, 0);
     controls.update();
     setCameraMode('top');
@@ -405,7 +872,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
-    camera.position.set(0, 18, 16);
+    camera.position.set(0, 36, 32);
     controls.target.set(0, 0, 0);
     controls.update();
     setCameraMode('3d');
@@ -415,6 +882,7 @@ export const ThreeBoard = memo(function ThreeBoard({
     <div className="relative h-full w-full select-none" data-testid="three-board">
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
 
+      {/* Camera View Preset Controls */}
       <div className="pointer-events-auto absolute top-4 right-4 flex items-center gap-1.5 rounded-xl border border-sky-500/30 bg-[#071828]/85 p-1.5 shadow-xl backdrop-blur-md">
         <button
           type="button"
@@ -424,6 +892,7 @@ export const ThreeBoard = memo(function ThreeBoard({
               ? 'bg-amber-500 text-slate-950 shadow-md'
               : 'bg-sky-950/70 text-sky-200 hover:bg-sky-800'
           }`}
+          title="3D Isometric Perspective"
         >
           🎮 3D View
         </button>
@@ -435,8 +904,17 @@ export const ThreeBoard = memo(function ThreeBoard({
               ? 'bg-amber-500 text-slate-950 shadow-md'
               : 'bg-sky-950/70 text-sky-200 hover:bg-sky-800'
           }`}
+          title="Top-Down Tactical View"
         >
           🧭 2D Map
+        </button>
+        <button
+          type="button"
+          onClick={setIsometricView}
+          className="rounded-lg bg-sky-950/70 px-2.5 py-1.5 text-xs font-bold text-sky-300 hover:bg-sky-800"
+          title="Reset Camera"
+        >
+          ⛶ Reset
         </button>
       </div>
     </div>
