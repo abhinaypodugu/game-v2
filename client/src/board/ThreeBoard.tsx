@@ -393,8 +393,10 @@ export const ThreeBoard = memo(function ThreeBoard({
 
         const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.02, pa.y * SCALE);
         const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.02, pb.y * SCALE);
-        const dir = new THREE.Vector3().subVectors(p2, p1);
-        const len = dir.length();
+        const dx = p2.x - p1.x;
+        const dz = p2.z - p1.z;
+        const len = Math.hypot(dx, dz);
+        const angle = Math.atan2(dx, dz);
 
         const isLegal = propsRef.current.legalEdges?.has(eid);
         const ownerSeat = roads[eid];
@@ -408,16 +410,17 @@ export const ThreeBoard = memo(function ThreeBoard({
           });
         }
 
-        const trailGeom = new THREE.BoxGeometry(0.48, 0.08, len * 0.94);
+        const trailGeom = new THREE.BoxGeometry(1.48, 0.08, len * 0.94);
         const trail = new THREE.Mesh(trailGeom, edgeMat);
         trail.position.addVectors(p1, p2).multiplyScalar(0.5);
-        trail.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.normalize());
+        trail.position.y = HEX_HEIGHT + 0.04;
+        trail.rotation.set(0, angle, 0); // Flat on the ground!
         trail.receiveShadow = true;
         boardGroup.add(trail);
       }
 
       // --- D. Settlement Foundation Plazas at All Vertices ---
-      const plazaGeom = new THREE.CylinderGeometry(0.88, 1.0, 0.16, 16);
+      const plazaGeom = new THREE.CylinderGeometry(1.6, 1.85, 0.22, 16);
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
         color: 0x475569, // Dark slate foundation
         roughness: 0.85,
@@ -504,27 +507,28 @@ export const ThreeBoard = memo(function ThreeBoard({
 
           const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT, pa.y * SCALE);
           const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT, pb.y * SCALE);
-          const dir = new THREE.Vector3().subVectors(p2, p1);
-          const len = dir.length();
+          const dx = p2.x - p1.x;
+          const dz = p2.z - p1.z;
+          const len = Math.hypot(dx, dz);
+          const angle = Math.atan2(dx, dz);
 
-          // Visual glowing ghost road
-          const ghostGeom = new THREE.CylinderGeometry(0.32, 0.32, len * 0.9, 8);
+          // Visual glowing ghost road (flat on the ground, 2x wide!)
+          const ghostGeom = new THREE.BoxGeometry(1.4, 0.38, len * 0.94);
           const ghost = new THREE.Mesh(ghostGeom, roadGhostMat);
           ghost.position.addVectors(p1, p2).multiplyScalar(0.5);
-          ghost.position.y += 0.28;
-          ghost.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+          ghost.position.y = HEX_HEIGHT + 0.22;
+          ghost.rotation.set(0, angle, 0);
           boardGroup.add(ghost);
 
           // Fat raycast hit target
-          const hitGeom = new THREE.CylinderGeometry(0.7, 0.7, len, 6);
+          const hitGeom = new THREE.BoxGeometry(1.8, 0.8, len);
           const hitMesh = new THREE.Mesh(hitGeom, new THREE.MeshBasicMaterial({ visible: false }));
           hitMesh.position.copy(ghost.position);
-          hitMesh.quaternion.copy(ghost.quaternion);
+          hitMesh.rotation.set(0, angle, 0);
           boardGroup.add(hitMesh);
           hitMeshes.push({ mesh: hitMesh, kind: 'edge', id: eid });
         }
       }
-
       // --- G. Legal Vertex Beacons & Raycast Targets ---
       const legalVerticesSet = propsRef.current.legalVertices;
       if (legalVerticesSet && legalVerticesSet.size > 0) {
@@ -636,10 +640,10 @@ export const ThreeBoard = memo(function ThreeBoard({
             });
             hoverGroup.add(ghostSettlement);
 
-            // Glowing rotating halo ring around the vertex
-            const halo = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.25, 24), hoverRingMat);
+            // Glowing rotating halo ring around the vertex (2x scale)
+            const halo = new THREE.Mesh(new THREE.RingGeometry(1.5, 2.2, 24), hoverRingMat);
             halo.rotation.x = -Math.PI / 2;
-            halo.position.set(vx, HEX_HEIGHT + 0.12, vz);
+            halo.position.set(vx, HEX_HEIGHT + 0.16, vz);
             hoverGroup.add(halo);
           }
         } else if (hit.kind === 'edge' && typeof hit.id === 'string' && legalEdges?.has(hit.id)) {
@@ -651,12 +655,15 @@ export const ThreeBoard = memo(function ThreeBoard({
             if (pa && pb) {
               const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.14, pa.y * SCALE);
               const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.14, pb.y * SCALE);
-              const dir = new THREE.Vector3().subVectors(p2, p1);
-              const len = dir.length();
+              const dx = p2.x - p1.x;
+              const dz = p2.z - p1.z;
+              const len = Math.hypot(dx, dz);
+              const angle = Math.atan2(dx, dz);
 
-              const ghostRoad = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, len * 0.94, 8), hoverGlowMat);
+              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.42, len * 0.94), hoverGlowMat);
               ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
-              ghostRoad.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+              ghostRoad.position.y = HEX_HEIGHT + 0.28;
+              ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
               hoverGroup.add(ghostRoad);
             }
           }
