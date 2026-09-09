@@ -14,7 +14,7 @@ import type { Harbor, Terrain } from '@catan/shared';
 export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D units
 export const HEX_RADIUS = 4.76;
 export const HEX_BASE_RADIUS = 4.80;
-export const HEX_HEIGHT = 1.15;
+export const HEX_HEIGHT = 1.70; // Elevated hex tile plateau height
 export const WELL_RADIUS = 1.70; // Sunken circular well for number tokens
 
 // ---------------------------------------------------------------------------
@@ -105,6 +105,166 @@ export function getNumberTokenTexture(token: number, pips: number): THREE.Canvas
   texture.anisotropy = 16;
   tokenTextureCache.set(token, texture);
   return texture;
+}
+
+// ---------------------------------------------------------------------------
+// Procedural Wood Pathway & River Flow Textures
+// ---------------------------------------------------------------------------
+
+let woodPathwayTex: THREE.CanvasTexture | null = null;
+export function getWoodPathwayTexture(): THREE.CanvasTexture {
+  if (woodPathwayTex) return woodPathwayTex;
+
+  const w = 512;
+  const h = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+
+  // Warm golden-amber oak wood base
+  ctx.fillStyle = '#9b6338';
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle longitudinal grain lines
+  const grainColors = ['#885329', '#ab7042', '#75431d', '#bd8554', '#683915'];
+  for (let i = 0; i < 48; i++) {
+    const y = Math.random() * h;
+    const thickness = 1 + Math.random() * 2.5;
+    ctx.fillStyle = grainColors[i % grainColors.length]!;
+    ctx.globalAlpha = 0.25 + Math.random() * 0.35;
+    ctx.fillRect(0, y, w, thickness);
+  }
+  ctx.globalAlpha = 1.0;
+
+  // Transverse wooden boardwalk planks with dark gap seams
+  const plankWidth = 64;
+  for (let x = 0; x < w; x += plankWidth) {
+    // Dark plank shadow seam
+    ctx.fillStyle = '#3f210d';
+    ctx.fillRect(x, 0, 3, h);
+    // Light plank edge highlight
+    ctx.fillStyle = '#d49b6a';
+    ctx.fillRect(x + 3, 0, 1.5, h);
+
+    // Nail/peg fasteners on the plank ends
+    ctx.fillStyle = '#261407';
+    ctx.beginPath();
+    ctx.arc(x + 12, 14, 2.5, 0, Math.PI * 2);
+    ctx.arc(x + 12, h - 14, 2.5, 0, Math.PI * 2);
+    ctx.arc(x + plankWidth - 12, 14, 2.5, 0, Math.PI * 2);
+    ctx.arc(x + plankWidth - 12, h - 14, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1, 3);
+  tex.anisotropy = 8;
+  woodPathwayTex = tex;
+  return tex;
+}
+
+let woodPlazaTex: THREE.CanvasTexture | null = null;
+export function getWoodPlazaTexture(): THREE.CanvasTexture {
+  if (woodPlazaTex) return woodPlazaTex;
+
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+
+  const center = size / 2;
+
+  // Base warm timber disc
+  ctx.fillStyle = '#9b6338';
+  ctx.beginPath();
+  ctx.arc(center, center, center, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Concentric tree rings / circular decking
+  const ringColors = ['#885329', '#ab7042', '#75431d', '#bd8554', '#5e3212'];
+  for (let r = 8; r < center - 6; r += 7) {
+    ctx.strokeStyle = ringColors[Math.floor(r / 7) % ringColors.length]!;
+    ctx.lineWidth = 2 + (r % 3);
+    ctx.globalAlpha = 0.35 + (r % 4) * 0.1;
+    ctx.beginPath();
+    ctx.arc(center, center, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1.0;
+
+  // 6 radial plank joints
+  for (let a = 0; a < 6; a++) {
+    const angle = (a * Math.PI) / 3;
+    ctx.strokeStyle = '#381c0b';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(center + Math.cos(angle) * 12, center + Math.sin(angle) * 12);
+    ctx.lineTo(center + Math.cos(angle) * (center - 6), center + Math.sin(angle) * (center - 6));
+    ctx.stroke();
+  }
+
+  // Outer dark rim
+  ctx.strokeStyle = '#2b1508';
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.arc(center, center, center - 4, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 8;
+  woodPlazaTex = tex;
+  return tex;
+}
+
+let riverFlowTex: THREE.CanvasTexture | null = null;
+export function getRiverFlowTexture(): THREE.CanvasTexture {
+  if (riverFlowTex) return riverFlowTex;
+
+  const w = 512;
+  const h = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+
+  // Vibrant clear river water base
+  const gradient = ctx.createLinearGradient(0, 0, 0, h);
+  gradient.addColorStop(0, '#0284c7'); // Rich azure
+  gradient.addColorStop(0.5, '#0ea5e9'); // Turquoise blue
+  gradient.addColorStop(1, '#0369a1'); // Deep stream
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, w, h);
+
+  // Flowing water current streams & foam streaks
+  const streamColors = ['rgba(186, 230, 253, 0.45)', 'rgba(125, 211, 252, 0.55)', 'rgba(240, 249, 255, 0.70)', 'rgba(56, 189, 248, 0.35)'];
+  for (let i = 0; i < 64; i++) {
+    const y = Math.random() * h;
+    const x = Math.random() * w;
+    const len = 40 + Math.random() * 120;
+    const thickness = 1.2 + Math.random() * 3.2;
+
+    ctx.strokeStyle = streamColors[i % streamColors.length]!;
+    ctx.lineWidth = thickness;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.bezierCurveTo(x + len * 0.3, y + Math.sin(x * 0.05) * 6, x + len * 0.7, y - Math.sin(x * 0.05) * 6, x + len, y);
+    ctx.stroke();
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(4, 1);
+  tex.anisotropy = 8;
+  riverFlowTex = tex;
+  return tex;
 }
 
 // ---------------------------------------------------------------------------
@@ -687,21 +847,21 @@ export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: stri
   const len = Math.hypot(dx, dz);
   const angle = Math.atan2(dx, dz);
 
-  // 1. Dark chassis in deep player dark tone
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.30, len * 0.95), chassisMat);
+  // 1. Dark chassis in deep player dark tone (calibrated narrower width: 0.66)
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.30, len * 0.95), chassisMat);
   chassis.position.y = 0.15;
   chassis.castShadow = true;
   chassis.receiveShadow = true;
   group.add(chassis);
 
-  // 2. Vibrant glowing player core beam
-  const core = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.26, len * 0.92), coreMat);
+  // 2. Vibrant glowing player core beam (narrower: 0.54)
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.26, len * 0.92), coreMat);
   core.position.y = 0.18;
   core.castShadow = true;
   group.add(core);
 
   // 3. Center highlight stripe in player light tone (zero white!)
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, len * 0.88), highlightMat);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.06, len * 0.88), highlightMat);
   stripe.position.y = 0.32;
   group.add(stripe);
 

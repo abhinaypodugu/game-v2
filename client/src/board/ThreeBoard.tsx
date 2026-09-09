@@ -22,6 +22,9 @@ import {
   createRobberMesh,
   createSettlementMesh,
   getNumberTokenTexture,
+  getRiverFlowTexture,
+  getWoodPathwayTexture,
+  getWoodPlazaTexture,
   HEX_BASE_RADIUS,
   HEX_HEIGHT,
   HEX_RADIUS,
@@ -29,7 +32,6 @@ import {
   SCALE,
   TERRAIN_COLORS,
 } from './threeUtils';
-
 export interface ThreeBoardProps {
   snap: PersonalSnapshot;
   legalVertices?: Set<number>;
@@ -149,19 +151,52 @@ export const ThreeBoard = memo(function ThreeBoard({
     ocean.receiveShadow = true;
     scene.add(ocean);
 
-    // Subtle foam ring around island
-    const foamGeom = new THREE.RingGeometry(18, 20.5, 48);
-    const foamMat = new THREE.MeshBasicMaterial({
-      color: 0x38bdf8,
-      transparent: true,
-      opacity: 0.18,
+    // River flow texture reference for animation loop
+    let riverFlowTex: THREE.CanvasTexture | null = null;
+
+    // 1. Inner River Shoreline Embankment (natural sandy/rocky bank under elevated hex cliffs)
+    const innerBankGeom = new THREE.RingGeometry(18.2, 19.5, 64);
+    const innerBankMat = new THREE.MeshStandardMaterial({
+      color: 0x854d0e, // Warm natural earth/stone shore
+      roughness: 0.9,
       side: THREE.DoubleSide,
     });
-    const foam = new THREE.Mesh(foamGeom, foamMat);
-    foam.rotation.x = -Math.PI / 2;
-    foam.position.y = 0.02;
-    scene.add(foam);
+    const innerBank = new THREE.Mesh(innerBankGeom, innerBankMat);
+    innerBank.rotation.x = -Math.PI / 2;
+    innerBank.position.y = 0.12;
+    innerBank.receiveShadow = true;
+    scene.add(innerBank);
 
+    // 2. Surrounding Flowing River Channel (bordering the entire elevated island perimeter!)
+    const riverGeom = new THREE.RingGeometry(19.3, 25.6, 64);
+    riverFlowTex = getRiverFlowTexture();
+    const riverMat = new THREE.MeshStandardMaterial({
+      color: 0x0284c7,
+      map: riverFlowTex,
+      transparent: true,
+      opacity: 0.88,
+      roughness: 0.12,
+      metalness: 0.25,
+      side: THREE.DoubleSide,
+    });
+    const river = new THREE.Mesh(riverGeom, riverMat);
+    river.rotation.x = -Math.PI / 2;
+    river.position.y = 0.22; // Well below elevated hex tiles (HEX_HEIGHT = 1.70)
+    river.receiveShadow = true;
+    scene.add(river);
+
+    // 3. Outer Riverbank Embankment (natural stone barrier separating river from exterior ocean)
+    const outerBankGeom = new THREE.RingGeometry(25.4, 26.8, 64);
+    const outerBankMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b, // Dark natural stone embankment
+      roughness: 0.85,
+      side: THREE.DoubleSide,
+    });
+    const outerBank = new THREE.Mesh(outerBankGeom, outerBankMat);
+    outerBank.rotation.x = -Math.PI / 2;
+    outerBank.position.y = 0.28;
+    outerBank.receiveShadow = true;
+    scene.add(outerBank);
     // 5. Board Dynamic Container (Hexes, props, tokens, pieces, hit targets)
     const boardGroup = new THREE.Group();
     scene.add(boardGroup);
@@ -372,28 +407,29 @@ export const ThreeBoard = memo(function ThreeBoard({
         port.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dirFromCenter);
         boardGroup.add(port);
       }
-      // --- C. Road Path Bed Strips Along All Edges (Black Border + Soft Greyish-White Path) ---
+      // --- C. Road Path Bed Strips Along All Edges (Wooden Boardwalk Pathways) ---
       const trailBorderMat = new THREE.MeshStandardMaterial({
-        color: 0x09090b, // Crisp black border outline
-        roughness: 0.9,
+        color: 0x382012, // Dark walnut timber frame border
+        roughness: 0.85,
         flatShading: true,
         polygonOffset: true,
         polygonOffsetFactor: -1,
         polygonOffsetUnits: -1,
       });
       const unbuiltTrailMat = new THREE.MeshStandardMaterial({
-        color: 0xd1d5db, // Soft greyish white limestone
-        roughness: 0.85,
+        color: 0xd99864, // Warm golden-amber oak wood tone
+        map: getWoodPathwayTexture(),
+        roughness: 0.75,
         flatShading: true,
         polygonOffset: true,
         polygonOffsetFactor: -2,
         polygonOffsetUnits: -2,
       });
       const legalTrailMat = new THREE.MeshStandardMaterial({
-        color: 0xfacc15,
-        emissive: 0xca8a04,
-        emissiveIntensity: 0.45,
-        roughness: 0.5,
+        color: 0xf59e0b,
+        emissive: 0xd97706,
+        emissiveIntensity: 0.65,
+        roughness: 0.45,
         polygonOffset: true,
         polygonOffsetFactor: -2,
         polygonOffsetUnits: -2,
@@ -432,13 +468,13 @@ export const ThreeBoard = memo(function ThreeBoard({
         trailGroup.position.y = HEX_HEIGHT + 0.04;
         trailGroup.rotation.set(0, angle, 0);
 
-        // 1. Black outer border frame (crisp outline against all tiles)
-        const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(1.22, 0.05, len * 0.94), trailBorderMat);
+        // 1. Dark walnut timber outer frame (calibrated narrower width: 0.94)
+        const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.94, 0.05, len * 0.94), trailBorderMat);
         borderMesh.receiveShadow = true;
         trailGroup.add(borderMesh);
 
-        // 2. Soft greyish-white inner pathbed (or player color if built!)
-        const innerTrail = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.07, len * 0.92), edgeMat);
+        // 2. Warm wooden inner boardwalk pathway (calibrated narrower width: 0.72)
+        const innerTrail = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.07, len * 0.92), edgeMat);
         innerTrail.position.y = 0.01;
         innerTrail.receiveShadow = true;
         trailGroup.add(innerTrail);
@@ -446,21 +482,22 @@ export const ThreeBoard = memo(function ThreeBoard({
         boardGroup.add(trailGroup);
       }
 
-      // --- D. Settlement Foundation Plazas at All Vertices (Black Border + Greyish-White Plaza) ---
-      const plazaBorderGeom = new THREE.CylinderGeometry(1.28, 1.48, 0.16, 16);
-      const innerPlazaGeom = new THREE.CylinderGeometry(1.06, 1.22, 0.20, 16);
+      // --- D. Settlement Foundation Plazas at All Vertices (Circular Wooden Decking Discs) ---
+      const plazaBorderGeom = new THREE.CylinderGeometry(0.96, 1.10, 0.16, 16);
+      const innerPlazaGeom = new THREE.CylinderGeometry(0.78, 0.90, 0.20, 16);
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
-        color: 0xd1d5db, // Soft greyish white carved stone
-        roughness: 0.85,
+        color: 0xd99864, // Warm circular timber deck
+        map: getWoodPlazaTexture(),
+        roughness: 0.75,
         flatShading: true,
         polygonOffset: true,
         polygonOffsetFactor: -3,
         polygonOffsetUnits: -3,
       });
       const legalPlazaMat = new THREE.MeshStandardMaterial({
-        color: 0xfacc15,
-        emissive: 0xca8a04,
-        emissiveIntensity: 0.5,
+        color: 0xf59e0b,
+        emissive: 0xd97706,
+        emissiveIntensity: 0.65,
         roughness: 0.4,
         polygonOffset: true,
         polygonOffsetFactor: -3,
@@ -564,7 +601,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const angle = Math.atan2(dx, dz);
 
           // Visual glowing ghost road (flat on the ground, 2x wide!)
-          const ghostGeom = new THREE.BoxGeometry(0.88, 0.30, len * 0.94);
+          const ghostGeom = new THREE.BoxGeometry(0.66, 0.28, len * 0.94);
           const ghost = new THREE.Mesh(ghostGeom, roadGhostMat);
           ghost.position.addVectors(p1, p2).multiplyScalar(0.5);
           ghost.position.y = HEX_HEIGHT + 0.22;
@@ -572,7 +609,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           boardGroup.add(ghost);
 
           // Fat raycast hit target
-          const hitGeom = new THREE.BoxGeometry(1.25, 0.65, len);
+          const hitGeom = new THREE.BoxGeometry(1.05, 0.65, len);
           const hitMesh = new THREE.Mesh(hitGeom, new THREE.MeshBasicMaterial({ visible: false }));
           hitMesh.position.copy(ghost.position);
           hitMesh.rotation.set(0, angle, 0);
@@ -735,7 +772,7 @@ export const ThreeBoard = memo(function ThreeBoard({
               const len = Math.hypot(dx, dz);
               const angle = Math.atan2(dx, dz);
 
-              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.32, len * 0.94), hoverGlowMat);
+              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.28, len * 0.94), hoverGlowMat);
               ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
               ghostRoad.position.y = HEX_HEIGHT + 0.28;
               ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
@@ -799,13 +836,9 @@ export const ThreeBoard = memo(function ThreeBoard({
       animId = requestAnimationFrame(animate);
       const elapsed = clock.getElapsedTime();
 
-      // Gentle water ripple rotation
-      foam.rotation.z = elapsed * 0.05;
-
-      // Animated flowing river water toward the ocean
-      const riverTex = (scene as unknown as { __riverTex?: THREE.CanvasTexture }).__riverTex;
-      if (riverTex) {
-        riverTex.offset.y -= 0.007;
+      // Animate flowing river current streaming around the exterior perimeter
+      if (riverFlowTex) {
+        riverFlowTex.offset.x += 0.0022;
       }
 
       // Pulsing glow on hover preview
