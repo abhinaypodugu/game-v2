@@ -14,6 +14,7 @@ import {
   createDesertProps,
   createFieldsProps,
   createForestProps,
+  createHarborBridge,
   createHarborPortMesh,
   createHillsProps,
   createMountainProps,
@@ -268,11 +269,13 @@ export const ThreeBoard = memo(function ThreeBoard({
         slab.castShadow = true;
         hexObj.add(slab);
 
-        // Hexagonal perimeter boundary frame ring (dark walnut rim isolating hex top from street)
-        const borderRingGeom = new THREE.RingGeometry(HEX_RADIUS * 0.90, HEX_RADIUS, 6, 1, Math.PI / 6);
+        // Hexagonal perimeter boundary frame ring (sleek thin dark walnut rim, fully opaque)
+        const borderRingGeom = new THREE.RingGeometry(HEX_RADIUS * 0.96, HEX_RADIUS, 6, 1, Math.PI / 6);
         const borderRingMat = new THREE.MeshStandardMaterial({
           color: 0x2e1e14, // Dark walnut boundary frame
           roughness: 0.85,
+          transparent: false,
+          opacity: 1.0,
           side: THREE.DoubleSide,
         });
         const hexBorderRing = new THREE.Mesh(borderRingGeom, borderRingMat);
@@ -335,12 +338,6 @@ export const ThreeBoard = memo(function ThreeBoard({
         boardGroup.add(hexObj);
       }
       // --- B. 3D Miniature Harbor Ports on Extended Wooden Bridge Piers ---
-      // Wooden bridge material for harbor piers
-      const bridgeMat = new THREE.MeshStandardMaterial({
-        color: 0x3d2415, // Dark walnut timber bridge
-        roughness: 0.85,
-      });
-
       for (const [eid, harbor] of Object.entries(board.harbors)) {
         const endpoints = board.topology.edgeEndpoints[eid];
         if (!endpoints) continue;
@@ -360,29 +357,15 @@ export const ThreeBoard = memo(function ThreeBoard({
         const harborCenter = new THREE.Vector3().addVectors(mid, dirFromCenter.clone().multiplyScalar(3.0));
         harborCenter.y = STREET_Y;
 
-        // Wooden Bridge Pier 1 (connecting coastal vertex A to harbor dock)
-        const dir1 = new THREE.Vector3().subVectors(harborCenter, p1);
-        const len1 = dir1.length();
-        const bridge1 = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, len1 * 0.98), bridgeMat);
-        bridge1.position.addVectors(p1, harborCenter).multiplyScalar(0.5);
-        bridge1.position.y = STREET_Y + 0.04;
-        bridge1.rotation.set(0, Math.atan2(dir1.x, dir1.z), 0);
-        bridge1.castShadow = true;
-        bridge1.receiveShadow = true;
+        // Detailed wooden boardwalk footbridge on timber pilings from coastal vertex A
+        const bridge1 = createHarborBridge(p1, harborCenter);
         boardGroup.add(bridge1);
 
-        // Wooden Bridge Pier 2 (connecting coastal vertex B to harbor dock)
-        const dir2 = new THREE.Vector3().subVectors(harborCenter, p2);
-        const len2 = dir2.length();
-        const bridge2 = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, len2 * 0.98), bridgeMat);
-        bridge2.position.addVectors(p2, harborCenter).multiplyScalar(0.5);
-        bridge2.position.y = STREET_Y + 0.04;
-        bridge2.rotation.set(0, Math.atan2(dir2.x, dir2.z), 0);
-        bridge2.castShadow = true;
-        bridge2.receiveShadow = true;
+        // Detailed wooden boardwalk footbridge on timber pilings from coastal vertex B
+        const bridge2 = createHarborBridge(p2, harborCenter);
         boardGroup.add(bridge2);
 
-        // 3D Wooden Pier, Moored Ship, Cargo Crates, and Trade Badge placed at the end of the bridge!
+        // 3D Wooden Pier, Moored Ship, Cargo Crates, and Trade Medallion Disc placed at the end of the bridge!
         const port = createHarborPortMesh(harbor);
         port.position.copy(harborCenter);
         port.position.y = STREET_Y - 0.02;

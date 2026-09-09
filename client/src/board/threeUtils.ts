@@ -64,33 +64,33 @@ export function getNumberTokenTexture(token: number, pips: number): THREE.Canvas
   ctx.arc(size / 2, size / 2, size / 2 - 14, 0, Math.PI * 2);
   ctx.fill();
 
-  // Outer border ring
-  // High-probability numbers: 6, 8, AND 10 in vivid red; all other numbers in bold solid black!
-  const isHighProb = token === 6 || token === 8 || token === 10;
-  ctx.strokeStyle = isHighProb ? '#dc2626' : '#000000';
+  // High-probability numbers: 6 and 8 in bold dark red; 10 and all other numbers in solid pure black!
+  const isHot = token === 6 || token === 8;
+  const darkRed = '#b91c1c'; // Rich dark red for 6 and 8!
+  ctx.strokeStyle = isHot ? darkRed : '#000000';
   ctx.lineWidth = 26;
   ctx.stroke();
 
   // Inner subtle decorative circle
-  ctx.strokeStyle = isHighProb ? 'rgba(220,38,38,0.35)' : 'rgba(0,0,0,0.20)';
+  ctx.strokeStyle = isHot ? 'rgba(185,28,28,0.35)' : 'rgba(0,0,0,0.20)';
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.arc(size / 2, size / 2, size / 2 - 40, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Number text: bold pure black for standard numbers, bold red for 8, 10, 6!
+  // Number text: bold dark red for 6 and 8, bold pure black for 10 and all others!
   ctx.font = 'bold 210px Rubik, sans-serif';
-  ctx.fillStyle = isHighProb ? '#dc2626' : '#000000';
+  ctx.fillStyle = isHot ? darkRed : '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(String(token), size / 2, size / 2 - 32);
 
-  // Dot pips: red for 6, 8, 10; solid pure black for all others!
+  // Dot pips: dark red for 6 and 8; solid pure black for all others!
   const dotCount = pips;
   const dotSpacing = 36;
   const startX = size / 2 - ((dotCount - 1) * dotSpacing) / 2;
   const dotY = size / 2 + 120;
-  ctx.fillStyle = isHighProb ? '#dc2626' : '#000000';
+  ctx.fillStyle = isHot ? darkRed : '#000000';
 
   for (let i = 0; i < dotCount; i++) {
     ctx.beginPath();
@@ -101,7 +101,7 @@ export function getNumberTokenTexture(token: number, pips: number): THREE.Canvas
     ctx.beginPath();
     ctx.arc(startX + i * dotSpacing - 3, dotY - 3, 4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = isHighProb ? '#dc2626' : '#000000';
+    ctx.fillStyle = isHot ? darkRed : '#000000';
   }
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -825,24 +825,15 @@ export function createCityMesh(color: string): THREE.Group {
   return group;
 }
 
-/** Road: completely in one player color with tonal chassis, glowing core, and light accent (zero white) */
+/** Road: 100% solid player color (pure monolithic bar, no white or contrasting lines) */
 export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: string): THREE.Group {
   const pal = PLAYER_3D_COLORS[color] ?? PLAYER_3D_COLORS.white!;
   const group = new THREE.Group();
 
-  const chassisMat = new THREE.MeshStandardMaterial({ color: pal.dark, roughness: 0.8 });
-  const coreMat = new THREE.MeshStandardMaterial({
-    color: pal.main,
-    emissive: pal.main,
-    emissiveIntensity: 0.7,
-    roughness: 0.18,
-    metalness: 0.15,
-  });
-  const highlightMat = new THREE.MeshStandardMaterial({
-    color: pal.light, // Player light shade (NO white!)
-    emissive: pal.main,
-    emissiveIntensity: 0.6,
-    roughness: 0.25,
+  const solidMat = new THREE.MeshStandardMaterial({
+    color: pal.main, // Pure solid player color (solid blue for blue, solid red for red!)
+    roughness: 0.35,
+    metalness: 0.08,
   });
 
   const dx = p2.x - p1.x;
@@ -850,23 +841,12 @@ export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: stri
   const len = Math.hypot(dx, dz);
   const angle = Math.atan2(dx, dz);
 
-  // 1. Dark chassis in deep player dark tone (increased weight: 0.60, taller: 0.30)
-  const chassis = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.30, len * 0.94), chassisMat);
-  chassis.position.y = 0.15;
-  chassis.castShadow = true;
-  chassis.receiveShadow = true;
-  group.add(chassis);
-
-  // 2. Vibrant glowing player core beam (weight: 0.50, taller: 0.26)
-  const core = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.26, len * 0.90), coreMat);
-  core.position.y = 0.19;
-  core.castShadow = true;
-  group.add(core);
-
-  // 3. Center highlight stripe in player light tone (prominent height!)
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, len * 0.86), highlightMat);
-  stripe.position.y = 0.34;
-  group.add(stripe);
+  // Clean, solid monolithic rectangular bar in the exact player color
+  const road = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.30, len * 0.94), solidMat);
+  road.position.y = 0.15;
+  road.castShadow = true;
+  road.receiveShadow = true;
+  group.add(road);
 
   // Position at midpoint and orient flat on ground, elevated so road stands proud
   group.position.addVectors(p1, p2).multiplyScalar(0.5);
@@ -1167,20 +1147,92 @@ export function createHarborPortMesh(harbor: Harbor): THREE.Group {
   crate.castShadow = true;
   port.add(crate);
 
-  // 4. Camera-Facing 3D Trade Ratio Badge (Sprite faces camera at all angles!)
+  // 4. Solid Circular Trade Medallion Disc resting flat on the pier deck (like number tokens on hexes!)
   const badgeTex = createHarborBadgeTexture(harbor);
-  const spriteMat = new THREE.SpriteMaterial({
-    map: badgeTex,
-    depthTest: false,
-    depthWrite: false,
-  });
-  const badgeSprite = new THREE.Sprite(spriteMat);
-  badgeSprite.scale.set(3.4, 3.4, 1);
-  badgeSprite.position.set(0, 2.5, 2.5);
-  badgeSprite.renderOrder = 999;
-  port.add(badgeSprite);
+  const topMat = new THREE.MeshBasicMaterial({ map: badgeTex });
+  const sideMat = new THREE.MeshStandardMaterial({ color: 0x3d2415, roughness: 0.8 });
+  const badgeGeom = new THREE.CylinderGeometry(1.25, 1.30, 0.18, 32);
+  const badgeDisc = new THREE.Mesh(badgeGeom, [sideMat, topMat, sideMat]);
+  badgeDisc.position.set(0, 0.40, 2.3);
+  badgeDisc.castShadow = true;
+  badgeDisc.receiveShadow = true;
+  port.add(badgeDisc);
 
   return port;
+}
+
+/** Creates a detailed wooden connecting footbridge on timber pilings with railings */
+export function createHarborBridge(p1: THREE.Vector3, p2: THREE.Vector3): THREE.Group {
+  const bridge = new THREE.Group();
+  const timberMat = new THREE.MeshStandardMaterial({ color: 0x452b1a, roughness: 0.82 });
+  const plankMat = new THREE.MeshStandardMaterial({
+    color: 0x8a552e, // Warm oak boardwalk planking
+    map: getWoodPathwayTexture(),
+    roughness: 0.75,
+  });
+  const pilingMat = new THREE.MeshStandardMaterial({ color: 0x2e1b0f, roughness: 0.9 });
+
+  const dx = p2.x - p1.x;
+  const dz = p2.z - p1.z;
+  const len = Math.hypot(dx, dz);
+  const angle = Math.atan2(dx, dz);
+
+  // 1. Longitudinal timber stringer beams
+  const stringer1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, len * 0.98), timberMat);
+  stringer1.position.set(-0.20, 0.08, 0);
+  stringer1.castShadow = true;
+  bridge.add(stringer1);
+
+  const stringer2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, len * 0.98), timberMat);
+  stringer2.position.set(0.20, 0.08, 0);
+  stringer2.castShadow = true;
+  bridge.add(stringer2);
+
+  // 2. Wooden boardwalk plank deck
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.08, len * 0.98), plankMat);
+  deck.position.set(0, 0.16, 0);
+  deck.castShadow = true;
+  deck.receiveShadow = true;
+  bridge.add(deck);
+
+  // 3. Vertical wooden stilt pilings driving down into the water
+  const pilingGeom = new THREE.CylinderGeometry(0.06, 0.07, 0.55, 8);
+  const pCount = Math.max(2, Math.floor(len / 1.4));
+  for (let i = 0; i <= pCount; i++) {
+    const t = (i / pCount - 0.5) * len * 0.88;
+    const postL = new THREE.Mesh(pilingGeom, pilingMat);
+    postL.position.set(-0.22, -0.12, t);
+    postL.castShadow = true;
+    bridge.add(postL);
+
+    const postR = new THREE.Mesh(pilingGeom, pilingMat);
+    postR.position.set(0.22, -0.12, t);
+    postR.castShadow = true;
+    bridge.add(postR);
+
+    // Guardrail upright posts
+    const railPostL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.05), timberMat);
+    railPostL.position.set(-0.22, 0.32, t);
+    bridge.add(railPostL);
+
+    const railPostR = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.05), timberMat);
+    railPostR.position.set(0.22, 0.32, t);
+    bridge.add(railPostR);
+  }
+
+  // 4. Side handrails
+  const railL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, len * 0.96), timberMat);
+  railL.position.set(-0.22, 0.44, 0);
+  bridge.add(railL);
+
+  const railR = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, len * 0.96), timberMat);
+  railR.position.set(0.22, 0.44, 0);
+  bridge.add(railR);
+
+  bridge.position.addVectors(p1, p2).multiplyScalar(0.5);
+  bridge.position.y += 0.02;
+  bridge.rotation.set(0, angle, 0);
+  return bridge;
 }
 
 // ---------------------------------------------------------------------------
