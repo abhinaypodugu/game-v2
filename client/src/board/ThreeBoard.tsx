@@ -26,11 +26,13 @@ import {
   getWoodPathwayTexture,
   getWoodPlazaTexture,
   HEX_BASE_RADIUS,
-  HEX_HEIGHT,
+  HEX_ELEVATION,
   HEX_RADIUS,
   PLAYER_3D_COLORS,
   SCALE,
+  STREET_Y,
   TERRAIN_COLORS,
+  TOP_Y,
 } from './threeUtils';
 export interface ThreeBoardProps {
   snap: PersonalSnapshot;
@@ -258,10 +260,10 @@ export const ThreeBoard = memo(function ThreeBoard({
           flatShading: true,
         });
         const materials = [hexSideMat, topMat, hexSideMat];
-        const hexGeom = new THREE.CylinderGeometry(HEX_RADIUS, HEX_BASE_RADIUS, HEX_HEIGHT, 6);
+        const hexGeom = new THREE.CylinderGeometry(HEX_RADIUS, HEX_BASE_RADIUS, HEX_ELEVATION, 6);
         const slab = new THREE.Mesh(hexGeom, materials);
         slab.rotation.y = Math.PI / 6; // Orient points/edges to match 2D layout
-        slab.position.y = HEX_HEIGHT / 2;
+        slab.position.y = STREET_Y + HEX_ELEVATION / 2; // Elevates block from STREET_Y up to TOP_Y!
         slab.receiveShadow = true;
         slab.castShadow = true;
         hexObj.add(slab);
@@ -276,7 +278,7 @@ export const ThreeBoard = memo(function ThreeBoard({
         else if (hexData.terrain === 'desert') props = createDesertProps();
 
         if (props) {
-          props.position.y = HEX_HEIGHT;
+          props.position.y = TOP_Y; // 3D biome miniatures sit high on top of elevated hex block!
           hexObj.add(props);
         }
 
@@ -286,7 +288,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const wellRingMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.8 });
           const wellRing = new THREE.Mesh(wellRingGeom, wellRingMat);
           wellRing.rotation.x = -Math.PI / 2;
-          wellRing.position.y = HEX_HEIGHT + 0.01;
+          wellRing.position.y = TOP_Y + 0.01;
           hexObj.add(wellRing);
 
           // Number token sitting flush inside the well (enlarged 3D disc!)
@@ -296,7 +298,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const tokenSideMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.4 });
           const tokenGeom = new THREE.CylinderGeometry(1.65, 1.65, 0.20, 32);
           const tokenMesh = new THREE.Mesh(tokenGeom, [tokenSideMat, tokenTopMat, tokenSideMat]);
-          tokenMesh.position.y = HEX_HEIGHT + 0.10;
+          tokenMesh.position.y = TOP_Y + 0.10;
           tokenMesh.castShadow = true;
           hexObj.add(tokenMesh);
         }
@@ -305,7 +307,7 @@ export const ThreeBoard = memo(function ThreeBoard({
         const hitGeom = new THREE.CylinderGeometry(HEX_RADIUS * 0.9, HEX_RADIUS * 0.9, 0.4, 6);
         const hitMat = new THREE.MeshBasicMaterial({ visible: false });
         const hexHit = new THREE.Mesh(hitGeom, hitMat);
-        hexHit.position.y = HEX_HEIGHT + 0.2;
+        hexHit.position.y = TOP_Y + 0.20;
         hexObj.add(hexHit);
         hitMeshes.push({ mesh: hexHit, kind: 'hex', id: hexId });
 
@@ -315,7 +317,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const ring = new THREE.Mesh(ringGeom, hexHighlightMat);
           ring.rotation.x = -Math.PI / 2;
           ring.rotation.z = Math.PI / 6;
-          ring.position.y = HEX_HEIGHT + 0.15;
+          ring.position.y = TOP_Y + 0.15;
           hexObj.add(ring);
         }
         boardGroup.add(hexObj);
@@ -368,8 +370,8 @@ export const ThreeBoard = memo(function ThreeBoard({
         const pb = board.topology.vertexPos[b];
         if (!pa || !pb) continue;
 
-        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT, pa.y * SCALE);
-        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT, pb.y * SCALE);
+        const p1 = new THREE.Vector3(pa.x * SCALE, STREET_Y, pa.y * SCALE);
+        const p2 = new THREE.Vector3(pb.x * SCALE, STREET_Y, pb.y * SCALE);
         const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
 
         // Direction pointing outward into the sea
@@ -441,8 +443,8 @@ export const ThreeBoard = memo(function ThreeBoard({
         const pb = board.topology.vertexPos[b];
         if (!pa || !pb) continue;
 
-        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.02, pa.y * SCALE);
-        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.02, pb.y * SCALE);
+        const p1 = new THREE.Vector3(pa.x * SCALE, STREET_Y + 0.02, pa.y * SCALE);
+        const p2 = new THREE.Vector3(pb.x * SCALE, STREET_Y + 0.02, pb.y * SCALE);
         const dx = p2.x - p1.x;
         const dz = p2.z - p1.z;
         const len = Math.hypot(dx, dz);
@@ -465,7 +467,7 @@ export const ThreeBoard = memo(function ThreeBoard({
 
         const trailGroup = new THREE.Group();
         trailGroup.position.addVectors(p1, p2).multiplyScalar(0.5);
-        trailGroup.position.y = HEX_HEIGHT + 0.04;
+        trailGroup.position.y = STREET_Y + 0.04;
         trailGroup.rotation.set(0, angle, 0);
 
         // 1. Dark walnut timber outer frame (calibrated narrower width: 0.94)
@@ -527,7 +529,7 @@ export const ThreeBoard = memo(function ThreeBoard({
         }
 
         const plazaGroup = new THREE.Group();
-        plazaGroup.position.set(vx, HEX_HEIGHT + 0.06, vz);
+        plazaGroup.position.set(vx, STREET_Y + 0.06, vz);
 
         // 1. Black outer border ring
         const borderRing = new THREE.Mesh(plazaBorderGeom, trailBorderMat);
@@ -553,8 +555,8 @@ export const ThreeBoard = memo(function ThreeBoard({
         const pb = board.topology.vertexPos[b];
         if (!pa || !pb) continue;
 
-        const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.04, pa.y * SCALE);
-        const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.04, pb.y * SCALE);
+        const p1 = new THREE.Vector3(pa.x * SCALE, STREET_Y + 0.04, pa.y * SCALE);
+        const p2 = new THREE.Vector3(pb.x * SCALE, STREET_Y + 0.04, pb.y * SCALE);
         const color = playerColorMap.get(ownerSeat) ?? 'white';
         const road = createRoadMesh(p1, p2, color);
         boardGroup.add(road);
@@ -572,7 +574,7 @@ export const ThreeBoard = memo(function ThreeBoard({
         const color = playerColorMap.get(building.seat) ?? 'white';
         const piece =
           building.type === 'city' ? createCityMesh(color) : createSettlementMesh(color);
-        piece.position.set(vx, HEX_HEIGHT + 0.12, vz);
+        piece.position.set(vx, STREET_Y + 0.12, vz);
         boardGroup.add(piece);
         hitMeshes.push({ mesh: piece, kind: 'builtBuilding' as never, id: vid });
       }
@@ -582,7 +584,7 @@ export const ThreeBoard = memo(function ThreeBoard({
       const rx = robberCenter.x * SCALE;
       const rz = robberCenter.y * SCALE;
       const robberPawn = createRobberMesh();
-      robberPawn.position.set(rx, HEX_HEIGHT + 0.18, rz);
+      robberPawn.position.set(rx, TOP_Y + 0.18, rz);
       boardGroup.add(robberPawn);
 
       // --- F. Legal Edge Highlights & Raycast Targets ---
@@ -596,8 +598,8 @@ export const ThreeBoard = memo(function ThreeBoard({
           const pb = board.topology.vertexPos[b];
           if (!pa || !pb) continue;
 
-          const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT, pa.y * SCALE);
-          const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT, pb.y * SCALE);
+          const p1 = new THREE.Vector3(pa.x * SCALE, STREET_Y, pa.y * SCALE);
+          const p2 = new THREE.Vector3(pb.x * SCALE, STREET_Y, pb.y * SCALE);
           const dx = p2.x - p1.x;
           const dz = p2.z - p1.z;
           const len = Math.hypot(dx, dz);
@@ -607,7 +609,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const ghostGeom = new THREE.BoxGeometry(0.66, 0.28, len * 0.94);
           const ghost = new THREE.Mesh(ghostGeom, roadGhostMat);
           ghost.position.addVectors(p1, p2).multiplyScalar(0.5);
-          ghost.position.y = HEX_HEIGHT + 0.22;
+          ghost.position.y = STREET_Y + 0.22;
           ghost.rotation.set(0, angle, 0);
           boardGroup.add(ghost);
 
@@ -633,20 +635,20 @@ export const ThreeBoard = memo(function ThreeBoard({
           // Glowing vertical beacon
           const beaconGeom = new THREE.CylinderGeometry(0.35, 0.35, 2.2, 12);
           const beacon = new THREE.Mesh(beaconGeom, beaconMat);
-          beacon.position.set(vx, HEX_HEIGHT + 1.1, vz);
+          beacon.position.set(vx, STREET_Y + 1.1, vz);
           boardGroup.add(beacon);
 
           // Rotating white beacon ring
           const ringGeom = new THREE.RingGeometry(0.6, 0.9, 16);
           const ring = new THREE.Mesh(ringGeom, beaconRingMat);
           ring.rotation.x = -Math.PI / 2;
-          ring.position.set(vx, HEX_HEIGHT + 1.8, vz);
+          ring.position.set(vx, STREET_Y + 1.8, vz);
           boardGroup.add(ring);
 
           // Raycast target sphere
           const hitGeom = new THREE.SphereGeometry(1.2, 8, 8);
           const hitMesh = new THREE.Mesh(hitGeom, new THREE.MeshBasicMaterial({ visible: false }));
-          hitMesh.position.set(vx, HEX_HEIGHT + 1.0, vz);
+          hitMesh.position.set(vx, STREET_Y + 1.0, vz);
           boardGroup.add(hitMesh);
           hitMeshes.push({ mesh: hitMesh, kind: 'vertex', id: vid });
         }
@@ -747,7 +749,7 @@ export const ThreeBoard = memo(function ThreeBoard({
 
             // Glowing holographic ghost settlement
             const ghostSettlement = createSettlementMesh(myColor);
-            ghostSettlement.position.set(vx, HEX_HEIGHT + 0.14, vz);
+            ghostSettlement.position.set(vx, STREET_Y + 0.14, vz);
             ghostSettlement.traverse((child) => {
               if ((child as THREE.Mesh).isMesh) {
                 (child as THREE.Mesh).material = hoverGlowMat;
@@ -758,7 +760,7 @@ export const ThreeBoard = memo(function ThreeBoard({
             // Glowing rotating halo ring around the vertex (2x scale)
             const halo = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.55, 24), hoverRingMat);
             halo.rotation.x = -Math.PI / 2;
-            halo.position.set(vx, HEX_HEIGHT + 0.16, vz);
+            halo.position.set(vx, STREET_Y + 0.16, vz);
             hoverGroup.add(halo);
           }
         } else if (hit.kind === 'edge' && typeof hit.id === 'string' && legalEdges?.has(hit.id)) {
@@ -768,8 +770,8 @@ export const ThreeBoard = memo(function ThreeBoard({
             const pa = board.topology.vertexPos[a];
             const pb = board.topology.vertexPos[b];
             if (pa && pb) {
-              const p1 = new THREE.Vector3(pa.x * SCALE, HEX_HEIGHT + 0.14, pa.y * SCALE);
-              const p2 = new THREE.Vector3(pb.x * SCALE, HEX_HEIGHT + 0.14, pb.y * SCALE);
+              const p1 = new THREE.Vector3(pa.x * SCALE, STREET_Y + 0.14, pa.y * SCALE);
+              const p2 = new THREE.Vector3(pb.x * SCALE, STREET_Y + 0.14, pb.y * SCALE);
               const dx = p2.x - p1.x;
               const dz = p2.z - p1.z;
               const len = Math.hypot(dx, dz);
@@ -777,7 +779,7 @@ export const ThreeBoard = memo(function ThreeBoard({
 
               const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.28, len * 0.94), hoverGlowMat);
               ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
-              ghostRoad.position.y = HEX_HEIGHT + 0.28;
+              ghostRoad.position.y = STREET_Y + 0.28;
               ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
               hoverGroup.add(ghostRoad);
             }
@@ -790,8 +792,7 @@ export const ThreeBoard = memo(function ThreeBoard({
 
           const ring = new THREE.Mesh(new THREE.RingGeometry(HEX_RADIUS * 0.3, HEX_RADIUS * 0.96, 6), hoverHexMat);
           ring.rotation.x = -Math.PI / 2;
-          ring.rotation.z = Math.PI / 6;
-          ring.position.set(hx, HEX_HEIGHT + 0.2, hz);
+          ring.position.set(hx, TOP_Y + 0.20, hz);
           hoverGroup.add(ring);
         } else if (hit.kind === 'builtBuilding' || hit.kind === 'builtRoad') {
           // Dynamic hover glow on built piece!
@@ -807,7 +808,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           if (hit.kind === 'builtBuilding') {
             const halo = new THREE.Mesh(new THREE.RingGeometry(1.4, 2.0, 24), hoverRingMat);
             halo.rotation.x = -Math.PI / 2;
-            halo.position.set(hit.mesh.position.x, HEX_HEIGHT + 0.14, hit.mesh.position.z);
+            halo.position.set(hit.mesh.position.x, hit.mesh.position.y + 0.04, hit.mesh.position.z);
             hoverGroup.add(halo);
           }
         }
