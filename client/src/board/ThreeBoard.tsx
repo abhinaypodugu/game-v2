@@ -426,7 +426,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const hexCol = PLAYER_3D_COLORS[pCol]?.main ?? 0xffffff;
           edgeMat = new THREE.MeshStandardMaterial({
             color: hexCol,
-            roughness: 0.35,
+            roughness: 0.85,
             polygonOffset: true,
             polygonOffsetFactor: -2,
             polygonOffsetUnits: -2,
@@ -488,7 +488,7 @@ export const ThreeBoard = memo(function ThreeBoard({
           const hexCol = PLAYER_3D_COLORS[pCol]?.main ?? 0xffffff;
           plazaMat = new THREE.MeshStandardMaterial({
             color: hexCol,
-            roughness: 0.35,
+            roughness: 0.85,
             polygonOffset: true,
             polygonOffsetFactor: -3,
             polygonOffsetUnits: -3,
@@ -572,16 +572,16 @@ export const ThreeBoard = memo(function ThreeBoard({
           const len = Math.hypot(dx, dz);
           const angle = Math.atan2(dx, dz);
 
-          // Visual glowing ghost road (flat on the ground, 2x wide!)
-          const ghostGeom = new THREE.BoxGeometry(0.54, 0.20, len * 0.94);
+          // Visual glowing ghost road (calibrated height matching taller road)
+          const ghostGeom = new THREE.BoxGeometry(0.58, 0.74, len * 0.94);
           const ghost = new THREE.Mesh(ghostGeom, roadGhostMat);
           ghost.position.addVectors(p1, p2).multiplyScalar(0.5);
-          ghost.position.y = STREET_Y + 0.22;
+          ghost.position.y = STREET_Y + 0.41;
           ghost.rotation.set(0, angle, 0);
           boardGroup.add(ghost);
 
-          // Fat raycast hit target
-          const hitGeom = new THREE.BoxGeometry(0.88, 0.55, len);
+          // Raycast hit target
+          const hitGeom = new THREE.BoxGeometry(0.88, 0.85, len);
           const hitMesh = new THREE.Mesh(hitGeom, new THREE.MeshBasicMaterial({ visible: false }));
           hitMesh.position.copy(ghost.position);
           hitMesh.rotation.set(0, angle, 0);
@@ -744,9 +744,9 @@ export const ThreeBoard = memo(function ThreeBoard({
               const len = Math.hypot(dx, dz);
               const angle = Math.atan2(dx, dz);
 
-              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.20, len * 0.94), hoverGlowMat);
+              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.74, len * 0.94), hoverGlowMat);
               ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
-              ghostRoad.position.y = STREET_Y + 0.28;
+              ghostRoad.position.y = STREET_Y + 0.41;
               ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
               hoverGroup.add(ghostRoad);
             }

@@ -33,12 +33,12 @@ export const TERRAIN_COLORS: Record<Terrain, { top: string; side: string; rough:
 };
 
 export const PLAYER_3D_COLORS: Record<string, { main: number; dark: number; light: number }> = {
-  red: { main: 0xdc2626, dark: 0x7f1d1d, light: 0xf87171 },
-  blue: { main: 0x2563eb, dark: 0x1e3a8a, light: 0x60a5fa },
-  orange: { main: 0xea580c, dark: 0x7c2d12, light: 0xfb923c },
-  white: { main: 0x94a3b8, dark: 0x475569, light: 0xcbd5e1 }, // Silver-platinum tone (distinct from white stone paths)
-  green: { main: 0x16a34a, dark: 0x14532d, light: 0x4ade80 },
-  brown: { main: 0x854d0e, dark: 0x451a03, light: 0xb45309 },
+  red: { main: 0xdc2626, dark: 0x991b1b, light: 0xef4444 },
+  blue: { main: 0x2563eb, dark: 0x1d4ed8, light: 0x3b82f6 },
+  orange: { main: 0xea580c, dark: 0xc2410c, light: 0xf97316 },
+  white: { main: 0xf8fafc, dark: 0xcbd5e1, light: 0xffffff }, // Brilliant pure white (high contrast against board!)
+  green: { main: 0x16a34a, dark: 0x15803d, light: 0x22c55e },
+  brown: { main: 0x78350f, dark: 0x451a03, light: 0x9a3412 },
 };
 
 // ---------------------------------------------------------------------------
@@ -832,8 +832,8 @@ export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: stri
 
   const solidMat = new THREE.MeshStandardMaterial({
     color: pal.main, // Pure solid player color (solid blue for blue, solid red for red!)
-    roughness: 0.35,
-    metalness: 0.08,
+    roughness: 0.85, // Matte finish: completely eliminates any white specular reflection lines!
+    metalness: 0.0, // Zero metallic specular sheen!
   });
 
   const dx = p2.x - p1.x;
@@ -841,16 +841,16 @@ export function createRoadMesh(p1: THREE.Vector3, p2: THREE.Vector3, color: stri
   const len = Math.hypot(dx, dz);
   const angle = Math.atan2(dx, dz);
 
-  // Clean, solid monolithic rectangular bar in the exact player color
-  const road = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.30, len * 0.94), solidMat);
-  road.position.y = 0.15;
+  // Solid monolithic rectangular road bar rising from street to a bit above the hex tiles
+  const roadHeight = 0.78;
+  const road = new THREE.Mesh(new THREE.BoxGeometry(0.62, roadHeight, len * 0.96), solidMat);
+  road.position.y = roadHeight / 2;
   road.castShadow = true;
   road.receiveShadow = true;
   group.add(road);
 
-  // Position at midpoint and orient flat on ground, elevated so road stands proud
+  // Position at midpoint and orient flat on ground at street level
   group.position.addVectors(p1, p2).multiplyScalar(0.5);
-  group.position.y += 0.10;
   group.rotation.set(0, angle, 0); // Flat on ground!
   return group;
 }
