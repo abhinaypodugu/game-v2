@@ -354,7 +354,7 @@ export const ThreeBoard = memo(function ThreeBoard({
         const dirFromCenter = new THREE.Vector3(mid.x, 0, mid.z).normalize();
 
         // Extend harbor out by a bridge into the water so it NEVER overlaps settlements at vertices p1 and p2!
-        const harborCenter = new THREE.Vector3().addVectors(mid, dirFromCenter.clone().multiplyScalar(3.0));
+        const harborCenter = new THREE.Vector3().addVectors(mid, dirFromCenter.clone().multiplyScalar(3.5));
         harborCenter.y = STREET_Y;
 
         // Detailed wooden boardwalk footbridge on timber pilings from coastal vertex A

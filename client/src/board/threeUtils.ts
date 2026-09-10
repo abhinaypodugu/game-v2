@@ -900,7 +900,7 @@ export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
   const cached = harborTextureCache.get(key);
   if (cached) return cached;
 
-  const size = 256;
+  const size = 512;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -951,49 +951,48 @@ export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
   }
 
   // 1. Outer circular badge background in exact tile color with soft shadow
-  ctx.shadowColor = 'rgba(0,0,0,0.5)';
-  ctx.shadowBlur = 12;
+  ctx.shadowColor = 'rgba(0,0,0,0.4)';
+  ctx.shadowBlur = 18;
   ctx.fillStyle = bgColor;
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 10, 0, Math.PI * 2);
+  ctx.arc(size / 2, size / 2, size / 2 - 16, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
 
   // 2. Beveled border ring in tile side shade
   ctx.strokeStyle = borderColor;
-  ctx.lineWidth = 14;
+  ctx.lineWidth = 26;
   ctx.stroke();
 
   // 3. Inner cream parchment disc
   ctx.fillStyle = '#fefdf8';
   ctx.beginPath();
-  ctx.arc(size / 2, size / 2, size / 2 - 24, 0, Math.PI * 2);
+  ctx.arc(size / 2, size / 2, size / 2 - 42, 0, Math.PI * 2);
   ctx.fill();
 
-  // Subtle inner gold/border accent ring
+  // Subtle inner accent ring
   ctx.strokeStyle = bgColor;
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 8;
   ctx.stroke();
 
-  // 4. Ratio text (bold tile-colored heading: "2:1" or "3:1")
-  // 4. Ratio text (solid pure black for all harbor numbers: "2:1" or "3:1"!)
-  ctx.font = 'bold 74px Rubik, sans-serif';
+  // 4. Large bold ratio text in pure solid black: "2:1" or "3:1"!
+  ctx.font = 'bold 140px Rubik, sans-serif';
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(title, size / 2, size / 2 - 44);
+  ctx.fillText(title, size / 2, size / 2 - 82);
 
-  // 5. Center icon emblem matching tile
-  ctx.font = '56px Rubik, sans-serif';
-  ctx.fillText(icon, size / 2, size / 2 + 18);
+  // 5. Center icon emblem matching resource
+  ctx.font = '100px Rubik, sans-serif';
+  ctx.fillText(icon, size / 2, size / 2 + 34);
 
   // 6. Bottom resource name label
-  ctx.font = 'bold 26px Rubik, sans-serif';
-  ctx.fillStyle = '#1e293b';
-  ctx.fillText(label, size / 2, size / 2 + 64);
+  ctx.font = 'bold 48px Rubik, sans-serif';
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText(label, size / 2, size / 2 + 124);
 
   const texture = new THREE.CanvasTexture(canvas);
-  texture.anisotropy = 8;
+  texture.anisotropy = 16;
   harborTextureCache.set(key, texture);
   return texture;
 }
@@ -1007,72 +1006,33 @@ export function createHarborPortMesh(harbor: Harbor): THREE.Group {
   const plankMat = new THREE.MeshStandardMaterial({ color: 0x854d0e, roughness: 0.75 });
   const sailMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.45, side: THREE.DoubleSide });
 
-  // 1. Wooden Pier Boardwalk (extending out into the water along Z)
-  // 1. Wooden Pier Boardwalk (wider and longer for 3D port)
-  const pierDeck = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.28, 3.4), plankMat);
-  pierDeck.position.set(0, 0.28, 1.7);
+  // 1. Wide and spacious wooden pier boardwalk (width 2.6, length 4.0)
+  const pierDeck = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.28, 4.0), plankMat);
+  pierDeck.position.set(0, 0.28, 2.0);
   pierDeck.castShadow = true;
   pierDeck.receiveShadow = true;
   port.add(pierDeck);
 
-  // 3D Physical Resource Cargo Piles on the Dock
-  if (harbor.resource === 'wood') {
-    const logMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.85 });
-    for (let i = 0; i < 4; i++) {
-      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.1, 8), logMat);
-      log.rotation.z = Math.PI / 2;
-      log.position.set(0.4, 0.5 + (i > 2 ? 0.2 : 0), 1.0 + (i % 3) * 0.35);
-      log.castShadow = true;
-      port.add(log);
-    }
-  } else if (harbor.resource === 'brick') {
-    const brickMat = new THREE.MeshStandardMaterial({ color: 0xc2410c, roughness: 0.8 });
-    for (let i = 0; i < 6; i++) {
-      const brick = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.16, 0.22), brickMat);
-      brick.position.set(0.4, 0.5 + (i >= 4 ? 0.16 : 0), 1.0 + (i % 4) * 0.25);
-      brick.castShadow = true;
-      port.add(brick);
-    }
-  } else if (harbor.resource === 'sheep') {
-    const woolMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.9 });
-    for (let i = 0; i < 3; i++) {
-      const sack = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), woolMat);
-      sack.scale.set(1, 0.8, 1.2);
-      sack.position.set(0.4, 0.56, 0.9 + i * 0.45);
-      sack.castShadow = true;
-      port.add(sack);
-    }
-  } else if (harbor.resource === 'wheat') {
-    const grainMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.85 });
-    for (let i = 0; i < 3; i++) {
-      const sack = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.55, 8), grainMat);
-      sack.position.set(0.4, 0.65, 0.9 + i * 0.42);
-      sack.castShadow = true;
-      port.add(sack);
-    }
-  } else if (harbor.resource === 'ore') {
-    const oreMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.4, metalness: 0.6 });
-    for (let i = 0; i < 4; i++) {
-      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.26), oreMat);
-      rock.position.set(0.4, 0.55, 0.8 + i * 0.35);
-      rock.castShadow = true;
-      port.add(rock);
-    }
-  } else {
-    // Generic 3:1 sea chest
-    const chest = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.35, 0.6), woodDark);
-    chest.position.set(0.4, 0.55, 1.3);
-    chest.castShadow = true;
-    port.add(chest);
-  }
+  // Dark walnut border trim around the pier edges
+  const rimL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 4.0), woodDark);
+  rimL.position.set(-1.3, 0.30, 2.0);
+  port.add(rimL);
+  const rimR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.32, 4.0), woodDark);
+  rimR.position.set(1.3, 0.30, 2.0);
+  port.add(rimR);
+  const rimEnd = new THREE.Mesh(new THREE.BoxGeometry(2.68, 0.32, 0.08), woodDark);
+  rimEnd.position.set(0, 0.30, 4.0);
+  port.add(rimEnd);
 
-  // 4 Vertical Pier Pilings / Stilts extending down into ocean bed
-  const pilingGeom = new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8);
+  // 6 Vertical Timber Pilings under the pier into the water
+  const pilingGeom = new THREE.CylinderGeometry(0.10, 0.10, 1.2, 8);
   const pilingPositions = [
-    { x: -0.4, z: 0.4 },
-    { x: 0.4, z: 0.4 },
-    { x: -0.4, z: 2.2 },
-    { x: 0.4, z: 2.2 },
+    { x: -1.1, z: 0.6 },
+    { x: 1.1, z: 0.6 },
+    { x: -1.1, z: 2.0 },
+    { x: 1.1, z: 2.0 },
+    { x: -1.1, z: 3.6 },
+    { x: 1.1, z: 3.6 },
   ];
   for (const pos of pilingPositions) {
     const piling = new THREE.Mesh(pilingGeom, woodDark);
@@ -1081,80 +1041,133 @@ export function createHarborPortMesh(harbor: Harbor): THREE.Group {
     port.add(piling);
   }
 
-  // 2 Mooring Bollards on pier deck
-  const bollardGeom = new THREE.CylinderGeometry(0.07, 0.07, 0.25, 8);
-  const b1 = new THREE.Mesh(bollardGeom, woodDark);
-  b1.position.set(-0.4, 0.45, 1.8);
-  port.add(b1);
+  // 2. Zone A: Dedicated Elevated Trade Medallion Disc (Center-Outer Dock)
+  // Placed on an angled plinth tilted toward camera so the ratio is clearly legible!
+  const plinthGeom = new THREE.CylinderGeometry(1.40, 1.45, 0.12, 32);
+  const plinth = new THREE.Mesh(plinthGeom, woodDark);
+  plinth.position.set(0, 0.44, 2.6);
+  plinth.rotation.x = -0.20; // Tilted toward the island & camera!
+  port.add(plinth);
 
-  const b2 = new THREE.Mesh(bollardGeom, woodDark);
-  b2.position.set(-0.4, 0.45, 0.8);
-  port.add(b2);
+  const badgeTex = createHarborBadgeTexture(harbor);
+  const badgeTopMat = new THREE.MeshBasicMaterial({ map: badgeTex });
+  const badgeSideMat = new THREE.MeshStandardMaterial({ color: 0x3d2415, roughness: 0.8 });
+  const badgeGeom = new THREE.CylinderGeometry(1.30, 1.35, 0.18, 32);
+  const badgeDisc = new THREE.Mesh(badgeGeom, [badgeSideMat, badgeTopMat, badgeSideMat]);
+  badgeDisc.position.set(0, 0.54, 2.6);
+  badgeDisc.rotation.x = -0.20; // Tilted toward camera for direct readability!
+  badgeDisc.castShadow = true;
+  badgeDisc.receiveShadow = true;
+  port.add(badgeDisc);
 
-  // 2. Miniature 3D Merchant Trading Ship (moored on left side of the pier)
+  // 3. Zone B: Moored Trading Sailboat in Water (on left berth, completely off the pier!)
   const ship = new THREE.Group();
-  ship.position.set(-1.1, -0.05, 1.4);
-  ship.rotation.y = 0.08; // Slight natural bobbing angle
+  ship.position.set(-2.1, -0.15, 2.0); // Floating in open water alongside the pier
+  ship.rotation.y = 0.05;
 
-  // Wooden Hull with tapered bow & stern
-  const hull = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.42, 1.9), woodLight);
-  hull.position.y = 0.21;
+  // Wooden Hull
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.44, 2.1), woodLight);
+  hull.position.y = 0.22;
   hull.castShadow = true;
   ship.add(hull);
 
-  // Deck
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.08, 1.8), plankMat);
-  deck.position.y = 0.44;
-  ship.add(deck);
+  const shipDeck = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.08, 2.0), plankMat);
+  shipDeck.position.y = 0.46;
+  ship.add(shipDeck);
 
   // Mast
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 8), woodDark);
-  mast.position.set(0, 1.4, -0.1);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.4, 8), woodDark);
+  mast.position.set(0, 1.5, -0.1);
   mast.castShadow = true;
   ship.add(mast);
 
   // Yardarm spar
-  const spar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.9, 8), woodDark);
+  const spar = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.0, 8), woodDark);
   spar.rotation.z = Math.PI / 2;
-  spar.position.set(0, 2.1, -0.05);
+  spar.position.set(0, 2.2, -0.05);
   ship.add(spar);
 
-  // Billowing White Canvas Sail
-  const sail = new THREE.Mesh(new THREE.PlaneGeometry(0.85, 1.3), sailMat);
-  sail.position.set(0, 1.45, 0.05);
+  // Canvas Sail
+  const sail = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 1.4), sailMat);
+  sail.position.set(0, 1.55, 0.05);
   sail.rotation.y = -0.15;
   sail.castShadow = true;
   ship.add(sail);
 
   port.add(ship);
 
-  // 3. Cargo on the Pier: stacked wooden barrels and cargo crate
-  const barrelGeom = new THREE.CylinderGeometry(0.2, 0.22, 0.4, 10);
-  const barrel1 = new THREE.Mesh(barrelGeom, woodDark);
-  barrel1.position.set(0.25, 0.48, 1.9);
-  barrel1.castShadow = true;
-  port.add(barrel1);
+  // 4. Zone C: Cargo Wharf on Right Side (neatly stacked away from medallion)
+  const cargoGroup = new THREE.Group();
+  cargoGroup.position.set(0.85, 0.42, 1.0);
 
-  const barrel2 = new THREE.Mesh(barrelGeom, woodDark);
-  barrel2.position.set(0.22, 0.48, 1.4);
-  barrel2.castShadow = true;
-  port.add(barrel2);
+  if (harbor.resource === 'wood') {
+    const logMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.85 });
+    for (let i = 0; i < 4; i++) {
+      const log = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.9, 8), logMat);
+      log.rotation.z = Math.PI / 2;
+      log.position.set(0, 0.1 + (i > 2 ? 0.16 : 0), (i % 3) * 0.28 - 0.28);
+      log.castShadow = true;
+      cargoGroup.add(log);
+    }
+  } else if (harbor.resource === 'brick') {
+    const brickMat = new THREE.MeshStandardMaterial({ color: 0xc2410c, roughness: 0.8 });
+    for (let i = 0; i < 4; i++) {
+      const brick = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.20), brickMat);
+      brick.position.set(0, 0.08 + (i >= 2 ? 0.14 : 0), (i % 2) * 0.24 - 0.12);
+      brick.castShadow = true;
+      cargoGroup.add(brick);
+    }
+  } else if (harbor.resource === 'sheep') {
+    const woolMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.9 });
+    for (let i = 0; i < 2; i++) {
+      const sack = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), woolMat);
+      sack.scale.set(1, 0.8, 1.2);
+      sack.position.set(0, 0.16, (i - 0.5) * 0.40);
+      sack.castShadow = true;
+      cargoGroup.add(sack);
+    }
+  } else if (harbor.resource === 'wheat') {
+    const grainMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.85 });
+    for (let i = 0; i < 2; i++) {
+      const sack = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.22, 0.48, 8), grainMat);
+      sack.position.set(0, 0.24, (i - 0.5) * 0.38);
+      sack.castShadow = true;
+      cargoGroup.add(sack);
+    }
+  } else if (harbor.resource === 'ore') {
+    const oreMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.4, metalness: 0.6 });
+    for (let i = 0; i < 3; i++) {
+      const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.22), oreMat);
+      rock.position.set(0, 0.16, (i - 1) * 0.32);
+      rock.castShadow = true;
+      cargoGroup.add(rock);
+    }
+  } else {
+    const crate = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, 0.45), woodDark);
+    crate.position.set(0, 0.16, 0);
+    crate.castShadow = true;
+    cargoGroup.add(crate);
+  }
+  port.add(cargoGroup);
 
-  const crate = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.35), woodLight);
-  crate.position.set(0.24, 0.46, 0.85);
-  crate.castShadow = true;
-  port.add(crate);
+  // 5. Zone D: Illuminated Brass Lantern Posts on Pier Outer Corners
+  const lanternPostGeom = new THREE.CylinderGeometry(0.04, 0.05, 0.7, 8);
+  const lanternBoxGeom = new THREE.BoxGeometry(0.14, 0.18, 0.14);
+  const lanternGlowMat = new THREE.MeshStandardMaterial({
+    color: 0xfef08a,
+    emissive: 0xf59e0b,
+    emissiveIntensity: 1.4,
+  });
 
-  // 4. Solid Circular Trade Medallion Disc resting flat on the pier deck (like number tokens on hexes!)
-  const badgeTex = createHarborBadgeTexture(harbor);
-  const topMat = new THREE.MeshBasicMaterial({ map: badgeTex });
-  const sideMat = new THREE.MeshStandardMaterial({ color: 0x3d2415, roughness: 0.8 });
-  const badgeGeom = new THREE.CylinderGeometry(1.25, 1.30, 0.18, 32);
-  const badgeDisc = new THREE.Mesh(badgeGeom, [sideMat, topMat, sideMat]);
-  badgeDisc.position.set(0, 0.40, 2.3);
-  badgeDisc.castShadow = true;
-  badgeDisc.receiveShadow = true;
-  port.add(badgeDisc);
+  for (const lx of [-1.15, 1.15]) {
+    const post = new THREE.Mesh(lanternPostGeom, woodDark);
+    post.position.set(lx, 0.65, 3.8);
+    port.add(post);
+
+    const box = new THREE.Mesh(lanternBoxGeom, lanternGlowMat);
+    box.position.set(lx, 1.05, 3.8);
+    port.add(box);
+  }
 
   return port;
 }
