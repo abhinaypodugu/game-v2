@@ -10,20 +10,18 @@ import { useEffect, useMemo, useState } from 'react';
 import type { GameAction } from '@catan/shared';
 import { legalRobberHexes } from '@catan/shared';
 import { ThreeBoard } from '../board/ThreeBoard';
-import { CardHandTray } from '../components/CardHandTray';
-import { ThreeDiceDisplay } from '../components/ThreeDiceDisplay';
-import { PlayerBadges } from '../components/PlayerBadges';
-import { CollapsibleLog } from '../components/CollapsibleLog';
+import { ColonistTopLeftToolbar } from '../components/ColonistTopLeftToolbar';
+import { ColonistTradeBanner } from '../components/ColonistTradeBanner';
+import { ColonistRightSidebar } from '../components/ColonistRightSidebar';
+import { ColonistBottomDock } from '../components/ColonistBottomDock';
 import { DiscardModal, VictimPicker } from '../components/RobberFlow';
-import { ReconnectBanner, ToastStack, TurnTimer } from '../components/Overlays';
+import { ReconnectBanner, ToastStack } from '../components/Overlays';
 import { TradeModal } from '../components/TradeModal';
 import { VictoryOverlay } from '../components/VictoryOverlay';
 import { ProductionFloaters } from '../components/ProductionFloaters';
 import { useLegalMoves } from '../hooks/useLegalMoves';
 import { useStore } from '../store';
-import { PIECE_COLORS } from '../theme';
 import type { GameEvent } from '../types';
-
 export function GamePage(): React.JSX.Element {
   const snap = useStore((s) => s.game);
   const session = useStore((s) => s.session);
@@ -31,7 +29,6 @@ export function GamePage(): React.JSX.Element {
   const setPlacement = useStore((s) => s.setPlacement);
   const placement = useStore((s) => s.ui.placement);
   const showTradeModal = useStore((s) => s.ui.showTradeModal);
-  const setTradeModal = useStore((s) => s.setTradeModal);
   const log = useStore((s) => s.log);
   const [rolling, setRolling] = useState(false);
   const [setupVertex, setSetupVertex] = useState<number | null>(null);
@@ -144,8 +141,6 @@ export function GamePage(): React.JSX.Element {
     }
   };
 
-  const activePlayer = snap.players[snap.activeSeat]!;
-
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#071828] text-[#f6f8fa] select-none">
       <ReconnectBanner />
@@ -170,137 +165,51 @@ export function GamePage(): React.JSX.Element {
       </div>
 
       {/* ============================================================ */}
-      {/* 2. FLOATING HUD OVERLAY                                      */}
+      {/* 2. COLONIST.IO HUD OVERLAYS                                  */}
       {/* ============================================================ */}
-      <div className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-4">
-        {/* TOP SECTION: Player Badges (left) & Turn Banner (center) */}
-        <header className="flex items-start justify-between">
-          {/* Top Left: Floating Player Badges */}
-          <PlayerBadges snap={snap} />
+      {/* Top Left: Circular Utility Toolbar (Settings, Rules, Fullscreen, Info) */}
+      <ColonistTopLeftToolbar snap={snap} />
 
-          {/* Top Center: Sleek Turn Banner & Actions */}
-          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-sky-500/30 bg-[#031422]/90 px-5 py-2.5 shadow-2xl backdrop-blur-md">
-            <span
-              className="inline-block h-4 w-4 rounded-full border border-black/50 shadow"
-              style={{ background: PIECE_COLORS[activePlayer.color]?.main }}
-            />
-            <div className="flex flex-col">
-              <span className="font-[Bricolage_Grotesque,system-ui] text-sm font-bold text-white leading-tight">
-                {myTurn ? 'Your Turn' : `${activePlayer.name}'s Turn`}
-              </span>
-              <span className="text-[10px] font-semibold text-amber-300 uppercase tracking-wide">
-                {snap.phase === 'specialBuild'
-                  ? `Special Build: ${snap.specialBuildSeat !== null ? snap.players[snap.specialBuildSeat]!.name : 'passing'}`
-                  : snap.phase.replace(/([A-Z])/g, ' $1')}
-              </span>
-            </div>
-
-            <div className="h-6 w-px bg-sky-800/80 mx-1" />
-
-            <ThreeDiceDisplay
-              die1={snap.dice?.die1 ?? null}
-              die2={snap.dice?.die2 ?? null}
-              rolling={rolling}
-            />
-            <TurnTimer />
-
-            {myTurn && snap.phase === 'turnPreroll' ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const action: GameAction = { type: 'rollDice' };
-                  sendAction(action);
-                }}
-                className="rounded-xl bg-gradient-to-b from-amber-500 to-amber-600 px-4 py-2 text-xs font-bold text-slate-950 shadow-lg transition hover:scale-105"
-                data-testid="roll-button"
-              >
-                🎲 Roll
-              </button>
-            ) : null}
-
-            {(myTurn && snap.phase === 'turnMain') || snap.trades.some((t) => t.status === 'open') ? (
-              <button
-                type="button"
-                onClick={() => setTradeModal(true)}
-                className="rounded-xl bg-gradient-to-b from-sky-600 to-sky-700 px-3 py-2 text-xs font-bold text-white shadow-lg transition hover:scale-105"
-                data-testid="open-trade"
-              >
-                🔁 Trade
-              </button>
-            ) : null}
-
-            {myTurn && snap.phase === 'turnMain' ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const action: GameAction = { type: 'endTurn' };
-                  sendAction(action);
-                }}
-                className="rounded-xl bg-gradient-to-b from-emerald-600 to-emerald-700 px-4 py-2 text-xs font-bold text-white shadow-lg transition hover:scale-105"
-                data-testid="end-turn"
-              >
-                End Turn ➜
-              </button>
-            ) : null}
-
-            {sbpWindow ? (
-              <button
-                type="button"
-                onClick={() => {
-                  const action: GameAction = { type: 'specialBuildDone' };
-                  sendAction(action);
-                }}
-                className="rounded-xl bg-gradient-to-b from-red-600 to-red-700 px-3 py-2 text-xs font-bold text-white shadow-lg transition hover:scale-105"
-                data-testid="sbp-done"
-              >
-                Pass Window
-              </button>
-            ) : null}
-          </div>
-
-          {/* Top Right: (Reserved for Camera controls rendered by ThreeBoard) */}
-          <div className="w-32" />
-        </header>
-
-        {/* MIDDLE CONTEXTUAL PROMPT (when placing) */}
-        {isSetupActor || placement !== null || robberPlacing ? (
-          <div className="pointer-events-none flex justify-center">
-            <div className="rounded-2xl border border-amber-400/50 bg-[#04182a]/95 px-6 py-2.5 text-xs font-bold text-amber-200 shadow-2xl backdrop-blur-md animate-pulse">
-              {isSetupActor
-                ? setupVertex === null
-                  ? '✨ Click a glowing golden beacon on the 3D board to place your settlement'
-                  : '✨ Now click a glowing golden road to connect your settlement'
-                : placement?.kind === 'road'
-                  ? '✨ Click a glowing edge on the 3D board to place your road'
-                  : placement?.kind === 'settlement'
-                    ? '✨ Click a glowing beacon on the 3D board to place your settlement'
-                    : placement?.kind === 'city'
-                      ? '✨ Click an existing settlement on the 3D board to upgrade to city'
-                      : robberPlacing
-                        ? '⚔️ Click a highlighted hex to move the robber'
-                        : null}
-            </div>
-          </div>
-        ) : <div />}
-
-        {/* BOTTOM SECTION: Card Hand & Build Dock (center) & Event Log (right) */}
-        <footer className="flex items-end justify-between">
-          <div className="w-24" />
-
-          {/* Bottom Center: Resource Cards Hand & Attached Build Bar */}
-          <CardHandTray
-            canAct={canAct}
-            legal={legal}
-            onArm={(kind) => {
-              setPlacement(placement?.kind === kind ? null : { kind });
-            }}
-          />
-
-          {/* Bottom Right: Collapsible Event Log */}
-          <CollapsibleLog />
-        </footer>
+      {/* Top Center: Trade Offer & Turn Status Banner */}
+      <div className="pointer-events-none fixed top-3 left-0 right-0 z-20 flex justify-center px-4">
+        <ColonistTradeBanner snap={snap} rolling={rolling} />
       </div>
 
+      {/* Right Sidebar: Game Log, Bank Cards Bar, and Player Roster */}
+      <ColonistRightSidebar snap={snap} />
+
+      {/* Middle Contextual Prompt Banner (when placing road / settlement / city / robber) */}
+      {isSetupActor || placement !== null || robberPlacing ? (
+        <div className="pointer-events-none fixed top-16 left-0 right-0 z-20 flex justify-center px-4">
+          <div className="rounded-2xl border border-amber-400/60 bg-[#04182a]/95 px-6 py-2 text-xs font-bold text-amber-200 shadow-2xl backdrop-blur-md animate-pulse">
+            {isSetupActor
+              ? setupVertex === null
+                ? '✨ Click a valid circle on the board to place your settlement'
+                : '✨ Now click a valid path to connect your road'
+              : placement?.kind === 'road'
+                ? '✨ Click a valid path on the board to place your road'
+                : placement?.kind === 'settlement'
+                  ? '✨ Click a valid circle on the board to place your settlement'
+                  : placement?.kind === 'city'
+                    ? '✨ Click an existing settlement on the board to upgrade to city'
+                    : robberPlacing
+                      ? '⚔️ Click an occupied hex to move the robber'
+                      : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Bottom Dock: My Resource Hand (left) & Build Action Bar (right) */}
+      <ColonistBottomDock
+        snap={snap}
+        legal={legal}
+        canAct={canAct}
+        placement={placement}
+        onArm={(kind) => {
+          setPlacement(placement?.kind === kind ? null : { kind });
+        }}
+        rolling={rolling}
+      />
       {/* ============================================================ */}
       {/* 3. MODALS & OVERLAYS                                         */}
       {/* ============================================================ */}
