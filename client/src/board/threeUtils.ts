@@ -899,85 +899,37 @@ const harborTextureCache = new Map<string, THREE.CanvasTexture>();
 // High-Contrast Pure Black Vector Silhouettes for Harbor Trade Medallions
 // ---------------------------------------------------------------------------
 
-function drawAnchorIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
-  ctx.save();
-  ctx.fillStyle = '#000000';
-  ctx.strokeStyle = '#000000';
-
-  // Ring at top
-  ctx.lineWidth = 10;
-  ctx.beginPath();
-  ctx.arc(cx, cy - 48, 14, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // Crossbar
-  ctx.fillRect(cx - 36, cy - 28, 72, 12);
-  ctx.beginPath();
-  ctx.arc(cx - 36, cy - 22, 6, 0, Math.PI * 2);
-  ctx.arc(cx + 36, cy - 22, 6, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Vertical shank
-  ctx.fillRect(cx - 7, cy - 26, 14, 78);
-
-  // Curved flukes
-  ctx.lineWidth = 16;
-  ctx.beginPath();
-  ctx.arc(cx, cy + 16, 44, 0.15 * Math.PI, 0.85 * Math.PI);
-  ctx.stroke();
-
-  // Arrowhead tips at fluke ends
-  const drawTip = (tx: number, ty: number, angle: number) => {
-    ctx.save();
-    ctx.translate(tx, ty);
-    ctx.rotate(angle);
-    ctx.beginPath();
-    ctx.moveTo(0, -14);
-    ctx.lineTo(12, 10);
-    ctx.lineTo(-12, 10);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  };
-  const leftAngle = 0.85 * Math.PI;
-  const rightAngle = 0.15 * Math.PI;
-  drawTip(cx + Math.cos(leftAngle) * 44, cy + 16 + Math.sin(leftAngle) * 44, -0.7);
-  drawTip(cx + Math.cos(rightAngle) * 44, cy + 16 + Math.sin(rightAngle) * 44, 0.7);
-
-  ctx.restore();
-}
-
 function drawWoodIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
   ctx.save();
   ctx.fillStyle = '#000000';
 
-  // Bold stylized evergreen pine tree silhouette
+  // Giant bold evergreen pine tree silhouette filling the available space
   // Top tier
   ctx.beginPath();
-  ctx.moveTo(cx, cy - 56);
-  ctx.lineTo(cx + 28, cy - 22);
-  ctx.lineTo(cx - 28, cy - 22);
+  ctx.moveTo(cx, cy - 125);
+  ctx.lineTo(cx + 65, cy - 35);
+  ctx.lineTo(cx - 65, cy - 35);
   ctx.closePath();
   ctx.fill();
 
   // Middle tier
   ctx.beginPath();
-  ctx.moveTo(cx, cy - 26);
-  ctx.lineTo(cx + 40, cy + 8);
-  ctx.lineTo(cx - 40, cy + 8);
+  ctx.moveTo(cx, cy - 50);
+  ctx.lineTo(cx + 105, cy + 40);
+  ctx.lineTo(cx - 105, cy + 40);
   ctx.closePath();
   ctx.fill();
 
   // Bottom tier
   ctx.beginPath();
-  ctx.moveTo(cx, cy + 4);
-  ctx.lineTo(cx + 52, cy + 40);
-  ctx.lineTo(cx - 52, cy + 40);
+  ctx.moveTo(cx, cy + 25);
+  ctx.lineTo(cx + 145, cy + 115);
+  ctx.lineTo(cx - 145, cy + 115);
   ctx.closePath();
   ctx.fill();
 
-  // Sturdy trunk
-  ctx.fillRect(cx - 9, cy + 40, 18, 20);
+  // Sturdy thick trunk
+  ctx.fillRect(cx - 24, cy + 115, 48, 40);
 
   ctx.restore();
 }
@@ -986,20 +938,20 @@ function drawBrickIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): v
   ctx.save();
   ctx.fillStyle = '#000000';
 
-  // Three bold masonry bricks in a stable 1-over-2 arch pattern
+  // Giant bold masonry bricks in a stable 1-over-2 pattern
   // Top center brick
   ctx.beginPath();
-  ctx.roundRect(cx - 42, cy - 46, 84, 38, 4);
+  ctx.roundRect(cx - 115, cy - 110, 230, 95, 12);
   ctx.fill();
 
   // Bottom left brick
   ctx.beginPath();
-  ctx.roundRect(cx - 56, cy + 2, 52, 38, 4);
+  ctx.roundRect(cx - 145, cy + 5, 140, 95, 12);
   ctx.fill();
 
   // Bottom right brick
   ctx.beginPath();
-  ctx.roundRect(cx + 4, cy + 2, 52, 38, 4);
+  ctx.roundRect(cx + 5, cy + 5, 140, 95, 12);
   ctx.fill();
 
   ctx.restore();
@@ -1009,30 +961,30 @@ function drawWheatIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): v
   ctx.save();
   ctx.fillStyle = '#000000';
 
-  // Sturdy vertical stalk
-  ctx.fillRect(cx - 4, cy - 54, 8, 110);
+  // Giant sturdy vertical stalk
+  ctx.fillRect(cx - 7, cy - 130, 14, 255);
 
   // Top kernel
   ctx.beginPath();
-  ctx.ellipse(cx, cy - 52, 9, 14, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy - 125, 16, 26, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // 4 pairs of plump oval grain kernels
+  // 4 pairs of giant plump grain kernels spreading outward
   for (let i = 0; i < 4; i++) {
-    const y = cy - 32 + i * 22;
+    const y = cy - 80 + i * 48;
     // Left kernel
     ctx.beginPath();
-    ctx.ellipse(cx - 20, y, 16, 9, -Math.PI / 4, 0, Math.PI * 2);
+    ctx.ellipse(cx - 48, y, 38, 22, -Math.PI / 4, 0, Math.PI * 2);
     ctx.fill();
 
     // Right kernel
     ctx.beginPath();
-    ctx.ellipse(cx + 20, y, 16, 9, Math.PI / 4, 0, Math.PI * 2);
+    ctx.ellipse(cx + 48, y, 38, 22, Math.PI / 4, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // Tied ribbon band
-  ctx.fillRect(cx - 14, cy + 44, 28, 10);
+  // Large tied ribbon band
+  ctx.fillRect(cx - 36, cy + 85, 72, 22);
 
   ctx.restore();
 }
@@ -1041,34 +993,34 @@ function drawOreIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): voi
   ctx.save();
   ctx.fillStyle = '#000000';
 
-  // Dual angular mountain peaks
+  // Giant dual angular mountain peaks
   // High main mountain peak
   ctx.beginPath();
-  ctx.moveTo(cx - 10, cy - 54);
-  ctx.lineTo(cx + 36, cy + 48);
-  ctx.lineTo(cx - 56, cy + 48);
+  ctx.moveTo(cx - 25, cy - 125);
+  ctx.lineTo(cx + 85, cy + 105);
+  ctx.lineTo(cx - 145, cy + 105);
   ctx.closePath();
   ctx.fill();
 
   // Companion right peak
   ctx.beginPath();
-  ctx.moveTo(cx + 26, cy - 24);
-  ctx.lineTo(cx + 58, cy + 48);
-  ctx.lineTo(cx - 8, cy + 48);
+  ctx.moveTo(cx + 55, cy - 55);
+  ctx.lineTo(cx + 150, cy + 105);
+  ctx.lineTo(cx - 20, cy + 105);
   ctx.closePath();
   ctx.fill();
 
-  // Crisp chisel ridge lines for instant 3D readability
+  // Crisp chisel ridge lines in parchment white
   ctx.strokeStyle = '#fefdf8';
-  ctx.lineWidth = 5;
+  ctx.lineWidth = 10;
   ctx.beginPath();
-  ctx.moveTo(cx - 10, cy - 54);
-  ctx.lineTo(cx - 18, cy + 48);
+  ctx.moveTo(cx - 25, cy - 125);
+  ctx.lineTo(cx - 38, cy + 105);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(cx + 26, cy - 24);
-  ctx.lineTo(cx + 20, cy + 48);
+  ctx.moveTo(cx + 55, cy - 55);
+  ctx.lineTo(cx + 45, cy + 105);
   ctx.stroke();
 
   ctx.restore();
@@ -1078,36 +1030,44 @@ function drawSheepIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number): v
   ctx.save();
   ctx.fillStyle = '#000000';
 
-  // Fluffy fleece cloud body
+  // Giant fluffy fleece cloud body filling the white space
   ctx.beginPath();
-  ctx.arc(cx - 18, cy + 4, 26, 0, Math.PI * 2);
-  ctx.arc(cx + 14, cy + 4, 24, 0, Math.PI * 2);
-  ctx.arc(cx, cy - 16, 22, 0, Math.PI * 2);
-  ctx.arc(cx - 30, cy - 6, 18, 0, Math.PI * 2);
-  ctx.arc(cx + 26, cy - 6, 18, 0, Math.PI * 2);
+  ctx.arc(cx - 30, cy - 10, 68, 0, Math.PI * 2);
+  ctx.arc(cx - 95, cy - 30, 56, 0, Math.PI * 2);
+  ctx.arc(cx + 15, cy - 55, 54, 0, Math.PI * 2);
+  ctx.arc(cx + 65, cy - 25, 52, 0, Math.PI * 2);
+  ctx.arc(cx - 85, cy + 30, 54, 0, Math.PI * 2);
+  ctx.arc(cx - 15, cy + 45, 58, 0, Math.PI * 2);
+  ctx.arc(cx + 45, cy + 35, 52, 0, Math.PI * 2);
+  ctx.arc(cx - 130, cy - 2, 42, 0, Math.PI * 2);
   ctx.fill();
 
-  // Head
+  // Cute bold sheep head (elevated on right)
   ctx.beginPath();
-  ctx.ellipse(cx + 38, cy - 10, 13, 17, 0.25, 0, Math.PI * 2);
+  ctx.ellipse(cx + 115, cy - 35, 34, 46, 0.2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Drooping ear
+  // Snout/muzzle
   ctx.beginPath();
-  ctx.ellipse(cx + 48, cy - 16, 6, 11, 0.8, 0, Math.PI * 2);
+  ctx.ellipse(cx + 142, cy - 20, 20, 24, 0.15, 0, Math.PI * 2);
   ctx.fill();
 
-  // 4 sturdy legs
-  ctx.fillRect(cx - 30, cy + 24, 9, 22);
-  ctx.fillRect(cx - 12, cy + 24, 9, 22);
-  ctx.fillRect(cx + 6, cy + 24, 9, 22);
-  ctx.fillRect(cx + 22, cy + 24, 9, 22);
+  // Drooping floppy ear
+  ctx.beginPath();
+  ctx.ellipse(cx + 140, cy - 55, 14, 30, 0.85, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 4 sturdy thick legs
+  ctx.fillRect(cx - 105, cy + 70, 20, 55);
+  ctx.fillRect(cx - 50, cy + 70, 20, 55);
+  ctx.fillRect(cx + 10, cy + 70, 20, 55);
+  ctx.fillRect(cx + 65, cy + 70, 20, 55);
 
   ctx.restore();
 }
 
 export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
-  const key = `${harbor.type}:${harbor.resource ?? 'any'}:v2`;
+  const key = `${harbor.type}:${harbor.resource ?? 'any'}:v4`;
   const cached = harborTextureCache.get(key);
   if (cached) return cached;
 
@@ -1119,19 +1079,7 @@ export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
   if (!ctx) throw new Error('2D canvas unavailable');
 
   const isGeneric = harbor.type === 'generic';
-  let title = '3:1';
-  let label = 'ANY';
-
-  if (!isGeneric) {
-    title = '2:1';
-    switch (harbor.resource) {
-      case 'wood': label = 'WOOD'; break;
-      case 'brick': label = 'BRICK'; break;
-      case 'sheep': label = 'SHEEP'; break;
-      case 'wheat': label = 'WHEAT'; break;
-      case 'ore': label = 'ORE'; break;
-    }
-  }
+  const title = isGeneric ? '3:1' : '2:1';
 
   // 1. Clean ivory parchment background circular disc
   ctx.fillStyle = '#fefdfa';
@@ -1145,25 +1093,30 @@ export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
   ctx.stroke();
 
   // Inner subtle decorative accent ring
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.arc(size / 2, size / 2, size / 2 - 42, 0, Math.PI * 2);
   ctx.stroke();
 
-  // 3. Large bold ratio text in pure solid black: "2:1" or "3:1"!
-  ctx.font = 'bold 165px Rubik, sans-serif';
+  // 3. Large bold ratio text in pure solid black: "2:1" or "3:1" at top
+  ctx.font = 'bold 150px Rubik, sans-serif';
   ctx.fillStyle = '#000000';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(title, size / 2, 118);
+  ctx.fillText(title, size / 2, 105);
 
-  // 4. Strong high-contrast vector silhouette icon in solid pure black
+  // 4. Large prominent vector symbol / icon filling the available white space (NO text description!)
   const cx = size / 2;
-  const cy = 262;
+  const cy = 300;
+
   if (isGeneric) {
-    drawAnchorIcon(ctx, cx, cy);
+    // 3:1 Any: Massive bold '?' symbol filling the white space
+    ctx.font = 'bold 310px Rubik, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText('?', cx, cy + 25);
   } else {
+    // 2:1 Specialty: Giant vector SVG silhouette filling the white space
     switch (harbor.resource) {
       case 'wood': drawWoodIcon(ctx, cx, cy); break;
       case 'brick': drawBrickIcon(ctx, cx, cy); break;
@@ -1172,11 +1125,6 @@ export function createHarborBadgeTexture(harbor: Harbor): THREE.CanvasTexture {
       case 'sheep': drawSheepIcon(ctx, cx, cy); break;
     }
   }
-
-  // 5. Large bold resource name label in pure solid black
-  ctx.font = 'bold 62px Rubik, sans-serif';
-  ctx.fillStyle = '#000000';
-  ctx.fillText(label, size / 2, 422);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.anisotropy = 16;
