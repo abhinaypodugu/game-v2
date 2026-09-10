@@ -90,15 +90,22 @@ export const ThreeBoard = memo(function ThreeBoard({
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
 
+    // Dynamic camera distance calculation: frames the full board + padding on ANY aspect ratio!
+    const aspect = width / Math.max(1, height);
+    const tanHalfVfov = Math.tan((40 * Math.PI) / 360);
+    const paddedRadius = 29.5; // Full island + harbors + river with generous padding
+    const distV = paddedRadius / tanHalfVfov;
+    const distH = paddedRadius / (aspect * tanHalfVfov);
+    const fitDist = Math.max(distV, distH) * 1.15;
+
     // 1. Scene & Renderer setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#38bdf8'); // Liquid water lake sky blue!
     scene.fog = new THREE.FogExp2('#38bdf8', 0.0022); // Atmospheric sunlit lake haze
 
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 800);
-    camera.position.set(0, 36, 32);
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.5, 1200);
+    camera.position.set(0, fitDist * 0.74, fitDist * 0.67);
     cameraRef.current = camera;
-
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -112,8 +119,8 @@ export const ThreeBoard = memo(function ThreeBoard({
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
-    controls.minDistance = 8;
-    controls.maxDistance = 180;
+    controls.minDistance = 12;
+    controls.maxDistance = fitDist * 2.5;
     controls.minPolarAngle = Math.PI / 10;
     controls.maxPolarAngle = Math.PI / 2.25;
     controls.target.set(0, 0, 0);
@@ -875,12 +882,18 @@ export const ThreeBoard = memo(function ThreeBoard({
     trigger?.(snap);
   }, [snap, legalVertices, legalEdges, legalHexes]);
 
-  // Camera view presets
+  // Camera view presets with dynamic viewport fit
   const setTopDownView = () => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
-    if (!camera || !controls) return;
-    camera.position.set(0, 58, 0.1);
+    const container = containerRef.current;
+    if (!camera || !controls || !container) return;
+    const w = container.clientWidth || window.innerWidth;
+    const h = container.clientHeight || window.innerHeight;
+    const aspect = w / Math.max(1, h);
+    const tanHalf = Math.tan((40 * Math.PI) / 360);
+    const dist = Math.max(29.5 / tanHalf, 29.5 / (aspect * tanHalf)) * 1.15;
+    camera.position.set(0, dist * 1.05, 0.1);
     controls.target.set(0, 0, 0);
     controls.update();
     setCameraMode('top');
@@ -889,19 +902,24 @@ export const ThreeBoard = memo(function ThreeBoard({
   const setIsometricView = () => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
-    if (!camera || !controls) return;
-    camera.position.set(0, 36, 32);
+    const container = containerRef.current;
+    if (!camera || !controls || !container) return;
+    const w = container.clientWidth || window.innerWidth;
+    const h = container.clientHeight || window.innerHeight;
+    const aspect = w / Math.max(1, h);
+    const tanHalf = Math.tan((40 * Math.PI) / 360);
+    const dist = Math.max(29.5 / tanHalf, 29.5 / (aspect * tanHalf)) * 1.15;
+    camera.position.set(0, dist * 0.74, dist * 0.67);
     controls.target.set(0, 0, 0);
     controls.update();
     setCameraMode('3d');
   };
-
   return (
     <div className="relative h-full w-full select-none" data-testid="three-board">
       <div ref={containerRef} className="absolute inset-0 h-full w-full" />
 
-      {/* Camera View Preset Controls */}
-      <div className="pointer-events-auto absolute top-4 right-4 flex items-center gap-1.5 rounded-xl border border-sky-500/30 bg-[#071828]/85 p-1.5 shadow-xl backdrop-blur-md">
+      {/* Camera View Preset Controls (floating cleanly on mobile/tablet left, top-right on desktop) */}
+      <div className="pointer-events-auto absolute top-28 left-2 sm:top-28 sm:left-3 lg:top-3 lg:left-auto lg:right-84 flex items-center gap-1 rounded-xl border border-slate-300/80 bg-white/95 p-1 shadow-md backdrop-blur-md z-15">
         <button
           type="button"
           onClick={setIsometricView}

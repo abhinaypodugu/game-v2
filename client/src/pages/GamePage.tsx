@@ -170,8 +170,8 @@ export function GamePage(): React.JSX.Element {
       {/* Top Left: Circular Utility Toolbar (Settings, Rules, Fullscreen, Info) */}
       <ColonistTopLeftToolbar snap={snap} />
 
-      {/* Top Center: Trade Offer & Turn Status Banner */}
-      <div className="pointer-events-none fixed top-3 left-0 right-0 z-20 flex justify-center px-4">
+      {/* Top Center: Trade Offer & Turn Status Banner (responsive spacing below mobile toolbar) */}
+      <div className="pointer-events-none fixed top-11 sm:top-12 lg:top-3 left-0 right-0 z-20 flex justify-center px-2 sm:px-4">
         <ColonistTradeBanner snap={snap} rolling={rolling} />
       </div>
 
@@ -180,7 +180,7 @@ export function GamePage(): React.JSX.Element {
 
       {/* Middle Contextual Prompt Banner (when placing road / settlement / city / robber) */}
       {isSetupActor || placement !== null || robberPlacing ? (
-        <div className="pointer-events-none fixed top-16 left-0 right-0 z-20 flex justify-center px-4">
+        <div className="pointer-events-none fixed top-24 sm:top-24 lg:top-16 left-0 right-0 z-20 flex justify-center px-4">
           <div className="rounded-2xl border border-amber-400/60 bg-[#04182a]/95 px-6 py-2 text-xs font-bold text-amber-200 shadow-2xl backdrop-blur-md animate-pulse">
             {isSetupActor
               ? setupVertex === null

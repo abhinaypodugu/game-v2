@@ -27,15 +27,15 @@ export const ColonistTopLeftToolbar = memo(function ColonistTopLeftToolbar({
 
   return (
     <>
-      {/* Top-Left Icon Column */}
+      {/* Top-Left Icon Toolbar (compact row on mobile, column on desktop) */}
       <div
-        className="pointer-events-auto fixed top-3 left-3 z-30 flex flex-col gap-2"
+        className="pointer-events-auto fixed top-2 left-2 z-30 flex flex-row lg:flex-col gap-1 sm:gap-1.5"
         data-testid="colonist-top-left-toolbar"
       >
         <button
           type="button"
           onClick={() => setModal('settings')}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-sm text-slate-700 shadow-md transition hover:scale-105 hover:bg-slate-100 active:scale-95"
+          className="flex h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-xs sm:text-sm text-slate-700 shadow-md transition hover:scale-105 hover:bg-slate-100 active:scale-95"
           title="Settings"
           data-testid="btn-settings"
         >
@@ -45,7 +45,7 @@ export const ColonistTopLeftToolbar = memo(function ColonistTopLeftToolbar({
         <button
           type="button"
           onClick={() => setModal('rules')}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-sm text-slate-700 shadow-md transition hover:scale-105 hover:bg-slate-100 active:scale-95"
+          className="flex h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-xs sm:text-sm text-slate-700 shadow-md transition hover:scale-105 hover:bg-slate-100 active:scale-95"
           title="Build Costs & Rules"
           data-testid="btn-rules"
         >
@@ -55,7 +55,7 @@ export const ColonistTopLeftToolbar = memo(function ColonistTopLeftToolbar({
         <button
           type="button"
           onClick={toggleFullscreen}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-sm text-slate-700 shadow-md transition hover:scale-105 hover:bg-slate-100 active:scale-95"
+          className="flex h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-xs sm:text-sm text-slate-700 shadow-md transition hover:scale-105 hover:bg-slate-100 active:scale-95"
           title="Toggle Fullscreen"
           data-testid="btn-fullscreen"
         >
@@ -65,7 +65,7 @@ export const ColonistTopLeftToolbar = memo(function ColonistTopLeftToolbar({
         <button
           type="button"
           onClick={() => setModal('info')}
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-sm font-black text-slate-700 shadow-md transition hover:scale-105 hover:bg-slate-100 active:scale-95"
+          className="flex h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-xs sm:text-sm font-black text-slate-700 shadow-md transition hover:scale-105 hover:bg-slate-100 active:scale-95"
           title="Game Info"
           data-testid="btn-info"
         >

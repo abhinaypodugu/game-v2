@@ -161,19 +161,27 @@ export const ColonistRightSidebar = memo(function ColonistRightSidebar({
 
   return (
     <>
+      {/* Backdrop scrim on mobile when drawer is open */}
+      {mobileOpen ? (
+        <div
+          className="pointer-events-auto fixed inset-0 z-25 bg-black/50 backdrop-blur-xs lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      ) : null}
+
       {/* Mobile Drawer Toggle Button (Visible only on <1024px) */}
       <button
         type="button"
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="pointer-events-auto fixed top-4 right-4 z-30 flex lg:hidden items-center gap-1.5 rounded-xl border border-sky-500/40 bg-[#071828]/90 px-3 py-1.5 text-xs font-bold text-sky-200 shadow-xl backdrop-blur-md"
+        className="pointer-events-auto fixed top-2 right-2 z-30 flex lg:hidden items-center gap-1 rounded-xl border border-slate-300 bg-white/95 px-2.5 py-1 text-xs font-bold text-slate-800 shadow-md"
       >
-        <span>{mobileOpen ? '✕ Close' : '📋 Roster & Log'}</span>
+        <span>{mobileOpen ? '✕ Close' : '📋 Roster'}</span>
       </button>
 
       {/* Main Sidebar Container */}
       <aside
-        className={`pointer-events-auto fixed top-3 right-3 bottom-3 z-20 flex w-76 sm:w-80 flex-col justify-between gap-2 transition-transform duration-300 ease-in-out ${
-          mobileOpen ? 'translate-x-0 bg-[#071828]/95 backdrop-blur-md lg:bg-transparent shadow-2xl p-2.5 rounded-2xl' : 'translate-x-[110%] lg:translate-x-0'
+        className={`pointer-events-auto fixed top-2 right-2 bottom-2 z-30 flex w-[85vw] max-w-[320px] sm:w-80 flex-col justify-between gap-2 transition-transform duration-300 ease-in-out ${
+          mobileOpen ? 'translate-x-0 bg-[#071828]/95 backdrop-blur-md lg:bg-transparent shadow-2xl p-2 rounded-2xl' : 'translate-x-[115%] lg:translate-x-0'
         }`}
         data-testid="colonist-right-sidebar"
       >

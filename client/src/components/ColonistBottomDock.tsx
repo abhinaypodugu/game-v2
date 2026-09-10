@@ -66,7 +66,7 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
 
   return (
     <div
-      className="pointer-events-auto fixed bottom-3 left-0 right-0 z-30 flex items-end justify-between px-3 md:px-5 gap-2"
+      className="pointer-events-auto fixed bottom-2 left-2 right-2 lg:bottom-3 lg:left-3 lg:right-84 z-30 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-1.5 overflow-x-auto scrollbar-none pb-0.5 max-w-full"
       data-testid="colonist-bottom-dock"
     >
       {/* ============================================================ */}
@@ -81,23 +81,23 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
           return (
             <div
               key={res}
-              className={`flex h-16 w-11 sm:h-20 sm:w-13 flex-col items-center justify-between rounded-xl border ${
+              className={`flex h-13 w-8 sm:h-16 sm:w-11 lg:h-18 lg:w-12 flex-col items-center justify-between rounded-lg sm:rounded-xl border ${
                 spec.bg
-              } ${spec.border} p-1 shadow-sm transition transform hover:-translate-y-1 ${
+              } ${spec.border} p-0.5 sm:p-1 shadow-sm transition transform hover:-translate-y-0.5 ${
                 hasCards ? 'opacity-100' : 'opacity-40 grayscale-50'
               }`}
               title={`${res}: you have ${count}`}
             >
               {/* Count Badge at Top */}
-              <div className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-black/40 px-1 text-[11px] font-black text-white shadow-xs">
+              <div className="flex h-3.5 min-w-[14px] sm:h-5 sm:min-w-[18px] items-center justify-center rounded-full bg-black/40 px-0.5 text-[8px] sm:text-[10px] font-black text-white shadow-xs">
                 {count}
               </div>
 
               {/* Resource Icon */}
-              <span className="text-base sm:text-lg">{spec.icon}</span>
+              <span className="text-xs sm:text-base">{spec.icon}</span>
 
               {/* Resource Label */}
-              <span className="text-[9px] font-bold text-white uppercase tracking-wider leading-none">
+              <span className="text-[7px] sm:text-[9px] font-bold text-white uppercase tracking-wider leading-none">
                 {res.slice(0, 3)}
               </span>
             </div>
@@ -136,8 +136,8 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
       {/* ============================================================ */}
       {/* 2. BOTTOM RIGHT: COLONIST ACTION & BUILD DOCK                */}
       {/* ============================================================ */}
-      <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-md">
-        {/* Trade Button (Circular Arrows) */}
+      {/* 2. BOTTOM RIGHT: COLONIST ACTION & BUILD DOCK */}
+      <div className="flex items-center gap-1 sm:gap-1.5 rounded-xl sm:rounded-2xl border border-slate-300/80 bg-white/95 p-1 sm:p-1.5 shadow-xl backdrop-blur-md overflow-x-auto max-w-full">
         <button
           type="button"
           onClick={() => setTradeModal(true)}
