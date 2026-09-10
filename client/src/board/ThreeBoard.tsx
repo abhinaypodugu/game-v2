@@ -374,17 +374,17 @@ export const ThreeBoard = memo(function ThreeBoard({
       }
       // --- C. Road Path Bed Strips Along All Edges (Wooden Boardwalk Pathways) ---
       const trailBorderMat = new THREE.MeshStandardMaterial({
-        color: 0x382012, // Dark walnut timber frame border
+        color: 0x4a3a2d, // Soft warm neutral frame border (50% less harsh brown!)
         roughness: 0.85,
         flatShading: true,
         transparent: true,
-        opacity: 0.90,
+        opacity: 0.88,
         polygonOffset: true,
         polygonOffsetFactor: -1,
         polygonOffsetUnits: -1,
       });
       const unbuiltTrailMat = new THREE.MeshStandardMaterial({
-        color: 0xd99864, // Warm golden-amber oak wood tone
+        color: 0xded5c6, // 50% less woody: soft, refined warm neutral pathway
         map: getWoodPathwayTexture(),
         roughness: 0.72,
         flatShading: true,
@@ -438,24 +438,28 @@ export const ThreeBoard = memo(function ThreeBoard({
         trailGroup.position.y = STREET_Y + 0.04;
         trailGroup.rotation.set(0, angle, 0);
 
-        // 1. Dark walnut timber outer frame (calibrated width: 0.72)
-        const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.04, len * 0.94), trailBorderMat);
+        // 1. Soft walnut timber outer frame (calibrated width: 0.76)
+        const borderMesh = new THREE.Mesh(new THREE.BoxGeometry(0.76, 0.04, len * 0.94), trailBorderMat);
         borderMesh.receiveShadow = true;
         trailGroup.add(borderMesh);
 
-        // 2. Warm wooden inner boardwalk pathway (calibrated width: 0.54)
-        const innerTrail = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.05, len * 0.92), edgeMat);
+        // 2. Soft warm neutral boardwalk pathway (calibrated width: 0.56)
+        const innerTrail = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.05, len * 0.92), edgeMat);
         innerTrail.position.y = 0.01;
         innerTrail.receiveShadow = true;
         trailGroup.add(innerTrail);
         boardGroup.add(trailGroup);
-      }
 
+        // Interactive hit target for edge selection & hover
+        if (ownerSeat === undefined) {
+          hitMeshes.push({ mesh: innerTrail, kind: 'edge', id: eid });
+        }
+      }
       // --- D. Settlement Foundation Plazas at All Vertices (Circular Wooden Decking Discs) ---
-      const plazaBorderGeom = new THREE.CylinderGeometry(0.74, 0.86, 0.10, 16);
-      const innerPlazaGeom = new THREE.CylinderGeometry(0.58, 0.68, 0.12, 16);
+      const plazaBorderGeom = new THREE.CylinderGeometry(0.68, 0.78, 0.10, 24);
+      const innerPlazaGeom = new THREE.CylinderGeometry(0.54, 0.62, 0.12, 24);
       const unbuiltPlazaMat = new THREE.MeshStandardMaterial({
-        color: 0xd99864, // Warm circular timber deck
+        color: 0xded5c6, // Soft warm neutral circular timber deck (50% less woody)
         map: getWoodPlazaTexture(),
         roughness: 0.72,
         flatShading: true,
@@ -510,8 +514,12 @@ export const ThreeBoard = memo(function ThreeBoard({
         plazaGroup.add(innerPlaza);
 
         boardGroup.add(plazaGroup);
-      }
 
+        // Interactive hit target for vertex selection & hover
+        if (building === undefined) {
+          hitMeshes.push({ mesh: innerPlaza, kind: 'vertex', id: vid });
+        }
+      }
 
       // --- E. Roads ---
       for (const [eid, ownerSeat] of Object.entries(roads)) {
@@ -705,50 +713,56 @@ export const ThreeBoard = memo(function ThreeBoard({
       }
       if (hit) {
         const { snap, legalVertices, legalEdges, legalHexes } = propsRef.current;
-        const { board, you } = snap;
+        const { board, you, buildings, roads } = snap;
         const myColor = snap.players[you.seat]?.color ?? 'red';
 
-        if (hit.kind === 'vertex' && typeof hit.id === 'number' && legalVertices?.has(hit.id)) {
-          const vPos = board.topology.vertexPos[hit.id];
-          if (vPos) {
-            const vx = vPos.x * SCALE;
-            const vz = vPos.y * SCALE;
+        if (hit.kind === 'vertex' && typeof hit.id === 'number') {
+          const isLegalVertex = legalVertices === undefined ? buildings[hit.id] === undefined : legalVertices.has(hit.id);
+          if (isLegalVertex) {
+            const vPos = board.topology.vertexPos[hit.id];
+            if (vPos) {
+              const vx = vPos.x * SCALE;
+              const vz = vPos.y * SCALE;
 
-            // Glowing holographic ghost settlement
-            const ghostSettlement = createSettlementMesh(myColor);
-            ghostSettlement.position.set(vx, STREET_Y + 0.14, vz);
-            ghostSettlement.traverse((child) => {
-              if ((child as THREE.Mesh).isMesh) {
-                (child as THREE.Mesh).material = hoverGlowMat;
-              }
-            });
-            hoverGroup.add(ghostSettlement);
+              // Glowing holographic ghost settlement
+              const ghostSettlement = createSettlementMesh(myColor);
+              ghostSettlement.position.set(vx, STREET_Y + 0.14, vz);
+              ghostSettlement.traverse((child) => {
+                if ((child as THREE.Mesh).isMesh) {
+                  (child as THREE.Mesh).material = hoverGlowMat;
+                }
+              });
+              hoverGroup.add(ghostSettlement);
 
-            // Glowing rotating halo ring around the vertex (2x scale)
-            const halo = new THREE.Mesh(new THREE.RingGeometry(1.1, 1.55, 24), hoverRingMat);
-            halo.rotation.x = -Math.PI / 2;
-            halo.position.set(vx, STREET_Y + 0.16, vz);
-            hoverGroup.add(halo);
+              // Glowing rotating halo ring around the vertex circle
+              const halo = new THREE.Mesh(new THREE.RingGeometry(0.68, 1.05, 24), hoverRingMat);
+              halo.rotation.x = -Math.PI / 2;
+              halo.position.set(vx, STREET_Y + 0.16, vz);
+              hoverGroup.add(halo);
+            }
           }
-        } else if (hit.kind === 'edge' && typeof hit.id === 'string' && legalEdges?.has(hit.id)) {
-          const endpoints = board.topology.edgeEndpoints[hit.id];
-          if (endpoints) {
-            const [a, b] = endpoints;
-            const pa = board.topology.vertexPos[a];
-            const pb = board.topology.vertexPos[b];
-            if (pa && pb) {
-              const p1 = new THREE.Vector3(pa.x * SCALE, STREET_Y + 0.14, pa.y * SCALE);
-              const p2 = new THREE.Vector3(pb.x * SCALE, STREET_Y + 0.14, pb.y * SCALE);
-              const dx = p2.x - p1.x;
-              const dz = p2.z - p1.z;
-              const len = Math.hypot(dx, dz);
-              const angle = Math.atan2(dx, dz);
+        } else if (hit.kind === 'edge' && typeof hit.id === 'string') {
+          const isLegalEdge = legalEdges === undefined ? roads[hit.id] === undefined : legalEdges.has(hit.id);
+          if (isLegalEdge) {
+            const endpoints = board.topology.edgeEndpoints[hit.id];
+            if (endpoints) {
+              const [a, b] = endpoints;
+              const pa = board.topology.vertexPos[a];
+              const pb = board.topology.vertexPos[b];
+              if (pa && pb) {
+                const p1 = new THREE.Vector3(pa.x * SCALE, STREET_Y + 0.14, pa.y * SCALE);
+                const p2 = new THREE.Vector3(pb.x * SCALE, STREET_Y + 0.14, pb.y * SCALE);
+                const dx = p2.x - p1.x;
+                const dz = p2.z - p1.z;
+                const len = Math.hypot(dx, dz);
+                const angle = Math.atan2(dx, dz);
 
-              const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.74, len * 0.94), hoverGlowMat);
-              ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
-              ghostRoad.position.y = STREET_Y + 0.41;
-              ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
-              hoverGroup.add(ghostRoad);
+                const ghostRoad = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.74, len * 0.94), hoverGlowMat);
+                ghostRoad.position.addVectors(p1, p2).multiplyScalar(0.5);
+                ghostRoad.position.y = STREET_Y + 0.41;
+                ghostRoad.rotation.set(0, angle, 0); // Flat on ground!
+                hoverGroup.add(ghostRoad);
+              }
             }
           }
         } else if (hit.kind === 'hex' && typeof hit.id === 'string' && legalHexes?.has(hit.id)) {

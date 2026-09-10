@@ -12,8 +12,8 @@ import * as THREE from 'three';
 import type { Harbor, Terrain } from '@catan/shared';
 
 export const SCALE = 0.048; // Scale factor from 2D board coordinates to 3D units
-export const HEX_RADIUS = 4.42; // True pointy-top edge-to-edge alignment with clean parallel street gap
-export const HEX_BASE_RADIUS = 4.45;
+export const HEX_RADIUS = 4.15; // Calibrated so vertex circle nodes are fully round & unclipped
+export const HEX_BASE_RADIUS = 4.18;
 export const STREET_Y = 0.05; // Street base level where connector pathways, roads, and settlements sit
 export const HEX_ELEVATION = 0.72; // Reduced by 60% (keeping 40% of original height: ~0.72 above road path)
 export const TOP_Y = STREET_Y + HEX_ELEVATION; // 0.77 - Top deck height where biomes, tokens, and robber sit
@@ -126,41 +126,40 @@ export function getWoodPathwayTexture(): THREE.CanvasTexture {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
-  // Warm golden-amber oak wood base
-  ctx.fillStyle = '#9b6338';
+  // 50% less woody: soft, refined warm neutral birch/sandstone base
+  ctx.fillStyle = '#d2c4b2';
   ctx.fillRect(0, 0, w, h);
 
-  // Subtle longitudinal grain lines
-  const grainColors = ['#885329', '#ab7042', '#75431d', '#bd8554', '#683915'];
-  for (let i = 0; i < 48; i++) {
+  // Subtle, gentle low-contrast grain lines (50% reduced intensity)
+  const grainColors = ['#c4b4a0', '#bba996', '#dcd0c0', '#ab9884', '#cfc2b0'];
+  for (let i = 0; i < 36; i++) {
     const y = Math.random() * h;
-    const thickness = 1 + Math.random() * 2.5;
+    const thickness = 1 + Math.random() * 2.0;
     ctx.fillStyle = grainColors[i % grainColors.length]!;
-    ctx.globalAlpha = 0.25 + Math.random() * 0.35;
+    ctx.globalAlpha = 0.08 + Math.random() * 0.16;
     ctx.fillRect(0, y, w, thickness);
   }
   ctx.globalAlpha = 1.0;
 
-  // Transverse wooden boardwalk planks with dark gap seams
+  // Transverse boardwalk planks with soft muted gap seams
   const plankWidth = 64;
   for (let x = 0; x < w; x += plankWidth) {
-    // Dark plank shadow seam
-    ctx.fillStyle = '#3f210d';
-    ctx.fillRect(x, 0, 3, h);
-    // Light plank edge highlight
-    ctx.fillStyle = '#d49b6a';
-    ctx.fillRect(x + 3, 0, 1.5, h);
+    // Soft plank shadow seam
+    ctx.fillStyle = '#7c6854';
+    ctx.fillRect(x, 0, 2.5, h);
+    // Subtle plank edge highlight
+    ctx.fillStyle = '#eae2d6';
+    ctx.fillRect(x + 2.5, 0, 1.2, h);
 
-    // Nail/peg fasteners on the plank ends
-    ctx.fillStyle = '#261407';
+    // Soft muted nail/peg fasteners on the plank ends
+    ctx.fillStyle = '#604e3c';
     ctx.beginPath();
-    ctx.arc(x + 12, 14, 2.5, 0, Math.PI * 2);
-    ctx.arc(x + 12, h - 14, 2.5, 0, Math.PI * 2);
-    ctx.arc(x + plankWidth - 12, 14, 2.5, 0, Math.PI * 2);
-    ctx.arc(x + plankWidth - 12, h - 14, 2.5, 0, Math.PI * 2);
+    ctx.arc(x + 12, 14, 2.2, 0, Math.PI * 2);
+    ctx.arc(x + 12, h - 14, 2.2, 0, Math.PI * 2);
+    ctx.arc(x + plankWidth - 12, 14, 2.2, 0, Math.PI * 2);
+    ctx.arc(x + plankWidth - 12, h - 14, 2.2, 0, Math.PI * 2);
     ctx.fill();
   }
-
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
@@ -183,42 +182,41 @@ export function getWoodPlazaTexture(): THREE.CanvasTexture {
 
   const center = size / 2;
 
-  // Base warm timber disc
-  ctx.fillStyle = '#9b6338';
+  // 50% less woody: soft, refined warm neutral birch/sandstone disc
+  ctx.fillStyle = '#d2c4b2';
   ctx.beginPath();
   ctx.arc(center, center, center, 0, Math.PI * 2);
   ctx.fill();
 
-  // Concentric tree rings / circular decking
-  const ringColors = ['#885329', '#ab7042', '#75431d', '#bd8554', '#5e3212'];
+  // Subtle concentric tree rings / circular decking (soft contrast)
+  const ringColors = ['#c4b4a0', '#bba996', '#ab9884', '#cfc2b0'];
   for (let r = 8; r < center - 6; r += 7) {
     ctx.strokeStyle = ringColors[Math.floor(r / 7) % ringColors.length]!;
-    ctx.lineWidth = 2 + (r % 3);
-    ctx.globalAlpha = 0.35 + (r % 4) * 0.1;
+    ctx.lineWidth = 1.8 + (r % 2);
+    ctx.globalAlpha = 0.15 + (r % 3) * 0.08;
     ctx.beginPath();
     ctx.arc(center, center, r, 0, Math.PI * 2);
     ctx.stroke();
   }
   ctx.globalAlpha = 1.0;
 
-  // 6 radial plank joints
+  // 6 radial plank joints (soft muted tone)
   for (let a = 0; a < 6; a++) {
     const angle = (a * Math.PI) / 3;
-    ctx.strokeStyle = '#381c0b';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#7c6854';
+    ctx.lineWidth = 1.8;
     ctx.beginPath();
     ctx.moveTo(center + Math.cos(angle) * 12, center + Math.sin(angle) * 12);
     ctx.lineTo(center + Math.cos(angle) * (center - 6), center + Math.sin(angle) * (center - 6));
     ctx.stroke();
   }
 
-  // Outer dark rim
-  ctx.strokeStyle = '#2b1508';
-  ctx.lineWidth = 8;
+  // Outer soft rim
+  ctx.strokeStyle = '#5c4836';
+  ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.arc(center, center, center - 4, 0, Math.PI * 2);
   ctx.stroke();
-
   const tex = new THREE.CanvasTexture(canvas);
   tex.anisotropy = 8;
   woodPlazaTex = tex;
