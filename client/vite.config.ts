@@ -4,6 +4,7 @@ import { defineConfig } from 'vite';
 import { serviceWorkerPlugin } from './pwa/swPlugin';
 
 export default defineConfig({
+  base: process.env.BASE_PATH || '/',
   // serviceWorkerPlugin is `apply: 'build'`: the dev server never emits or serves a worker.
   plugins: [react(), tailwindcss(), serviceWorkerPlugin()],
   server: {
