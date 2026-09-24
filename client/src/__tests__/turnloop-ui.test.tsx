@@ -9,7 +9,7 @@ import { generateBoard } from '@catan/shared';
 import { TradeModal } from '../components/TradeModal';
 import { DiscardModal, VictimPicker } from '../components/RobberFlow';
 import { VictoryOverlay } from '../components/VictoryOverlay';
-import { MonopolyModal, YearOfPlentyModal } from '../components/DevCardModals';
+import { DevCardConfirmModal, MonopolyModal, YearOfPlentyModal } from '../components/DevCardModals';
 import type { PersonalSnapshot } from '../types';
 import { useStore } from '../store';
 
@@ -214,5 +214,25 @@ describe('DevCardModals', () => {
       payload: { resources: ['wood', 'wheat'] },
     });
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it('DevCardConfirmModal prompts before playing and invokes callbacks', async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    const { unmount } = render(
+      <DevCardConfirmModal card={{ id: 'k1', type: 'knight' }} onConfirm={onConfirm} onClose={onClose} />,
+    );
+
+    expect(screen.getByText('Play Knight?')).toBeInTheDocument();
+    expect(screen.getByText(/Move the robber/i)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('dev-confirm-cancel'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    unmount();
+    render(<DevCardConfirmModal card={{ id: 'k1', type: 'knight' }} onConfirm={onConfirm} onClose={onClose} />);
+    await user.click(screen.getByTestId('dev-confirm-play'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 });

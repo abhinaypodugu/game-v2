@@ -1,6 +1,6 @@
-// Dev card modals: Monopoly resource picker & Year of Plenty selector.
 import { useState } from 'react';
-import type { GameAction, Resource } from '@catan/shared';
+import { createPortal } from 'react-dom';
+import type { DevCardType, GameAction, Resource } from '@catan/shared';
 import { RESOURCES } from '@catan/shared';
 import { useStore } from '../store';
 import { DEV_META, RESOURCE_META, ResourceCard } from './resourceArt';
@@ -18,29 +18,36 @@ function Sheet({
   onClose: () => void;
   children: React.ReactNode;
 }): React.JSX.Element {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4" data-testid={testId}>
+  if (typeof document === 'undefined') return <></>;
+  return createPortal(
+    <div
+      className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-ink/60 p-4 pt-[max(1rem,var(--safe-top))] pb-[max(1rem,var(--safe-bottom))] backdrop-blur-xs"
+      data-testid={testId}
+      onClick={onClose}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative w-full max-w-md rounded-t-3xl border-2 border-line bg-cream p-4 pb-[max(1rem,var(--safe-bottom))] text-ink shadow-2xl sm:rounded-3xl"
+        className="animate-pop-in relative max-h-[88dvh] w-full max-w-md overflow-y-auto rounded-3xl border-2 border-line bg-cream p-5 text-ink shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-full border-2 border-line bg-white text-base font-bold"
+          className="absolute top-3 right-3 flex h-11 w-11 items-center justify-center rounded-full border-2 border-line bg-white text-base font-bold active:translate-y-px"
           aria-label="Close"
         >
           ✕
         </button>
-        <div className="mb-1 flex items-center gap-2 pr-12">
+        <div className="mb-2 flex items-center gap-2 pr-12">
           <span className="text-2xl">{icon}</span>
           <h2 className="text-xl font-bold">{title}</h2>
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -151,6 +158,85 @@ export function YearOfPlentyModal({ cardId, onClose }: YearOfPlentyModalProps): 
       >
         Take {totalSelected} of 2
       </button>
+    </Sheet>
+  );
+}
+
+export interface DevCardConfirmModalProps {
+  card: { id: string; type: DevCardType };
+  onConfirm: () => void;
+  onClose: () => void;
+}
+
+const DEV_DESCRIPTIONS: Record<DevCardType, { title: string; desc: string; confirmLabel: string }> = {
+  knight: {
+    title: 'Play Knight?',
+    desc: 'Move the robber to any tile and steal 1 card from an adjacent player. Contributes toward Largest Army (3+ knights = 2 VP).',
+    confirmLabel: 'Play Knight',
+  },
+  roadBuilding: {
+    title: 'Play Road Building?',
+    desc: 'Place 2 free roads immediately without spending any wood or brick.',
+    confirmLabel: 'Place 2 Roads',
+  },
+  yearOfPlenty: {
+    title: 'Play Year of Plenty?',
+    desc: 'Take any 2 resource cards of your choice directly from the bank.',
+    confirmLabel: 'Choose Resources',
+  },
+  monopoly: {
+    title: 'Play Monopoly?',
+    desc: 'Name 1 resource. All other players must surrender all cards of that resource to you.',
+    confirmLabel: 'Choose Resource',
+  },
+  victoryPoint: {
+    title: 'Victory Point Card',
+    desc: 'Victory Point cards stay hidden in your hand and automatically count toward your victory points to win the game.',
+    confirmLabel: 'OK',
+  },
+};
+
+export function DevCardConfirmModal({ card, onConfirm, onClose }: DevCardConfirmModalProps): React.JSX.Element {
+  const meta = DEV_META[card.type];
+  const info = DEV_DESCRIPTIONS[card.type];
+
+  return (
+    <Sheet testId="dev-card-confirm-modal" title={info.title} icon={meta.icon} onClose={onClose}>
+      <div className="flex flex-col gap-4">
+        <div className="rounded-2xl border-2 border-line bg-white p-3.5 shadow-xs">
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <span className="text-3xl">{meta.icon}</span>
+            <div>
+              <div className="text-base font-bold text-ink">{meta.label}</div>
+              <div className="text-xs font-bold text-ink-soft uppercase tracking-wide">Development Card</div>
+            </div>
+          </div>
+          <p className="text-sm font-medium text-ink-soft leading-relaxed">{info.desc}</p>
+        </div>
+
+        <p className="text-xs text-ink-soft font-semibold text-center">
+          ⚠️ Only 1 development card can be played per turn.
+        </p>
+
+        <div className="grid grid-cols-2 gap-2.5 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-12 items-center justify-center rounded-2xl border-2 border-line bg-parchment px-3 font-display text-sm font-bold text-ink shadow-[0_2px_0_#d9cfb8] active:translate-y-px"
+            data-testid="dev-confirm-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="flex h-12 items-center justify-center rounded-2xl bg-cta px-3 font-display text-sm font-bold text-ink shadow-[0_3px_0_#a86d08] active:translate-y-px"
+            data-testid="dev-confirm-play"
+          >
+            {info.confirmLabel}
+          </button>
+        </div>
+      </div>
     </Sheet>
   );
 }

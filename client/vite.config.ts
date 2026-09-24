@@ -1,7 +1,7 @@
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
-import { serviceWorkerPlugin } from './pwa/swPlugin';
+import { serviceWorkerPlugin } from './pwa/swPlugin.ts';
 
 export default defineConfig({
   base: process.env.BASE_PATH || '/',

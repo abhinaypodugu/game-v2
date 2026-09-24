@@ -10,7 +10,7 @@
 // permanent right sidebar on ≥1024px.
 
 import { useMemo, useState } from 'react';
-import type { GameAction } from '@catan/shared';
+import type { DevCardType, GameAction } from '@catan/shared';
 import { legalRobberHexes } from '@catan/shared';
 import { Board2D } from '../board/Board2D';
 import { ColonistTopLeftToolbar } from '../components/ColonistTopLeftToolbar';
@@ -21,7 +21,7 @@ import { DiscardModal, VictimPicker } from '../components/RobberFlow';
 import { OfflineHostBanner, ReconnectBanner, ToastStack } from '../components/Overlays';
 import { TradeModal } from '../components/TradeModal';
 import { VictoryOverlay } from '../components/VictoryOverlay';
-import { MonopolyModal, YearOfPlentyModal } from '../components/DevCardModals';
+import { DevCardConfirmModal, MonopolyModal, YearOfPlentyModal } from '../components/DevCardModals';
 import { FlyingCards } from '../components/FlyingCards';
 import { PlayerStrip } from '../components/PlayerStrip';
 import { TurnStatusBar, type StatusPrompt } from '../components/TurnStatusBar';
@@ -113,6 +113,7 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
   const log = useStore((s) => s.log);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [setupSel, setSetupSel] = useState<{ key: string; vertex: number } | null>(null);
+  const [confirmDevCard, setConfirmDevCard] = useState<{ id: string; type: DevCardType } | null>(null);
   const [devModal, setDevModal] = useState<{ type: 'monopoly' | 'yearOfPlenty'; cardId: string } | null>(null);
   const [roadBuildingSel, setRoadBuildingSel] = useState<RoadBuildingState | null>(null);
   const mySeat = session?.seatIndex ?? -1;
@@ -293,14 +294,7 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
             placement={armed}
             onArm={(kind) => setPlacement(armed?.kind === kind ? null : { kind })}
             onPlayDevCard={(card) => {
-              if (card.type === 'knight') {
-                sendAction({ type: 'playDevCard', cardId: card.id });
-              } else if (card.type === 'monopoly' || card.type === 'yearOfPlenty') {
-                setDevModal({ type: card.type, cardId: card.id });
-              } else if (card.type === 'roadBuilding') {
-                setPlacement(null);
-                setRoadBuildingSel({ cardId: card.id, turn: snap.turn, edges: [] });
-              }
+              setConfirmDevCard(card as { id: string; type: DevCardType });
             }}
           />
         </footer>
@@ -314,6 +308,24 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
       <DiscardModal mySeat={mySeat} />
       <VictimPicker mySeat={mySeat} />
       <VictoryOverlay />
+      {confirmDevCard !== null ? (
+        <DevCardConfirmModal
+          card={confirmDevCard}
+          onClose={() => setConfirmDevCard(null)}
+          onConfirm={() => {
+            const card = confirmDevCard;
+            setConfirmDevCard(null);
+            if (card.type === 'knight') {
+              sendAction({ type: 'playDevCard', cardId: card.id });
+            } else if (card.type === 'monopoly' || card.type === 'yearOfPlenty') {
+              setDevModal({ type: card.type, cardId: card.id });
+            } else if (card.type === 'roadBuilding') {
+              setPlacement(null);
+              setRoadBuildingSel({ cardId: card.id, turn: snap.turn, edges: [] });
+            }
+          }}
+        />
+      ) : null}
       {devModal?.type === 'monopoly' ? <MonopolyModal cardId={devModal.cardId} onClose={() => setDevModal(null)} /> : null}
       {devModal?.type === 'yearOfPlenty' ? (
         <YearOfPlentyModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
