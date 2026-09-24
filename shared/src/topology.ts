@@ -23,7 +23,7 @@ export const HEX_DIRS: readonly Axial[] = [
 ] as const;
 
 export type HexId = string; // `${q},${r}`
-export type VertexId = number; // 0..53 (base) / 0..80 (ext56)
+export type VertexId = number; // 0..53 (base) / 0..79 (ext56) / 0..95 (ext78)
 export type Edge = [VertexId, VertexId]; // sorted tuple [min, max]
 export type EdgeId = string; // `${a}-${b}`
 
@@ -123,8 +123,8 @@ export function hexagon(radius: number): Axial[] {
 }
 
 /**
- * 5-6 player extension board: rows of widths 3,4,5,6,5,4,3 (30 hexes).
- * Equivalent to a radius-3 hexagon with two opposite side columns cut.
+ * 5-6 player extension board: rows of widths 3,4,5,6,5,4,3 (30 hexes), every
+ * row centred on the same x (pixel x ∝ q + r/2) so the island is symmetric.
  */
 export function bigBoard(): Axial[] {
   const rows: Array<[number, number, number]> = [
@@ -133,9 +133,9 @@ export function bigBoard(): Axial[] {
     [-2, -1, 2],
     [-1, -2, 2],
     [0, -3, 2],
-    [1, -2, 2],
-    [2, -2, 1],
-    [3, -2, 0],
+    [1, -3, 1],
+    [2, -3, 0],
+    [3, -3, -1],
   ];
   const out: Axial[] = [];
   for (const [r, qMin, qMax] of rows) {

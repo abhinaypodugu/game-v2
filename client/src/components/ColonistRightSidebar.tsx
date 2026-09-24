@@ -1,354 +1,149 @@
-// Colonist.io-style Right Sidebar HUD:
-// - Top: Game Event Log (light card with player avatars, dice, resources, actions)
-// - Middle: Chat bar & Bank inventory bar (Wood, Brick, Sheep, Wheat, Ore, Dev Cards)
-// - Bottom: Player Roster cards with avatars, VP ribbons, resource & dev card counts, knights, roads
-// - Responsive: Collapsible into a slide-over drawer on mobile screens (<1024px)
+// Game info panel: bank stock, full player details and the event log.
+// Phone: a slide-up bottom sheet toggled from the toolbar.
+// ≥1024px: a permanent right sidebar column beside the board.
 
-import { memo, useEffect, useRef, useState } from 'react';
-import type { GameEvent, Resource } from '@catan/shared';
-import type { PersonalSnapshot } from '../types';
+import { memo } from 'react';
+import { RESOURCES } from '@catan/shared';
 import { useStore } from '../store';
-import { PIECE_COLORS } from '../theme';
+import type { PersonalSnapshot } from '../types';
+import { EventLog } from './EventLog';
+import { Avatar } from './PlayerStrip';
+import { ResourceCard } from './resourceArt';
 
 export interface ColonistRightSidebarProps {
   snap: PersonalSnapshot;
+  /** Mobile sheet open state (ignored on ≥1024px, where it is always shown). */
+  open: boolean;
+  onClose: () => void;
 }
 
-const RESOURCE_EMOJI: Record<Resource, string> = {
-  wood: '🌲',
-  brick: '🧱',
-  sheep: '🐑',
-  wheat: '🌾',
-  ore: '⛰',
-};
-
-const RESOURCE_CARD_BG: Record<Resource, { bg: string; border: string; text: string }> = {
-  wood: { bg: 'bg-[#15803d]', border: 'border-[#166534]', text: 'text-white' },
-  brick: { bg: 'bg-[#dc2626]', border: 'border-[#b91c1c]', text: 'text-white' },
-  sheep: { bg: 'bg-[#65a30d]', border: 'border-[#4d7c0f]', text: 'text-white' },
-  wheat: { bg: 'bg-[#ca8a04]', border: 'border-[#a16207]', text: 'text-white' },
-  ore: { bg: 'bg-[#475569]', border: 'border-[#334155]', text: 'text-white' },
-};
-
-function formatEvent(event: GameEvent, names: string[], colors: string[]): React.JSX.Element {
-  const getBadge = (seat: number | null | undefined) => {
-    if (seat === null || seat === undefined) return null;
-    const col = colors[seat] ?? '#64748b';
-    return (
-      <span
-        className="inline-block h-2.5 w-2.5 rounded-full border border-black/30 mr-1.5 align-middle shadow-xs"
-        style={{ backgroundColor: col }}
-      />
-    );
-  };
-
-  const name = (seat: number | null | undefined): string =>
-    seat === null || seat === undefined ? '?' : (names[seat] ?? `P${seat}`);
-
-  switch (event.type) {
-    case 'gameStarted':
-      return <span>Game started with {event.playerCount} players</span>;
-    case 'setupPlaced':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> placed a{' '}
-          {event.second ? '2nd Settlement 🏠' : 'Settlement 🏠'}
-        </span>
-      );
-    case 'rolled':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> rolled 🎲{' '}
-          <span className="font-bold">{event.die1}+{event.die2} = {event.die1 + event.die2}</span>
-        </span>
-      );
-    case 'produced':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> received +{event.amount}{' '}
-          {RESOURCE_EMOJI[event.resource] ?? ''}
-        </span>
-      );
-    case 'roadBuilt':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> placed a Road 🛣
-        </span>
-      );
-    case 'settlementBuilt':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> placed a Settlement 🏠
-        </span>
-      );
-    case 'cityBuilt':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> upgraded to City 🏰
-        </span>
-      );
-    case 'devCardBought':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> bought a Dev Card 🎴
-        </span>
-      );
-    case 'devCardPlayed':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> played {event.cardType} ⚔
-        </span>
-      );
-    case 'robberMoved':
-      return (
-        <span>
-          {getBadge(event.seat)}
-          <span className="font-semibold text-slate-900">{name(event.seat)}</span> moved the Robber 🥷
-        </span>
-      );
-    case 'tradeOffered':
-      return (
-        <span>
-          {getBadge(event.proposer)}
-          <span className="font-semibold text-slate-900">{name(event.proposer)}</span> offered a trade
-        </span>
-      );
-    case 'tradeCompleted':
-      return (
-        <span>
-          Trade accepted: {name(event.from)} ↔ {name(event.to)}
-        </span>
-      );
-    case 'turnStarted':
-      return (
-        <span className="font-bold text-slate-600 block border-t border-slate-200/80 pt-1 mt-1">
-          — {name(event.seat)}'s Turn {event.turn} —
-        </span>
-      );
-    case 'victory':
-      return (
-        <span className="font-bold text-amber-600">
-          🎉 {name(event.seat)} wins with {event.vp} VP!
-        </span>
-      );
-    default:
-      return <span>{(event as { type: string }).type}</span>;
-  }
+function Stat({ label, value, highlight = false }: { label: string; value: string | number; highlight?: boolean }): React.JSX.Element {
+  return (
+    <span
+      className={`flex flex-col items-center rounded-lg px-1 py-0.5 leading-none ${highlight ? 'bg-[#fde7b0] text-[#7a5200]' : 'bg-parchment text-ink'}`}
+    >
+      <span className="text-xs font-bold tabular-nums">{value}</span>
+      <span className="text-[8px] font-bold uppercase tracking-wide opacity-70">{label}</span>
+    </span>
+  );
 }
 
 export const ColonistRightSidebar = memo(function ColonistRightSidebar({
   snap,
+  open,
+  onClose,
 }: ColonistRightSidebarProps): React.JSX.Element {
-  const log = useStore((s) => s.log);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const logEndRef = useRef<HTMLDivElement>(null);
-
-  const { players, activeSeat, longestRoad, largestArmy, you, bank, devDeckCount } = snap;
-  const names = players.map((p) => p.name);
-  const colors = players.map((p) => PIECE_COLORS[p.color]?.main ?? '#64748b');
-
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [log.length]);
+  const { players, activeSeat, longestRoad, largestArmy, you, bank, devDeckCount, rules } = snap;
 
   return (
     <>
-      {/* Backdrop scrim on mobile when drawer is open */}
-      {mobileOpen ? (
+      {open ? (
         <div
-          className="pointer-events-auto fixed inset-0 z-25 bg-black/50 backdrop-blur-xs lg:hidden"
-          onClick={() => setMobileOpen(false)}
+          className="fixed inset-0 z-40 bg-ink/40 lg:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+          data-testid="sidebar-scrim"
         />
       ) : null}
-
-      {/* Mobile Drawer Toggle Button (Visible only on <1024px) */}
-      <button
-        type="button"
-        onClick={() => setMobileOpen(!mobileOpen)}
-        className="pointer-events-auto fixed top-2 right-2 z-30 flex lg:hidden items-center gap-1 rounded-xl border border-slate-300 bg-white/95 px-2.5 py-1 text-xs font-bold text-slate-800 shadow-md"
-      >
-        <span>{mobileOpen ? '✕ Close' : '📋 Roster'}</span>
-      </button>
-
-      {/* Main Sidebar Container */}
       <aside
-        className={`pointer-events-auto fixed top-2 right-2 bottom-2 z-30 flex w-[85vw] max-w-[320px] sm:w-80 flex-col justify-between gap-2 transition-transform duration-300 ease-in-out ${
-          mobileOpen ? 'translate-x-0 bg-[#071828]/95 backdrop-blur-md lg:bg-transparent shadow-2xl p-2 rounded-2xl' : 'translate-x-[115%] lg:translate-x-0'
+        className={`fixed inset-x-0 bottom-0 z-50 flex max-h-[78dvh] flex-col gap-2 overflow-y-auto rounded-t-3xl border-t-2 border-line bg-cream px-2 pt-2 pb-[max(0.5rem,var(--safe-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.2)] transition-transform duration-300 ease-out lg:static lg:z-auto lg:max-h-none lg:w-[320px] lg:flex-none lg:translate-y-0 lg:rounded-2xl lg:border-2 lg:pb-2 lg:shadow-[0_2px_0_rgba(0,0,0,0.12)] ${
+          open ? 'translate-y-0' : 'pointer-events-none translate-y-full lg:pointer-events-auto'
         }`}
+        aria-label="Game details"
         data-testid="colonist-right-sidebar"
       >
-        {/* ============================================================ */}
-        {/* 1. TOP: GAME EVENT LOG (Colonist-style light card)          */}
-        {/* ============================================================ */}
-        <div className="flex h-44 lg:h-52 w-full flex-col rounded-xl border border-slate-300 bg-[#f8f9fa]/95 shadow-md overflow-hidden">
-          {/* Header */}
-          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100/90 px-3 py-1.5 text-xs font-bold text-slate-700">
-            <span className="flex items-center gap-1.5">
-              <span>📜</span>
-              <span>Game Log</span>
-            </span>
-            <span className="text-[10px] text-slate-500 font-normal">
-              Turn {snap.turn}
-            </span>
-          </div>
-
-          {/* Scrollable event feed */}
-          <div className="flex-1 overflow-y-auto p-2.5 text-[11px] leading-relaxed text-slate-700 space-y-1.5 scrollbar-thin scrollbar-thumb-slate-300">
-            {log.length === 0 ? (
-              <div className="text-slate-400 italic">Game events will appear here…</div>
-            ) : (
-              log.map((e, idx) => (
-                <div key={`${e.type}-${idx}`} className="break-words">
-                  {formatEvent(e, names, colors)}
-                </div>
-              ))
-            )}
-            <div ref={logEndRef} />
-          </div>
+        {/* Sheet header (phone only) */}
+        <div className="flex items-center justify-between lg:hidden">
+          <span className="mx-auto h-1.5 w-12 rounded-full bg-line" aria-hidden="true" />
+        </div>
+        <div className="flex items-center justify-between px-1">
+          <h2 className="text-lg font-bold text-ink">Game</h2>
+          <span className="text-xs font-bold text-ink-soft">
+            Turn {snap.turn} · First to {rules.victoryPointsToWin} VP
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-line bg-white text-base font-bold text-ink lg:hidden"
+            aria-label="Close game details"
+          >
+            ✕
+          </button>
         </div>
 
-        {/* ============================================================ */}
-        {/* 2. MIDDLE: BANK RESOURCES BAR (Colonist-style card row)     */}
-        {/* ============================================================ */}
-        <div className="flex w-full items-center justify-between gap-1 rounded-xl border border-slate-300/80 bg-white/95 px-2 py-1.5 shadow-sm">
-          {/* Bank building emblem */}
-          <div className="flex flex-col items-center justify-center px-1 text-slate-700" title="Bank Stock">
-            <span className="text-sm">🏛️</span>
-            <span className="text-[8px] font-bold text-slate-500">BANK</span>
-          </div>
-
-          {/* 5 Bank Resource Cards */}
-          {(['wood', 'brick', 'sheep', 'wheat', 'ore'] as const).map((res) => {
-            const spec = RESOURCE_CARD_BG[res];
-            return (
-              <div
-                key={res}
-                className={`flex h-11 w-9 flex-col items-center justify-between rounded border ${spec.bg} ${spec.border} p-0.5 shadow-xs`}
-                title={`${res}: ${bank[res]} left in bank`}
-              >
-                <span className="text-[10px] font-bold text-white leading-none">
-                  {bank[res]}
-                </span>
-                <span className="text-xs leading-none">{RESOURCE_EMOJI[res]}</span>
-              </div>
-            );
-          })}
-
-          {/* Dev Card Deck */}
+        {/* Bank */}
+        <div
+          className="flex items-center gap-1 rounded-2xl border-2 border-line bg-white px-2 py-1.5"
+          data-anchor="bank"
+          data-testid="bank"
+        >
+          <span className="mr-auto flex flex-col text-[10px] font-bold uppercase leading-tight text-ink-soft">
+            <span className="text-base leading-none">🏦</span>Bank
+          </span>
+          {RESOURCES.map((r) => (
+            <ResourceCard key={r} resource={r} count={bank[r]} size="md" dim={bank[r] === 0} title={`${bank[r]} ${r} in the bank`} />
+          ))}
           <div
-            className="flex h-11 w-9 flex-col items-center justify-between rounded border border-purple-800 bg-purple-700 p-0.5 shadow-xs"
-            title={`Development Cards: ${devDeckCount} remaining in deck`}
+            className="relative flex h-14 w-10 flex-none items-center justify-center rounded-lg border-2 border-[#5b3b8c] bg-[#b89ee6] font-bold text-white shadow-[0_2px_0_rgba(0,0,0,0.25)]"
+            title={`${devDeckCount} development cards left`}
           >
-            <span className="text-[10px] font-bold text-white leading-none">
+            ?
+            <span className="absolute bottom-0.5 left-1/2 flex h-5 min-w-5 -translate-x-1/2 items-center justify-center rounded-full bg-white px-1 text-xs font-bold text-ink">
               {devDeckCount}
             </span>
-            <span className="text-xs leading-none">🎴</span>
           </div>
         </div>
 
-        {/* ============================================================ */}
-        {/* 3. BOTTOM: PLAYER ROSTER CARDS (Colonist.io player cards)   */}
-        {/* ============================================================ */}
-        <div className="flex flex-1 flex-col justify-end gap-1.5 overflow-hidden">
+        {/* Player details */}
+        <ul className="flex flex-col gap-1" data-testid="player-details">
           {players.map((p) => {
-            const isActive = p.seat === activeSeat;
             const isYou = p.seat === you.seat;
-            const colorMain = PIECE_COLORS[p.color]?.main ?? '#64748b';
-            const hasRoad = longestRoad.holder === p.seat;
-            const hasArmy = largestArmy.holder === p.seat;
-            const vpScore = isYou ? you.totalVp : p.publicVp;
-            const roadsBuilt = Math.max(0, 15 - p.roadsLeft);
-
+            const vp = isYou ? you.totalVp : p.publicVp;
+            const roadsBuilt = 15 - p.roadsLeft;
             return (
-              <div
+              <li
                 key={p.seat}
-                data-testid={`player-card-${p.seat}`}
-                className={`flex items-center justify-between rounded-xl border px-2.5 py-1.5 shadow-md transition ${
-                  isActive
-                    ? 'border-amber-400/90 bg-white ring-2 ring-amber-400/50'
-                    : 'border-slate-300/80 bg-[#f8f9fa]'
-                } ${p.connected ? '' : 'opacity-60'}`}
+                className={`flex items-center gap-1.5 rounded-xl border-2 bg-white px-1.5 py-1 ${
+                  p.seat === activeSeat ? 'border-cta' : 'border-transparent'
+                } ${p.connected ? '' : 'opacity-50 grayscale'}`}
               >
-                {/* Active Indicator & Name */}
-                <div className="flex items-center gap-1.5 min-w-[72px] max-w-[84px]">
-                  {isActive ? (
-                    <span className="text-amber-500 font-black text-xs animate-pulse">…</span>
-                  ) : null}
-                  <span className="truncate text-xs font-bold text-slate-800" title={p.name}>
+                <Avatar name={p.name} color={p.color} />
+                <div className="flex min-w-0 flex-1 flex-col leading-tight">
+                  <span className="truncate text-sm font-bold text-ink">
                     {p.name}
+                    {isYou ? ' (you)' : ''}
+                  </span>
+                  <span className="truncate text-[10px] font-bold text-ink-soft">
+                    {p.connected ? `${p.settlementsLeft} houses · ${p.citiesLeft} cities · ${p.roadsLeft} roads left` : 'Disconnected'}
                   </span>
                 </div>
-
-                {/* Avatar Icon with VP Shield Ribbon below */}
-                <div className="relative flex flex-col items-center justify-center">
-                  <div
-                    className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white shadow-sm font-bold text-xs text-white"
-                    style={{ backgroundColor: colorMain }}
-                  >
-                    {p.name.charAt(0).toUpperCase()}
-                  </div>
-                  {/* VP Ribbon Shield */}
-                  <div
-                    className="absolute -bottom-1.5 flex h-4 min-w-[18px] items-center justify-center rounded bg-amber-400 px-1 text-[10px] font-black text-slate-900 shadow-xs border border-amber-500"
-                    title={`${vpScore} Victory Points`}
-                  >
-                    {vpScore}
-                  </div>
+                <div className="flex flex-none gap-0.5">
+                  <Stat label="VP" value={vp} />
+                  <Stat label="Cards" value={p.resourceCount} />
+                  <Stat label="Dev" value={p.devCardCount} />
+                  <Stat label="Knights" value={p.playedKnights} highlight={largestArmy.holder === p.seat} />
+                  <Stat label="Roads" value={roadsBuilt} highlight={longestRoad.holder === p.seat} />
                 </div>
-
-                {/* Stat Cards Row */}
-                <div className="flex items-center gap-1">
-                  {/* Resource Cards Count (Blue '?' Card) */}
-                  <div
-                    className="flex h-8 w-6 flex-col items-center justify-between rounded border border-blue-700 bg-blue-600 p-0.5 shadow-2xs text-white"
-                    title={`${p.resourceCount} resource cards`}
-                  >
-                    <span className="text-[9px] font-bold leading-none">{p.resourceCount}</span>
-                    <span className="text-[10px] font-bold leading-none">?</span>
-                  </div>
-
-                  {/* Dev Cards Count (Purple Card) */}
-                  <div
-                    className="flex h-8 w-6 flex-col items-center justify-between rounded border border-purple-700 bg-purple-600 p-0.5 shadow-2xs text-white"
-                    title={`${p.devCardCount} development cards`}
-                  >
-                    <span className="text-[9px] font-bold leading-none">{p.devCardCount}</span>
-                    <span className="text-[9px] leading-none">🎴</span>
-                  </div>
-
-                  {/* Knights Played */}
-                  <div
-                    className={`flex h-8 w-6 flex-col items-center justify-between rounded border p-0.5 shadow-2xs ${
-                      hasArmy ? 'border-red-500 bg-red-100 text-red-700 font-black' : 'border-slate-200 bg-slate-100 text-slate-600'
-                    }`}
-                    title={`${p.playedKnights} knights played ${hasArmy ? '(Largest Army! ⚔)' : ''}`}
-                  >
-                    <span className="text-[9px] font-bold leading-none">{p.playedKnights}</span>
-                    <span className="text-[9px] leading-none">⚔</span>
-                  </div>
-
-                  {/* Roads Built */}
-                  <div
-                    className={`flex h-8 w-6 flex-col items-center justify-between rounded border p-0.5 shadow-2xs ${
-                      hasRoad ? 'border-amber-500 bg-amber-100 text-amber-800 font-black' : 'border-slate-200 bg-slate-100 text-slate-600'
-                    }`}
-                    title={`${roadsBuilt} roads built ${hasRoad ? '(Longest Road! 🛣)' : ''}`}
-                  >
-                    <span className="text-[9px] font-bold leading-none">{roadsBuilt}</span>
-                    <span className="text-[9px] leading-none">🛣</span>
-                  </div>
-                </div>
-              </div>
+              </li>
             );
           })}
+        </ul>
+
+        <div className="flex min-h-40 flex-1 flex-col">
+          <EventLog />
+        </div>
+
+        <div className="pt-2 lg:hidden">
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              useStore.getState().leaveRoom();
+            }}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#d7263d] px-4 font-display text-sm font-bold text-white shadow-[0_3px_0_#8a1424] active:translate-y-px"
+          >
+            🚪 Leave game
+          </button>
         </div>
       </aside>
     </>

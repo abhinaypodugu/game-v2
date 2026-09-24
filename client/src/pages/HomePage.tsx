@@ -1,62 +1,111 @@
-// Home: create or join a room. Dark sea theme, minimal form.
+// Home: create a room, quick-play vs bots, or join with a code — plus the
+// offline mode (one phone hosts, others pair over Wi-Fi/hotspot via QR).
 
 import { useState } from 'react';
 import { useStore } from '../store';
+import { GuestPairingSheet } from '../components/OfflinePairing';
+
+const inputClass =
+  'h-12 rounded-2xl border-2 border-line bg-white px-4 text-lg font-bold text-ink outline-none placeholder:font-normal placeholder:text-ink-soft focus:border-cta';
 
 export function HomePage(): React.JSX.Element {
   const createRoom = useStore((s) => s.createRoom);
   const joinRoom = useStore((s) => s.joinRoom);
+  const startQuickPlay = useStore((s) => s.startQuickPlay);
+  const startOfflineHost = useStore((s) => s.startOfflineHost);
+  const resumeOfflineHost = useStore((s) => s.resumeOfflineHost);
+  const [canResume] = useState(() => useStore.getState().canResumeOfflineHost());
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [joining, setJoining] = useState(false);
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [offlineBusy, setOfflineBusy] = useState<'host' | 'resume' | null>(null);
+  const [offlineError, setOfflineError] = useState<string | null>(null);
+  const [guestPairing, setGuestPairing] = useState(false);
+  const trimmedName = name.trim();
+
+  const runOffline = (kind: 'host' | 'resume', start: () => Promise<void>): void => {
+    setOfflineBusy(kind);
+    setOfflineError(null);
+    start().then(
+      () => setOfflineBusy(null),
+      (err: unknown) => {
+        setOfflineBusy(null);
+        setOfflineError(err instanceof Error ? err.message : 'Could not start the offline game.');
+      },
+    );
+  };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-10 bg-[#04182a] text-[#f6f8fa]">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-6 bg-ocean px-4 pt-[max(1.5rem,var(--safe-top))] pb-[max(1.5rem,var(--safe-bottom))] text-ink">
       <div className="text-center">
-        <h1 className="font-[Bricolage_Grotesque,system-ui] text-6xl font-bold tracking-tight">
+        <div className="mx-auto mb-2 flex justify-center gap-1" aria-hidden="true">
+          {['#2f8a3a', '#e8b31c', '#cf5b2e', '#8cc63f', '#7b8794'].map((c) => (
+            <svg key={c} viewBox="0 0 24 26" className="h-8 w-8 drop-shadow-[0_2px_0_rgba(0,0,0,0.2)]">
+              <path d="M12 1 L23 7 V19 L12 25 L1 19 V7 Z" fill={c} stroke="#1f2a37" strokeWidth="1.5" strokeLinejoin="round" />
+            </svg>
+          ))}
+        </div>
+        <h1 className="font-display text-6xl font-bold tracking-tight text-white drop-shadow-[0_3px_0_rgba(31,42,55,0.45)]">
           Catan
         </h1>
-        <p className="mt-2 text-lg text-[#9fb8cc]">
-          Play Settlers of Catan with friends — right in your browser.
-        </p>
+        <p className="mt-1 text-base font-bold text-white/90">Settle, trade and build with friends — right in your browser.</p>
       </div>
 
-      <div className="flex w-full max-w-md flex-col gap-4 rounded-xl bg-[#0a4986] p-6 shadow-[0_2px_4px_rgba(0,0,0,0.2)]">
-        <label className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-[#cfe0ee]">Your name</span>
+      <div className="flex w-full max-w-md flex-col gap-3 rounded-3xl border-2 border-line bg-cream p-4 shadow-[0_4px_0_rgba(0,0,0,0.18)] sm:p-6">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-bold text-ink-soft">Your name</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={24}
             placeholder="e.g. Alice"
-            className="rounded-lg bg-[#04182a] px-4 py-3 text-lg outline-none ring-1 ring-black/30 focus:ring-[#f06800]"
+            autoComplete="nickname"
+            className={inputClass}
             data-testid="name-input"
           />
         </label>
 
         <button
           type="button"
+          disabled={quickBusy || offlineBusy !== null}
+          onClick={async () => {
+            setQuickBusy(true);
+            try {
+              await startQuickPlay(name.trim() || 'Player');
+            } finally {
+              setQuickBusy(false);
+            }
+          }}
+          className="h-14 rounded-2xl bg-go px-4 font-display text-lg font-bold text-white shadow-[0_4px_0_#1d7a2c] active:translate-y-px disabled:opacity-50"
+          data-testid="quick-play"
+        >
+          {quickBusy ? 'Starting game…' : '🤖 Quick play vs bots'}
+        </button>
+        <button
+          type="button"
           disabled={name.trim().length === 0}
           onClick={() => createRoom(name.trim())}
-          className="rounded-lg bg-[#f06800] px-4 py-3 text-lg font-semibold text-white transition hover:bg-[#d05800] disabled:opacity-50"
+          className="h-14 rounded-2xl bg-cta px-4 font-display text-lg font-bold text-ink shadow-[0_4px_0_#a86d08] active:translate-y-px disabled:opacity-50"
           data-testid="create-room"
         >
-          Create Room
+          Create room
         </button>
 
-        <div className="flex items-center gap-3 text-sm text-[#9fb8cc]">
-          <span className="h-px flex-1 bg-white/20" />
-          or
-          <span className="h-px flex-1 bg-white/20" />
+        <div className="flex items-center gap-3 text-sm font-bold text-ink-soft">
+          <span className="h-0.5 flex-1 rounded bg-line" />
+          or join friends
+          <span className="h-0.5 flex-1 rounded bg-line" />
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <input
             value={code}
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             maxLength={4}
             placeholder="CODE"
-            className="w-28 rounded-lg bg-[#04182a] px-4 py-3 text-center text-lg font-bold tracking-widest outline-none ring-1 ring-black/30 focus:ring-[#1e90ff]"
+            autoCapitalize="characters"
+            className={`${inputClass} w-28 text-center tracking-widest`}
             data-testid="join-code-input"
           />
           <button
@@ -66,13 +115,81 @@ export function HomePage(): React.JSX.Element {
               setJoining(true);
               joinRoom(code, name.trim());
             }}
-            className="flex-1 rounded-lg bg-[#1fab1c] px-4 py-3 text-lg font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+            className="h-12 flex-1 rounded-2xl bg-ocean-deep px-4 font-display text-lg font-bold text-white shadow-[0_4px_0_#1f6f99] active:translate-y-px disabled:opacity-50"
             data-testid="join-room"
           >
-            {joining ? 'Joining…' : 'Join Room'}
+            {joining ? 'Joining…' : 'Join room'}
           </button>
         </div>
       </div>
+
+      <section
+        className="flex w-full max-w-md flex-col gap-3 rounded-3xl border-2 border-line bg-cream p-4 shadow-[0_4px_0_rgba(0,0,0,0.18)] sm:p-6"
+        aria-labelledby="offline-heading"
+        data-testid="offline-section"
+      >
+        <div>
+          <h2 id="offline-heading" className="font-display text-xl font-bold">
+            📡 Play offline (same Wi-Fi / hotspot)
+          </h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            No internet needed. The host turns on their phone's hotspot (or everyone joins the same Wi-Fi), then
+            pairs each player by scanning QR codes. Everyone must have opened this app online once (install it to
+            your home screen).
+          </p>
+        </div>
+        {canResume ? (
+          <button
+            type="button"
+            disabled={offlineBusy !== null}
+            onClick={() => runOffline('resume', resumeOfflineHost)}
+            className="h-14 rounded-2xl bg-go px-4 font-display text-lg font-bold text-white shadow-[0_4px_0_#1d7a2c] active:translate-y-px disabled:opacity-50"
+            data-testid="offline-resume"
+          >
+            {offlineBusy === 'resume' ? 'Resuming…' : '↩ Resume hosted game'}
+          </button>
+        ) : null}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={trimmedName.length === 0 || offlineBusy !== null}
+            onClick={() => runOffline('host', () => startOfflineHost(trimmedName))}
+            className="flex min-h-16 flex-col items-center justify-center rounded-2xl bg-cta px-3 py-2 font-display text-lg leading-tight font-bold text-ink shadow-[0_4px_0_#a86d08] active:translate-y-px disabled:opacity-50"
+            data-testid="offline-host"
+          >
+            <span aria-hidden="true">👑</span>
+            {offlineBusy === 'host' ? 'Starting…' : 'Host a game'}
+          </button>
+          <button
+            type="button"
+            disabled={trimmedName.length === 0 || offlineBusy !== null}
+            onClick={() => setGuestPairing(true)}
+            className="flex min-h-16 flex-col items-center justify-center rounded-2xl bg-ocean-deep px-3 py-2 font-display text-lg leading-tight font-bold text-white shadow-[0_4px_0_#1f6f99] active:translate-y-px disabled:opacity-50"
+            data-testid="offline-join"
+          >
+            <span aria-hidden="true">📷</span>
+            Join a game
+          </button>
+        </div>
+        {trimmedName.length === 0 ? (
+          <p className="text-center text-xs font-bold text-ink-soft">Enter your name above to host or join.</p>
+        ) : null}
+        {offlineError !== null ? (
+          <p className="rounded-xl bg-[#fdecee] px-3 py-2 text-sm font-bold text-[#8a1424]" role="alert">
+            {offlineError}
+          </p>
+        ) : null}
+      </section>
+
+      {guestPairing ? (
+        <GuestPairingSheet
+          name={trimmedName}
+          leaveOnCancel
+          onClose={() => {
+            setGuestPairing(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { generateBoard } from '@catan/shared';
 import { TradeModal } from '../components/TradeModal';
 import { DiscardModal, VictimPicker } from '../components/RobberFlow';
 import { VictoryOverlay } from '../components/VictoryOverlay';
+import { MonopolyModal, YearOfPlentyModal } from '../components/DevCardModals';
 import type { PersonalSnapshot } from '../types';
 import { useStore } from '../store';
 
@@ -19,6 +20,7 @@ function snapshotFor(partials: Partial<PersonalSnapshot> = {}): PersonalSnapshot
     config: 'base',
     playerCount: 3,
     phase: 'turnMain',
+    rules: { victoryPointsToWin: 10, discardLimit: 7 },
     activeSeat: 0,
     specialBuildSeat: null,
     turn: 1,
@@ -33,6 +35,7 @@ function snapshotFor(partials: Partial<PersonalSnapshot> = {}): PersonalSnapshot
     pendingDiscards: [],
     longestRoad: { holder: null, length: 0 },
     largestArmy: { holder: null, knights: 0 },
+    devCardPlayedThisTurn: false,
     winner: null,
     players: [
       { seat: 0, name: 'Alice', color: 'red' as never, resourceCount: 5, devCardCount: 0, playedKnights: 0, connected: true, publicVp: 2, roadsLeft: 13, settlementsLeft: 3, citiesLeft: 4 },
@@ -117,9 +120,9 @@ describe('DiscardModal', () => {
     render(<DiscardModal mySeat={0} />);
     expect(screen.getByTestId('discard-modal')).toHaveTextContent('Discard 4 cards');
 
-    const woodInput = screen.getByTestId('discard-input-wood') as HTMLInputElement;
-    await user.clear(woodInput);
-    await user.type(woodInput, '4');
+    for (let i = 0; i < 4; i++) await user.click(screen.getByTestId('discard-plus-wood'));
+    // Cannot exceed the required count.
+    expect(screen.getByTestId('discard-plus-brick')).toBeDisabled();
     await user.click(screen.getByTestId('discard-submit'));
     // The modal sends a PARTIAL bag (only chosen resources) — the reducer
     // validates the sum against the required count.
@@ -169,5 +172,47 @@ describe('VictoryOverlay', () => {
     mountWithStore(snapshotFor());
     const { container } = render(<VictoryOverlay />);
     expect(container.querySelector('[data-testid="victory-overlay"]')).toBeNull();
+  });
+});
+
+describe('DevCardModals', () => {
+  it('MonopolyModal selects a resource and dispatches playDevCard', async () => {
+    const user = userEvent.setup();
+    const sent = mountWithStore(snapshotFor());
+    const onClose = vi.fn();
+    render(<MonopolyModal cardId="m1" onClose={onClose} />);
+
+    await user.click(screen.getByTestId('mono-select-ore'));
+    expect(sent).toContainEqual({
+      type: 'playDevCard',
+      cardId: 'm1',
+      payload: { resource: 'ore' },
+    });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('YearOfPlentyModal selects 2 resources and enables submit', async () => {
+    const user = userEvent.setup();
+    const sent = mountWithStore(snapshotFor());
+    const onClose = vi.fn();
+    render(<YearOfPlentyModal cardId="yop1" onClose={onClose} />);
+
+    // Submit is disabled with 0 selected
+    expect(screen.getByTestId('yop-submit')).toBeDisabled();
+
+    // Increment wood and wheat
+    const plusButtons = screen.getAllByRole('button', { name: '+' });
+    await user.click(plusButtons[0]!); // wood
+    await user.click(plusButtons[3]!); // wheat
+
+    expect(screen.getByTestId('yop-submit')).toBeEnabled();
+    await user.click(screen.getByTestId('yop-submit'));
+
+    expect(sent).toContainEqual({
+      type: 'playDevCard',
+      cardId: 'yop1',
+      payload: { resources: ['wood', 'wheat'] },
+    });
+    expect(onClose).toHaveBeenCalled();
   });
 });

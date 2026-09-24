@@ -10,7 +10,7 @@ import {
   playerCanBuyDev,
 } from '@catan/shared';
 import type { PersonalSnapshot } from '../types';
-import type { GameAction } from '@catan/shared';
+import type { DevCardType, GameAction } from '@catan/shared';
 
 export interface LegalMoves {
   settlementVertices: Set<number>;
@@ -19,7 +19,14 @@ export interface LegalMoves {
   canBuyDev: boolean;
   setupVertices: Set<number>;
   setupRoadsForVertex: (vertex: number) => string[];
+  /**
+   * Road Building dev card: edges legal for a FREE road, treating `pending`
+   * (picked but not yet sent) edges as already built.
+   */
+  freeRoadEdges: (pending: readonly string[]) => Set<string>;
 }
+
+const noFreeRoads = (): Set<string> => new Set<string>();
 
 export function useLegalMoves(
   snap: PersonalSnapshot | null,
@@ -34,6 +41,7 @@ export function useLegalMoves(
         canBuyDev: false,
         setupVertices: new Set<number>(),
         setupRoadsForVertex: () => [],
+        freeRoadEdges: noFreeRoads,
       };
     }
     const setupPhase = snap.phase === 'setupForward' || snap.phase === 'setupReverse';
@@ -59,6 +67,7 @@ export function useLegalMoves(
         canBuyDev: false,
         setupVertices: new Set(vertices),
         setupRoadsForVertex,
+        freeRoadEdges: noFreeRoads,
       };
     }
 
@@ -70,10 +79,19 @@ export function useLegalMoves(
         canBuyDev: false,
         setupVertices: new Set(),
         setupRoadsForVertex: () => [],
+        freeRoadEdges: noFreeRoads,
       };
     }
 
     const engineState = toEngineSnapshot(snap);
+    const freeRoadEdges = (pending: readonly string[]): Set<string> => {
+      const roads = { ...engineState.roads };
+      for (const e of pending) roads[e] = mySeat;
+      const players = engineState.players.map((p) =>
+        p.seat === mySeat ? { ...p, roadsLeft: p.roadsLeft - pending.length } : p,
+      );
+      return new Set(legalRoadEdges({ ...engineState, roads, players }, mySeat, true));
+    };
     return {
       settlementVertices: new Set(legalSettlementVertices(engineState, mySeat, false)),
       cityVertices: new Set(legalCityVertices(engineState, mySeat)),
@@ -81,6 +99,7 @@ export function useLegalMoves(
       canBuyDev: playerCanBuyDev(engineState, mySeat),
       setupVertices: new Set(),
       setupRoadsForVertex: () => [],
+      freeRoadEdges,
     };
   }, [snap, mySeat]);
 }
@@ -94,6 +113,7 @@ function toEngineSnapshot(snap: PersonalSnapshot): Parameters<typeof legalSettle
   return {
     config: snap.config,
     playerCount: snap.playerCount,
+    rules: snap.rules,
     players: snap.players.map((p, i) => ({
       seat: p.seat,
       name: p.name,
@@ -119,8 +139,10 @@ function toEngineSnapshot(snap: PersonalSnapshot): Parameters<typeof legalSettle
     roads: snap.roads,
     robber: snap.robber,
     bank: snap.bank,
-    devDeck: [],
-    devDeckIndex: snap.devDeckCount,
+    // Only the remaining count is public; a same-length placeholder deck keeps
+    // `playerCanBuyDev`'s "cards left" check truthful.
+    devDeck: new Array<DevCardType>(snap.devDeckCount).fill('knight'),
+    devDeckIndex: 0,
     trades: snap.trades,
     pendingDiscards: snap.pendingDiscards,
     specialBuild: snap.specialBuildSeat === null ? null : { seat: snap.specialBuildSeat, usedThisRound: {} },
@@ -128,7 +150,8 @@ function toEngineSnapshot(snap: PersonalSnapshot): Parameters<typeof legalSettle
     longestRoad: snap.longestRoad,
     largestArmy: snap.largestArmy,
     winner: snap.winner,
-    devCardPlayedThisTurn: false,
+    devCardPlayedThisTurn: snap.devCardPlayedThisTurn,
+    knightBeforeRoll: false,
     version: snap.version,
   } as never;
 }

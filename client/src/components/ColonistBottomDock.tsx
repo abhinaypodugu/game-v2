@@ -1,46 +1,67 @@
-// Colonist.io-style Bottom Dock HUD:
-// - Left: Player's Resource Hand (compact cards with color backgrounds, icons, count badges)
-// - Right: Build Actions Tray:
-//   * Trade button (circulating arrows)
-//   * Dev Card buy button
-//   * Road build button (with roads left count)
-//   * Settlement build button (with settlements left count)
-//   * City build button (with cities left count)
-//   * Roll Dice / End Turn button with turn timer countdown
-// - Fully responsive on mobile with compact scrollable tray
+// Bottom dock: my hand (colonist-style resource cards + dev cards) and the
+// big-button action bar (Trade, Road, Settlement, City, Dev card, and the
+// primary Roll / End turn slot). Lives in document flow at the bottom of the
+// game layout, so it never overlaps the board region or the status line.
 
-import { memo } from 'react';
-import type { DevCardType, GameAction, Resource } from '@catan/shared';
-import { BUILD_COSTS, canAfford } from '@catan/shared';
+import { memo, useMemo } from 'react';
+import type { DevCardType, GameAction } from '@catan/shared';
+import { BUILD_COSTS, RESOURCES, canAfford } from '@catan/shared';
 import type { PersonalSnapshot } from '../types';
 import type { LegalMoves } from '../hooks/useLegalMoves';
 import { useStore, type PlacementMode } from '../store';
-import { TurnTimer } from './Overlays';
+import { CostPips, DEV_META, ResourceCard, costLabel } from './resourceArt';
+import { playerColor } from './PlayerStrip';
 
 export interface ColonistBottomDockProps {
   snap: PersonalSnapshot;
   legal: LegalMoves;
+  /** My build window: my main/pre-roll turn or my special-build slot. */
   canAct: boolean;
   placement: PlacementMode | null;
   onArm: (kind: 'settlement' | 'city' | 'road') => void;
-  rolling: boolean;
+  onPlayDevCard: (card: { id: string; type: string }) => void;
 }
 
-const RESOURCE_CARD_BG: Record<Resource, { bg: string; border: string; text: string; icon: string }> = {
-  wood: { bg: 'bg-[#15803d]', border: 'border-[#166534]', text: 'text-white', icon: '🌲' },
-  brick: { bg: 'bg-[#dc2626]', border: 'border-[#b91c1c]', text: 'text-white', icon: '🧱' },
-  sheep: { bg: 'bg-[#65a30d]', border: 'border-[#4d7c0f]', text: 'text-white', icon: '🐑' },
-  wheat: { bg: 'bg-[#ca8a04]', border: 'border-[#a16207]', text: 'text-white', icon: '🌾' },
-  ore: { bg: 'bg-[#475569]', border: 'border-[#334155]', text: 'text-white', icon: '⛰' },
-};
+type PieceKind = 'road' | 'settlement' | 'city';
 
-const DEV_ICONS: Record<DevCardType, string> = {
-  knight: '⚔',
-  victoryPoint: '🏆',
-  roadBuilding: '🛣',
-  monopoly: '👑',
-  yearOfPlenty: '🎁',
-};
+/** Flat player-coloured piece silhouettes with a dark outline. */
+function PieceIcon({ kind, color, className = 'h-6 w-6' }: { kind: PieceKind; color: string; className?: string }): React.JSX.Element {
+  const c = playerColor(color);
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <g fill={c.main} stroke="#1f2a37" strokeWidth="1.6" strokeLinejoin="round">
+        {kind === 'road' ? <rect x="2" y="9" width="20" height="6" rx="3" transform="rotate(-30 12 12)" /> : null}
+        {kind === 'settlement' ? <path d="M4 11 L12 4 L20 11 V20 H4 Z" /> : null}
+        {kind === 'city' ? (
+          <>
+            <path d="M2 12 L7 7.5 L12 12 V21 H2 Z" />
+            <path d="M11 21 V9 L16.5 4 L22 9 V21 Z" />
+          </>
+        ) : null}
+      </g>
+    </svg>
+  );
+}
+
+interface DevGroup {
+  key: string;
+  type: DevCardType;
+  ids: string[];
+  fresh: boolean;
+}
+
+const actionBase =
+  'relative flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl border-2 px-0.5 font-bold leading-none transition-[transform,opacity] active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:active:translate-y-0';
+const actionIdle = 'border-line bg-white text-ink shadow-[0_3px_0_#d9cfb8]';
+const actionArmed = 'border-cta bg-[#fff1d6] text-ink shadow-[0_3px_0_#c98612]';
+
+function CountBadge({ n }: { n: number }): React.JSX.Element {
+  return (
+    <span className="absolute -top-1.5 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-ink px-1 text-[10px] font-bold text-white tabular-nums">
+      {n}
+    </span>
+  );
+}
 
 export const ColonistBottomDock = memo(function ColonistBottomDock({
   snap,
@@ -48,108 +69,182 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
   canAct,
   placement,
   onArm,
-  rolling,
+  onPlayDevCard,
 }: ColonistBottomDockProps): React.JSX.Element {
   const sendAction = useStore((s) => s.sendAction);
   const setTradeModal = useStore((s) => s.setTradeModal);
 
-  const { you, activeSeat, players, phase, specialBuildSeat } = snap;
+  const { you, activeSeat, players, phase, specialBuildSeat, turn } = snap;
   const mySeat = you.seat;
   const myTurn = activeSeat === mySeat;
   const sbpWindow = specialBuildSeat === mySeat;
   const player = players[mySeat]!;
+  const handTotal = RESOURCES.reduce((n, r) => n + (you.resources[r] ?? 0), 0);
 
-  const canRoad = canAct && legal.roadEdges.size > 0 && player.roadsLeft > 0;
-  const canSettlement = canAct && legal.settlementVertices.size > 0 && player.settlementsLeft > 0;
-  const canCity = canAct && legal.cityVertices.size > 0 && player.citiesLeft > 0;
-  const canDevCard = canAct && canAfford(you.resources, BUILD_COSTS.devCard) && snap.devDeckCount > 0;
+  const canRoad = canAct && legal.roadEdges.size > 0;
+  const canSettlement = canAct && legal.settlementVertices.size > 0;
+  const canCity = canAct && legal.cityVertices.size > 0;
+  const canDevCard = canAct && snap.devDeckCount > 0 && canAfford(you.resources, BUILD_COSTS.devCard);
+  const canTrade = phase !== 'finished';
+  // One development card per turn, before or after rolling.
+  const devWindow = myTurn && (phase === 'turnMain' || phase === 'turnPreroll') && !snap.devCardPlayedThisTurn;
+  const noFreeRoad = legal.freeRoadEdges([]).size === 0;
+
+  // Group unplayed dev cards by type + "bought this turn" so the row stays narrow.
+  const devGroups = useMemo((): DevGroup[] => {
+    const groups = new Map<string, DevGroup>();
+    for (const c of you.devHand) {
+      if (c.played) continue;
+      const type = c.type as DevCardType;
+      const fresh = type !== 'victoryPoint' && c.boughtOnTurn >= turn;
+      const key = `${type}:${fresh ? 'new' : 'ok'}`;
+      const g = groups.get(key);
+      if (g === undefined) groups.set(key, { key, type, ids: [c.id], fresh });
+      else g.ids.push(c.id);
+    }
+    return [...groups.values()];
+  }, [you.devHand, turn]);
+
+  const build = (kind: PieceKind, enabled: boolean, left: number): React.JSX.Element => {
+    const armed = placement?.kind === kind;
+    const label = kind === 'road' ? 'Road' : kind === 'settlement' ? 'Settle' : 'City';
+    return (
+      <button
+        type="button"
+        disabled={!enabled && !armed}
+        onClick={() => onArm(kind)}
+        className={`${actionBase} ${armed ? actionArmed : actionIdle}`}
+        title={`${label} (${costLabel(BUILD_COSTS[kind])}) — ${left} left`}
+        aria-pressed={armed}
+        data-testid={`btn-build-${kind}`}
+      >
+        <CountBadge n={left} />
+        <PieceIcon kind={kind} color={player.color} />
+        <span className="text-[10px]">{label}</span>
+        <CostPips cost={BUILD_COSTS[kind]} />
+      </button>
+    );
+  };
+
+  let primary: React.JSX.Element;
+  if (myTurn && phase === 'turnPreroll') {
+    primary = (
+      <button
+        type="button"
+        onClick={() => {
+          const action: GameAction = { type: 'rollDice' };
+          sendAction(action);
+        }}
+        className={`${actionBase} border-[#c98612] bg-cta text-ink shadow-[0_3px_0_#a86d08]`}
+        data-testid="roll-button"
+      >
+        <span className="text-xl leading-none">🎲</span>
+        <span className="font-display text-sm">Roll</span>
+      </button>
+    );
+  } else if (myTurn && phase === 'turnMain') {
+    primary = (
+      <button
+        type="button"
+        onClick={() => {
+          const action: GameAction = { type: 'endTurn' };
+          sendAction(action);
+        }}
+        className={`${actionBase} border-[#1d7a2c] bg-go text-white shadow-[0_3px_0_#1d7a2c]`}
+        data-testid="end-turn"
+      >
+        <span className="text-lg leading-none">➜</span>
+        <span className="font-display text-sm">End turn</span>
+      </button>
+    );
+  } else if (sbpWindow) {
+    primary = (
+      <button
+        type="button"
+        onClick={() => {
+          const action: GameAction = { type: 'specialBuildDone' };
+          sendAction(action);
+        }}
+        className={`${actionBase} border-[#1d7a2c] bg-go text-white shadow-[0_3px_0_#1d7a2c]`}
+        data-testid="sbp-done"
+      >
+        <span className="text-lg leading-none">✓</span>
+        <span className="font-display text-sm">Done</span>
+      </button>
+    );
+  } else {
+    primary = (
+      <button type="button" disabled className={`${actionBase} ${actionIdle}`} data-testid="waiting-turn">
+        <span className="text-lg leading-none">⏳</span>
+        <span className="text-[10px]">Waiting</span>
+      </button>
+    );
+  }
 
   return (
-    <div
-      className="pointer-events-auto fixed bottom-2 left-2 right-2 lg:bottom-3 lg:left-3 lg:right-84 z-30 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-1.5 overflow-x-auto scrollbar-none pb-0.5 max-w-full"
-      data-testid="colonist-bottom-dock"
-    >
-      {/* ============================================================ */}
-      {/* 1. BOTTOM LEFT: PLAYER'S RESOURCE CARDS HAND                 */}
-      {/* ============================================================ */}
-      <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300/80 bg-white/95 p-1.5 shadow-xl backdrop-blur-md">
-        {(['wood', 'brick', 'sheep', 'wheat', 'ore'] as const).map((res) => {
-          const count = you.resources[res] ?? 0;
-          const spec = RESOURCE_CARD_BG[res];
-          const hasCards = count > 0;
-
-          return (
-            <div
-              key={res}
-              className={`flex h-13 w-8 sm:h-16 sm:w-11 lg:h-18 lg:w-12 flex-col items-center justify-between rounded-lg sm:rounded-xl border ${
-                spec.bg
-              } ${spec.border} p-0.5 sm:p-1 shadow-sm transition transform hover:-translate-y-0.5 ${
-                hasCards ? 'opacity-100' : 'opacity-40 grayscale-50'
-              }`}
-              title={`${res}: you have ${count}`}
-            >
-              {/* Count Badge at Top */}
-              <div className="flex h-3.5 min-w-[14px] sm:h-5 sm:min-w-[18px] items-center justify-center rounded-full bg-black/40 px-0.5 text-[8px] sm:text-[10px] font-black text-white shadow-xs">
-                {count}
-              </div>
-
-              {/* Resource Icon */}
-              <span className="text-xs sm:text-base">{spec.icon}</span>
-
-              {/* Resource Label */}
-              <span className="text-[7px] sm:text-[9px] font-bold text-white uppercase tracking-wider leading-none">
-                {res.slice(0, 3)}
-              </span>
-            </div>
-          );
-        })}
-
-        {/* Playable Dev Cards In Hand */}
-        {you.devHand.length > 0 ? (
-          <div className="flex items-center gap-1 border-l border-slate-200 pl-1.5 ml-1">
-            {you.devHand
-              .filter((c) => !c.played)
-              .map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => {
-                    if (canAct && c.boughtOnTurn < snap.turn) {
-                      const action: GameAction = { type: 'playDevCard', cardId: c.id };
-                      sendAction(action);
-                    }
-                  }}
-                  className="flex h-16 w-11 sm:h-20 sm:w-13 flex-col items-center justify-between rounded-xl border border-purple-800 bg-purple-700 p-1 text-white shadow-sm transition hover:-translate-y-1 hover:brightness-110"
-                  title={`Play ${c.type}`}
-                >
-                  <span className="text-[9px] font-bold leading-none">PLAY</span>
-                  <span className="text-base sm:text-lg">{DEV_ICONS[c.type as DevCardType] ?? '🎴'}</span>
-                  <span className="text-[8px] font-bold uppercase truncate max-w-[40px] leading-none">
-                    {c.type.slice(0, 4)}
+    <div className="flex flex-col gap-1.5" data-testid="colonist-bottom-dock">
+      {/* Hand: resource cards + dev cards */}
+      <div className="flex items-end gap-1.5 rounded-2xl border-2 border-line bg-cream px-1.5 pt-2 pb-1.5 shadow-[0_2px_0_rgba(0,0,0,0.12)]">
+        <div className="flex flex-none items-end gap-1" data-anchor="hand" data-testid="hand" aria-label={`Your hand: ${handTotal} cards`}>
+          {RESOURCES.map((r) => {
+            const count = you.resources[r] ?? 0;
+            return <ResourceCard key={r} resource={r} count={count} size="lg" dim={count === 0} />;
+          })}
+        </div>
+        <div className="scrollbar-none flex min-w-0 flex-1 items-end gap-1 overflow-x-auto border-l-2 border-line pl-1.5" data-testid="dev-hand">
+          {devGroups.length === 0 ? (
+            <span className="self-center px-1 text-[10px] font-bold leading-tight text-ink-soft">No dev cards</span>
+          ) : null}
+          {devGroups.map((g) => {
+            const meta = DEV_META[g.type];
+            const isVp = g.type === 'victoryPoint';
+            const playable = !isVp && !g.fresh && devWindow && !(g.type === 'roadBuilding' && noFreeRoad);
+            return (
+              <button
+                key={g.key}
+                type="button"
+                disabled={!playable}
+                onClick={() => onPlayDevCard({ id: g.ids[0]!, type: g.type })}
+                className={`relative flex h-16 w-11 flex-none flex-col items-center justify-center gap-0.5 rounded-xl border-2 px-0.5 shadow-[0_2px_0_rgba(0,0,0,0.25)] transition-transform active:translate-y-px sm:h-20 sm:w-14 ${
+                  isVp ? 'border-[#a87a07] bg-[#fff4cc]' : 'border-[#5b3b8c] bg-[#efe7fb]'
+                } ${playable ? '' : 'cursor-default'} ${g.fresh ? 'opacity-60' : ''}`}
+                title={`${meta.label}: ${meta.blurb}${g.fresh ? ' (bought this turn — playable next turn)' : ''}${isVp ? ' (counts automatically)' : ''}${
+                  !isVp && !g.fresh && myTurn && snap.devCardPlayedThisTurn ? ' (already played a card this turn)' : ''
+                }`}
+                data-testid={`dev-card-${g.type}`}
+              >
+                {g.ids.length > 1 ? <CountBadge n={g.ids.length} /> : null}
+                <span className="text-lg leading-none sm:text-xl">{meta.icon}</span>
+                <span className="w-full truncate text-center text-[8px] font-bold uppercase leading-none text-ink">
+                  {isVp ? 'VP' : meta.label}
+                </span>
+                {g.fresh ? (
+                  <span className="absolute inset-x-0 bottom-0.5 mx-auto w-fit rounded bg-ink px-0.5 text-[7px] font-bold uppercase leading-tight text-white">
+                    next turn
                   </span>
-                </button>
-              ))}
-          </div>
-        ) : null}
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ============================================================ */}
-      {/* 2. BOTTOM RIGHT: COLONIST ACTION & BUILD DOCK                */}
-      {/* ============================================================ */}
-      {/* 2. BOTTOM RIGHT: COLONIST ACTION & BUILD DOCK */}
-      <div className="flex items-center gap-1 sm:gap-1.5 rounded-xl sm:rounded-2xl border border-slate-300/80 bg-white/95 p-1 sm:p-1.5 shadow-xl backdrop-blur-md overflow-x-auto max-w-full">
+      {/* Action bar */}
+      <div className="grid grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.35fr)] gap-1.5">
         <button
           type="button"
+          disabled={!canTrade}
           onClick={() => setTradeModal(true)}
-          className="flex h-14 w-12 sm:h-16 sm:w-14 flex-col items-center justify-center gap-0.5 rounded-xl border border-sky-400 bg-sky-50 text-slate-800 shadow-xs transition hover:scale-105 hover:bg-sky-100 active:scale-95"
-          title="Open Trade Window (Player & Bank Trading)"
+          className={`${actionBase} ${actionIdle}`}
+          title="Trade with players or the bank"
           data-testid="bottom-trade-btn"
         >
-          <span className="text-xl leading-none">🔁</span>
-          <span className="text-[9px] font-bold uppercase text-sky-800">Trade</span>
+          <span className="text-lg leading-none">⇄</span>
+          <span className="text-[10px]">Trade</span>
         </button>
-
-        {/* Buy Dev Card Button */}
+        {build('road', canRoad, player.roadsLeft)}
+        {build('settlement', canSettlement, player.settlementsLeft)}
+        {build('city', canCity, player.citiesLeft)}
         <button
           type="button"
           disabled={!canDevCard}
@@ -157,131 +252,19 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
             const action: GameAction = { type: 'buyDevCard' };
             sendAction(action);
           }}
-          className={`flex h-14 w-12 sm:h-16 sm:w-14 flex-col items-center justify-center gap-0.5 rounded-xl border p-0.5 shadow-xs transition ${
-            canDevCard
-              ? 'border-purple-400 bg-purple-50 text-slate-800 hover:scale-105 hover:bg-purple-100 active:scale-95'
-              : 'border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed'
-          }`}
-          title="Buy Dev Card (🐑 + 🌾 + ⛰)"
+          className={`${actionBase} ${actionIdle}`}
+          title={`Buy a development card (${costLabel(BUILD_COSTS.devCard)}) — ${snap.devDeckCount} left`}
+          data-anchor="dev-deck"
+          data-testid="btn-buy-dev"
         >
-          <span className="text-lg leading-none">🎴</span>
-          <span className="text-[9px] font-bold uppercase text-purple-900 leading-none">Dev</span>
-        </button>
-
-        {/* Build Road Button (with Roads Left Badge) */}
-        <button
-          type="button"
-          disabled={!canRoad && placement?.kind !== 'road'}
-          onClick={() => onArm('road')}
-          className={`relative flex h-14 w-12 sm:h-16 sm:w-14 flex-col items-center justify-center gap-0.5 rounded-xl border p-0.5 shadow-xs transition ${
-            placement?.kind === 'road'
-              ? 'border-amber-500 bg-amber-100 ring-2 ring-amber-400 font-black'
-              : canRoad
-                ? 'border-slate-300 bg-white hover:scale-105 hover:bg-amber-50'
-                : 'border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed'
-          }`}
-          title={`Build Road (🌲 + 🧱) — ${player.roadsLeft} left`}
-          data-testid="btn-build-road"
-        >
-          <span className="absolute top-1 right-1 flex h-4 min-w-[14px] items-center justify-center rounded-full bg-slate-800 px-1 text-[9px] font-black text-white">
-            {player.roadsLeft}
+          <CountBadge n={snap.devDeckCount} />
+          <span className="flex h-6 w-5 items-center justify-center rounded-[4px] border-2 border-[#5b3b8c] bg-[#b89ee6] text-[10px] leading-none">
+            ?
           </span>
-          <span className="text-lg leading-none">🛣</span>
-          <span className="text-[9px] font-bold text-slate-700 leading-none">Road</span>
+          <span className="text-[10px]">Dev</span>
+          <CostPips cost={BUILD_COSTS.devCard} />
         </button>
-
-        {/* Build Settlement Button (with Settlements Left Badge) */}
-        <button
-          type="button"
-          disabled={!canSettlement && placement?.kind !== 'settlement'}
-          onClick={() => onArm('settlement')}
-          className={`relative flex h-14 w-12 sm:h-16 sm:w-14 flex-col items-center justify-center gap-0.5 rounded-xl border p-0.5 shadow-xs transition ${
-            placement?.kind === 'settlement'
-              ? 'border-emerald-500 bg-emerald-100 ring-2 ring-emerald-400 font-black'
-              : canSettlement
-                ? 'border-slate-300 bg-white hover:scale-105 hover:bg-emerald-50'
-                : 'border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed'
-          }`}
-          title={`Build Settlement (🌲 + 🧱 + 🐑 + 🌾) — ${player.settlementsLeft} left`}
-          data-testid="btn-build-settlement"
-        >
-          <span className="absolute top-1 right-1 flex h-4 min-w-[14px] items-center justify-center rounded-full bg-slate-800 px-1 text-[9px] font-black text-white">
-            {player.settlementsLeft}
-          </span>
-          <span className="text-lg leading-none">🏠</span>
-          <span className="text-[9px] font-bold text-slate-700 leading-none">Settle</span>
-        </button>
-
-        {/* Upgrade City Button (with Cities Left Badge) */}
-        <button
-          type="button"
-          disabled={!canCity && placement?.kind !== 'city'}
-          onClick={() => onArm('city')}
-          className={`relative flex h-14 w-12 sm:h-16 sm:w-14 flex-col items-center justify-center gap-0.5 rounded-xl border p-0.5 shadow-xs transition ${
-            placement?.kind === 'city'
-              ? 'border-indigo-500 bg-indigo-100 ring-2 ring-indigo-400 font-black'
-              : canCity
-                ? 'border-slate-300 bg-white hover:scale-105 hover:bg-indigo-50'
-                : 'border-slate-200 bg-slate-100 text-slate-400 opacity-50 cursor-not-allowed'
-          }`}
-          title={`Upgrade to City (🌾🌾 + ⛰⛰⛰) — ${player.citiesLeft} left`}
-          data-testid="btn-build-city"
-        >
-          <span className="absolute top-1 right-1 flex h-4 min-w-[14px] items-center justify-center rounded-full bg-slate-800 px-1 text-[9px] font-black text-white">
-            {player.citiesLeft}
-          </span>
-          <span className="text-lg leading-none">🏰</span>
-          <span className="text-[9px] font-bold text-slate-700 leading-none">City</span>
-        </button>
-
-        {/* Turn Action Button: Roll Dice OR End Turn with Timer countdown */}
-        {myTurn && phase === 'turnPreroll' ? (
-          <button
-            type="button"
-            disabled={rolling}
-            onClick={() => {
-              const action: GameAction = { type: 'rollDice' };
-              sendAction(action);
-            }}
-            className="flex h-14 min-w-[70px] sm:h-16 sm:min-w-[86px] flex-col items-center justify-center rounded-xl bg-gradient-to-b from-amber-400 to-amber-500 px-3 text-slate-950 shadow-md font-bold transition hover:scale-105 hover:brightness-105 active:scale-95"
-            data-testid="roll-button"
-          >
-            <span className="text-xl leading-none">🎲</span>
-            <span className="text-xs font-black uppercase mt-0.5">Roll</span>
-          </button>
-        ) : myTurn && phase === 'turnMain' ? (
-          <button
-            type="button"
-            onClick={() => {
-              const action: GameAction = { type: 'endTurn' };
-              sendAction(action);
-            }}
-            className="flex h-14 min-w-[70px] sm:h-16 sm:min-w-[86px] flex-col items-center justify-center rounded-xl bg-gradient-to-b from-emerald-500 to-emerald-600 px-3 text-white shadow-md font-bold transition hover:scale-105 hover:brightness-105 active:scale-95"
-            data-testid="end-turn"
-          >
-            <span className="text-sm font-black uppercase leading-tight">End</span>
-            <span className="text-[10px] font-extrabold uppercase leading-tight">Turn ➜</span>
-            <TurnTimer />
-          </button>
-        ) : sbpWindow ? (
-          <button
-            type="button"
-            onClick={() => {
-              const action: GameAction = { type: 'specialBuildDone' };
-              sendAction(action);
-            }}
-            className="flex h-14 min-w-[70px] sm:h-16 sm:min-w-[86px] flex-col items-center justify-center rounded-xl bg-gradient-to-b from-red-500 to-red-600 px-2 text-white shadow-md font-bold transition hover:scale-105"
-            data-testid="sbp-done"
-          >
-            <span className="text-[10px] font-black uppercase leading-tight">Pass</span>
-            <span className="text-[9px] font-bold leading-tight">Window</span>
-          </button>
-        ) : (
-          <div className="flex h-14 min-w-[60px] sm:h-16 sm:min-w-[72px] flex-col items-center justify-center rounded-xl border border-slate-200 bg-slate-100/90 px-2 text-slate-600 shadow-2xs">
-            <span className="text-base leading-none">⏳</span>
-            <TurnTimer />
-          </div>
-        )}
+        {primary}
       </div>
     </div>
   );

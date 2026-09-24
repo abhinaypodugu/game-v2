@@ -3,7 +3,15 @@ import { draftOrder } from '../rules/reducer';
 import { publicVp, totalVp } from '../rules/state';
 import { give, newGame, runSetup, act, fixedRoll } from './rules-helpers';
 import type { GameState } from '../rules/state';
-import { RESOURCES } from '../constants';
+import { emptyResourceBag, RESOURCES } from '../constants';
+
+/** Replace a seat's hand with exactly `n` wood. */
+function setHand(state: GameState, seat: number, n: number): GameState {
+  return {
+    ...state,
+    players: state.players.map((p) => (p.seat === seat ? { ...p, resources: { ...emptyResourceBag(), wood: n } } : p)),
+  };
+}
 
 describe('setup: snake draft', () => {
   it('draft order is forward then reverse', () => {
@@ -29,6 +37,15 @@ describe('setup: snake draft', () => {
     expect(s.phase).toBe('turnPreroll');
     expect(s.config).toBe('ext56');
     expect(Object.keys(s.buildings).length).toBe(12);
+  });
+
+  it('full draft for 8 players on ext78 board', () => {
+    const s = runSetup(newGame(8));
+    expect(s.phase).toBe('turnPreroll');
+    expect(s.config).toBe('ext78');
+    expect(new Set(s.players.map((p) => p.color)).size).toBe(8);
+    expect(Object.keys(s.buildings).length).toBe(16);
+    expect(s.bank.wood + s.players.reduce((n, p) => n + p.resources.wood, 0)).toBe(29);
   });
 
   it('distance rule violation rejected', () => {
@@ -116,13 +133,6 @@ describe('turn loop', () => {
 });
 
 describe('rolling 7: robber flow', () => {
-  it('discard math: 8->4, 9->4, 10->5, 7->0', () => {
-    expect(Math.floor(8 / 2)).toBe(4);
-    expect(Math.floor(9 / 2)).toBe(4);
-    expect(Math.floor(10 / 2)).toBe(5);
-    expect(Math.floor(7 / 2)).toBe(3); // but only >7 discards
-  });
-
   it('7 roll with no player over 7 goes straight to robberMove', () => {
     const s = runSetup(newGame(3, 'robber-seed'));
     const res = act(s, { type: 'rollDice' }, { rollDice: fixedRoll(3, 4) });
@@ -144,6 +154,26 @@ describe('rolling 7: robber flow', () => {
     const pending = res.state.pendingDiscards.find((d) => d.seat === 1);
     expect(pending).toBeDefined();
     expect(pending!.count).toBeGreaterThanOrEqual(5);
+  });
+
+  it('discardLimit rule decides who discards (default 7, custom 9)', () => {
+    function pendingAfterSeven(s: GameState, hands: Record<number, number>): Record<number, number> {
+      let st = s;
+      for (const [seat, n] of Object.entries(hands)) st = setHand(st, Number(seat), n);
+      const res = act(st, { type: 'rollDice' }, { rollDice: fixedRoll(3, 4) });
+      expect(res.ok).toBe(true);
+      if (!res.ok) return {};
+      return Object.fromEntries(res.state.pendingDiscards.map((d) => [d.seat, d.count]));
+    }
+    const hands = { 0: 7, 1: 8, 2: 10 };
+    const def = runSetup(newGame(3, 'limit-seed'));
+    expect(def.rules.discardLimit).toBe(7);
+    expect(pendingAfterSeven(def, hands)).toEqual({ 1: 4, 2: 5 });
+
+    const custom = runSetup(newGame(3, 'limit-seed', { discardLimit: 9 }));
+    expect(custom.rules).toEqual({ victoryPointsToWin: 10, discardLimit: 9 });
+    expect(pendingAfterSeven(custom, hands)).toEqual({ 2: 5 });
+    expect(pendingAfterSeven(custom, { 0: 9, 1: 9, 2: 9 })).toEqual({});
   });
 
   it('robber move then steal from victim with cards', () => {

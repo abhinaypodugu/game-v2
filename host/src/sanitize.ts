@@ -2,7 +2,7 @@
 // resource compositions and dev-card identities; keeps public counts.
 
 import type { GameState } from '@catan/shared';
-import { publicVp } from '@catan/shared';
+import { publicVp, totalVp } from '@catan/shared';
 import type { Resource } from '@catan/shared';
 
 export interface PublicPlayer {
@@ -28,8 +28,9 @@ export interface OwnView {
 
 export interface PersonalSnapshot {
   version: number;
-  config: string;
+  config: GameState['config'];
   playerCount: number;
+  rules: GameState['rules'];
   phase: GameState['phase'];
   activeSeat: number;
   specialBuildSeat: number | null;
@@ -45,14 +46,15 @@ export interface PersonalSnapshot {
   pendingDiscards: Array<{ seat: number; count: number; received: boolean }>;
   longestRoad: GameState['longestRoad'];
   largestArmy: GameState['largestArmy'];
+  /** The active player already played a development card this turn. */
+  devCardPlayedThisTurn: boolean;
   winner: number | null;
   players: PublicPlayer[];
   you: OwnView;
 }
 
 function ownTotalVp(state: GameState, seat: number): number {
-  const p = state.players[seat]!;
-  return publicVp(state, seat) + p.devHand.filter((c) => c.type === 'victoryPoint' && !c.played).length;
+  return totalVp(state, seat);
 }
 
 export function sanitize(state: GameState, seat: number): PersonalSnapshot {
@@ -80,6 +82,7 @@ export function sanitize(state: GameState, seat: number): PersonalSnapshot {
     version: state.version,
     config: state.config,
     playerCount: state.playerCount,
+    rules: { ...state.rules },
     phase: state.phase,
     activeSeat: state.activeSeat,
     specialBuildSeat: state.specialBuild?.seat ?? null,
@@ -95,13 +98,15 @@ export function sanitize(state: GameState, seat: number): PersonalSnapshot {
     pendingDiscards: state.pendingDiscards.map((d) => ({ ...d })),
     longestRoad: state.longestRoad,
     largestArmy: state.largestArmy,
+    devCardPlayedThisTurn: state.devCardPlayedThisTurn,
     winner: state.winner,
     players,
     you: {
       seat,
       resources: { ...own.resources },
+      // Revealed VP cards (flipped at victory) stay visible; other played cards drop out.
       devHand: own.devHand
-        .filter((c) => !c.played)
+        .filter((c) => !c.played || c.type === 'victoryPoint')
         .map((c) => ({ id: c.id, type: c.type, boughtOnTurn: c.boughtOnTurn, played: c.played === true })),
       totalVp: ownTotalVp(state, seat),
     },

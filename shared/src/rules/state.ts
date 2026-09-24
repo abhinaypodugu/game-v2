@@ -2,7 +2,9 @@
 
 import type { Board, PlayerCount } from '../board';
 import type {
+  BoardConfigKey,
   DevCardType,
+  GameRules,
   PlayerColor,
   ResourceBag,
 } from '../constants';
@@ -69,8 +71,10 @@ export interface SpecialBuildState {
 }
 
 export interface GameState {
-  config: 'base' | 'ext56';
+  config: BoardConfigKey;
   playerCount: number;
+  /** Room-configured rule variants (VP target, discard threshold). */
+  rules: GameRules;
   players: PlayerState[];
   board: Board;
   phase: Phase;
@@ -94,6 +98,8 @@ export interface GameState {
   winner: number | null;
   /** Per-seat flags for this turn: dev card already played. */
   devCardPlayedThisTurn: boolean;
+  /** A knight was played before rolling: after the robber resolves, return to turnPreroll. */
+  knightBeforeRoll: boolean;
   /** Monotonic version — bumped on every accepted action (client cache key). */
   version: number;
 }
@@ -108,6 +114,8 @@ export interface EngineOptions {
   playerCount: PlayerCount;
   players: InitialPlayer[];
   seed: string;
+  /** Rule overrides; missing fields fall back to DEFAULT_RULES (10 VP, discard above 7). */
+  rules?: Partial<GameRules>;
   /** Dice source override (balanced deck lives server-side). Default: 2×rng.int(6). */
   rollDice?: (state: GameState, rng: { int(n: number): number }) => { die1: number; die2: number };
 }
@@ -125,7 +133,7 @@ export type VictoryBreakdown = {
   largestArmy: boolean;
 };
 
-/** Public VP for a seat (excludes hidden VP cards). */
+/** Public VP for a seat (hidden VP dev cards excluded; revealed ones count). */
 export function publicVp(state: GameState, seat: number): number {
   let vp = 0;
   for (const b of Object.values(state.buildings)) {
@@ -133,6 +141,7 @@ export function publicVp(state: GameState, seat: number): number {
   }
   if (state.longestRoad.holder === seat) vp += 2;
   if (state.largestArmy.holder === seat) vp += 2;
+  vp += state.players[seat]!.devHand.filter((c) => c.type === 'victoryPoint' && c.played === true).length;
   return vp;
 }
 

@@ -4,9 +4,9 @@ import type { GameState } from '../rules/state';
 import { totalVp } from '../rules/state';
 
 
-describe('5-6 player special build phase', () => {
-  it('endTurn enters SBP and windows advance through all non-active seats', () => {
-    let s = runSetup(newGame(5, 'sbp-advance'));
+describe('5+ player special build phase', () => {
+  it.each([5, 8] as const)('endTurn enters SBP and windows advance through all non-active seats (players=%i)', (pc) => {
+    let s = runSetup(newGame(pc, 'sbp-advance'));
     const rolled = act(s, { type: 'rollDice' }, { rollDice: fixedRoll(1, 1) });
     expect(rolled.ok).toBe(true);
     if (!rolled.ok) return;
@@ -31,8 +31,8 @@ describe('5-6 player special build phase', () => {
       if (!done.ok) return;
       s = done.state;
     }
-    // All 4 non-active seats got a window, in clockwise order.
-    expect(seenWindows).toEqual([1, 2, 3, 4]);
+    // Every non-active seat got a window, in clockwise order.
+    expect(seenWindows).toEqual(Array.from({ length: pc - 1 }, (_, i) => i + 1));
     // Then the next turn starts.
     expect(s.phase).toBe('turnPreroll');
     expect(s.activeSeat).toBe(1);
@@ -189,6 +189,35 @@ describe('winning', () => {
     expect(build.state.phase).toBe('finished');
     // VP card revealed.
     expect(build.state.players[0]!.devHand[0]!.played).toBe(true);
+  });
+
+  it('victoryPointsToWin rule sets the win threshold', () => {
+    // Seat 0: 2 setup settlements + 1 forced city = 4 VP; upgrading a setup
+    // settlement to a city reaches 5 VP.
+    function upgradeToFive(rules?: { victoryPointsToWin: number }): GameState {
+      let s = runSetup(newGame(3, 'vp-rule', rules));
+      const rolled = act(s, { type: 'rollDice' }, { rollDice: fixedRoll(1, 1) });
+      expect(rolled.ok).toBe(true);
+      if (!rolled.ok) throw new Error(rolled.error);
+      s = rolled.state;
+      const vacant = s.board.topology.vertices.find((v) => s.buildings[v] === undefined)!;
+      s = { ...s, buildings: { ...s.buildings, [vacant]: { seat: 0, type: 'city' } } };
+      s = give(s, 0, { ore: 3, wheat: 2 });
+      const own = Object.entries(s.buildings).find(([, b]) => b.seat === 0 && b.type === 'settlement')!;
+      const city = act(s, { type: 'buildCity', vertex: Number(own[0]) });
+      expect(city.ok).toBe(true);
+      if (!city.ok) throw new Error(city.error);
+      expect(totalVp(city.state, 0)).toBe(5);
+      return city.state;
+    }
+    const custom = upgradeToFive({ victoryPointsToWin: 5 });
+    expect(custom.phase).toBe('finished');
+    expect(custom.winner).toBe(0);
+
+    const standard = upgradeToFive();
+    expect(standard.rules.victoryPointsToWin).toBe(10);
+    expect(standard.phase).toBe('turnMain');
+    expect(standard.winner).toBeNull();
   });
 });
 

@@ -1,80 +1,72 @@
-// Dice display: 3D cube flip animation on roll, settling on real pips.
-// CSS preserve-3d pattern (MDN); framer-motion drives the rotation.
+// 2D dice: white rounded dice with dark pips plus a bold total pill.
+// A new roll (rollKey change) remounts the dice, replaying the CSS tumble
+// animation — no JS animation loop.
 
-import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { memo } from 'react';
 
-const PIP_POSITIONS: Record<number, Array<[number, number]>> = {
+const PIPS: Record<number, Array<[number, number]>> = {
   1: [[50, 50]],
-  2: [[25, 25], [75, 75]],
-  3: [[25, 25], [50, 50], [75, 75]],
-  4: [[25, 25], [75, 25], [25, 75], [75, 75]],
-  5: [[25, 25], [75, 25], [50, 50], [25, 75], [75, 75]],
-  6: [[25, 25], [75, 25], [25, 50], [75, 50], [25, 75], [75, 75]],
+  2: [[27, 27], [73, 73]],
+  3: [[27, 27], [50, 50], [73, 73]],
+  4: [[27, 27], [73, 27], [27, 73], [73, 73]],
+  5: [[27, 27], [73, 27], [50, 50], [27, 73], [73, 73]],
+  6: [[27, 25], [73, 25], [27, 50], [73, 50], [27, 75], [73, 75]],
 };
 
-function Face({ value }: { value: number }): React.JSX.Element {
+function Die({ value, className, delayMs }: { value: number; className: string; delayMs: number }): React.JSX.Element {
   return (
-    <div className="absolute inset-0 rounded-lg bg-[#fdfaf2] shadow-inner">
-      {PIP_POSITIONS[value]?.map(([x, y], i) => (
-        <span
-          key={i}
-          className="absolute h-2 w-2 rounded-full bg-[#222]"
-          style={{ left: `${x}%`, top: `${y}%`, transform: 'translate(-50%, -50%)' }}
-        />
+    <svg
+      viewBox="0 0 100 100"
+      className={`${className} animate-dice-tumble drop-shadow-[0_2px_0_rgba(0,0,0,0.25)]`}
+      style={{ animationDelay: `${delayMs}ms` }}
+      aria-hidden="true"
+    >
+      <rect x="4" y="4" width="92" height="92" rx="22" fill="#ffffff" stroke="#2b3440" strokeWidth="6" />
+      <rect x="12" y="10" width="76" height="30" rx="14" fill="#f1f4f8" />
+      {PIPS[value]?.map(([x, y], i) => (
+        <circle key={i} cx={x} cy={y} r="9" fill={value === 1 ? '#d7263d' : '#1f2a37'} />
       ))}
-    </div>
+    </svg>
   );
 }
 
 export interface DiceDisplayProps {
   die1: number | null;
   die2: number | null;
-  rolling: boolean;
+  /** Increments per roll event; remounts the dice to replay the tumble. */
+  rollKey: number;
+  size?: 'sm' | 'md';
 }
 
-export function DiceDisplay({ die1, die2, rolling }: DiceDisplayProps): React.JSX.Element {
-  const [spin, setSpin] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    if (!rolling) return;
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduced) return;
-    const interval = setInterval(() => {
-      setSpin({
-        x: Math.floor(Math.random() * 360) + 360,
-        y: Math.floor(Math.random() * 360) + 360,
-      });
-    }, 100);
-    return () => clearInterval(interval);
-  }, [rolling]);
-
-  const value1 = rolling ? 1 + (Math.floor(spin.x / 60) % 6) : die1 ?? 1;
-  const value2 = rolling ? 1 + (Math.floor(spin.y / 60) % 6) : die2 ?? 1;
-
+export const DiceDisplay = memo(function DiceDisplay({
+  die1,
+  die2,
+  rollKey,
+  size = 'sm',
+}: DiceDisplayProps): React.JSX.Element {
+  const dieClass = size === 'sm' ? 'h-8 w-8' : 'h-10 w-10';
+  if (die1 === null || die2 === null) {
+    return (
+      <div className="flex items-center gap-1 opacity-50" data-testid="dice-display" aria-label="Dice not rolled yet">
+        <Die value={0} className={dieClass} delayMs={0} key="idle-1" />
+        <Die value={0} className={dieClass} delayMs={0} key="idle-2" />
+      </div>
+    );
+  }
+  const total = die1 + die2;
   return (
-    <div className="flex items-center gap-3" data-testid="dice-display" style={{ perspective: 600 }}>
-      {[value1, value2].map((v, i) => (
-        <div
-          key={i}
-          className="relative h-14 w-14"
-          style={{ transformStyle: 'preserve-3d' }}
-        >
-          <motion.div
-            className="relative h-14 w-14"
-            animate={{ rotateX: rolling ? spin.x : 0, rotateY: rolling ? spin.y : 0 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-            style={{ transformStyle: 'preserve-3d' }}
-          >
-            <Face value={v} />
-          </motion.div>
-        </div>
-      ))}
-      {die1 !== null && die2 !== null && !rolling ? (
-        <span className="text-2xl font-bold" data-testid="dice-sum">
-          = {die1 + die2}
-        </span>
-      ) : null}
+    <div className="flex flex-none items-center gap-1" data-testid="dice-display" aria-label={`Rolled ${die1} and ${die2}, total ${total}`}>
+      <Die value={die1} className={dieClass} delayMs={0} key={`a-${rollKey}`} />
+      <Die value={die2} className={dieClass} delayMs={70} key={`b-${rollKey}`} />
+      <span
+        key={`t-${rollKey}`}
+        className={`animate-pop-in ml-0.5 flex min-w-8 items-center justify-center rounded-full px-1.5 font-display font-bold leading-none tabular-nums shadow-sm ${
+          size === 'sm' ? 'h-7 text-base' : 'h-10 text-xl'
+        } ${total === 7 ? 'bg-[#d7263d] text-white' : 'bg-ink text-white'}`}
+        data-testid="dice-sum"
+      >
+        {total}
+      </span>
     </div>
   );
-}
+});

@@ -1,7 +1,7 @@
-// Socket.io event wiring: room lifecycle, game actions, timers, reconnect.
+// Game event wiring over any HubServer (socket.io on Node, MemoryHub in a
+// browser tab): room lifecycle, game actions, timers, reconnect.
 // Single authoritative path: every game mutation runs through applyAction.
 
-import type { Server, Socket } from 'socket.io';
 import { z } from 'zod';
 import {
   gameActionSchema,
@@ -9,21 +9,30 @@ import {
   legalSettlementVertices,
   stealCandidates,
   type GameAction,
+  type GameEvent,
 } from '@catan/shared';
-import type { PlayerColor } from '@catan/shared';
+import type { PlayerColor, PlayerCount } from '@catan/shared';
 import { applyAction } from '@catan/shared';
 import type { RoomManager} from './rooms';
 import { type Room } from './rooms';
-import type { GameLog } from './jsonl';
+import type { HubServer, HubSocket } from './hub';
 import { sanitize } from './sanitize';
-import { autoActionFor, phaseTimerMs } from './timers';
+import { autoActionFor, phaseTimerMs, type TimerHandle } from './timers';
 import { createBalancedDiceSource } from './dice';
+import { computeBotAction } from './bot';
+
+/** Where accepted game events are recorded (JSONL file on Node, nowhere offline). */
+export interface GameLogSink {
+  append(roomCode: string, event: GameEvent): void;
+}
+
+export const noopLog: GameLogSink = { append: () => {} };
 
 export interface ServerContext {
-  io: Server;
+  io: HubServer;
   rooms: RoomManager;
-  log: GameLog;
-  timers: Map<string, NodeJS.Timeout>; // roomCode -> active timeout
+  log: GameLogSink;
+  timers: Map<string, TimerHandle>; // roomCode -> active timeout
   timerDeadlines: Map<string, { phase: string; deadlineUnixMs: number }>;
 }
 
@@ -38,9 +47,11 @@ const createPayloadSchema = z.object({ name: z.string().min(1).max(24) });
 const setReadySchema = z.object({ ready: z.boolean() });
 const pickColorSchema = z.object({ color: z.string() });
 const settingsSchema = z.object({
-  maxPlayers: z.number().int().min(3).max(6).optional(),
+  maxPlayers: z.number().int().min(3).max(8).optional(),
   turnTimerSec: z.number().int().min(0).max(600).optional(),
   diceMode: z.enum(['random', 'balanced']).optional(),
+  victoryPointsToWin: z.number().int().min(3).max(20).optional(),
+  discardLimit: z.number().int().min(5).max(20).optional(),
 });
 
 export function roomStatePayload(room: Room): unknown {
@@ -53,6 +64,7 @@ export function roomStatePayload(room: Room): unknown {
       color: s.color,
       ready: s.ready,
       connected: s.connected,
+      isBot: s.isBot === true,
     })),
     settings: room.settings,
     seed: room.seed,
@@ -157,6 +169,7 @@ async function runAutoAction(ctx: ServerContext, code: string): Promise<void> {
   }
   broadcastGame(ctx, room);
   armTimer(ctx, room);
+  triggerBotTurnIfNeeded(ctx, room);
 }
 
 function RESOURCES_TOTAL(bag: Record<string, number>): number {
@@ -174,9 +187,9 @@ function makeRollSource(ctx: ServerContext, room: Room): Parameters<typeof apply
   };
 }
 
-function handleGameAction(ctx: ServerContext, socket: Socket, room: Room, seat: number, action: GameAction): void {
+function handleGameAction(ctx: ServerContext, socket: HubSocket | null, room: Room, seat: number, action: GameAction): void {
   if (room.game === null) {
-    socket.emit('error', { message: 'GAME_NOT_STARTED' });
+    socket?.emit('error', { message: 'GAME_NOT_STARTED' });
     return;
   }
   const state = room.game.state;
@@ -185,13 +198,19 @@ function handleGameAction(ctx: ServerContext, socket: Socket, room: Room, seat: 
   // Seat gate: only actions from the correct actor reach the engine.
   const actorOk = isActorAllowed(state, action, seat);
   if (!actorOk) {
-    socket.emit('error', { message: 'NOT_YOUR_ACTION' });
+    socket?.emit('error', { message: 'NOT_YOUR_ACTION' });
     return;
   }
 
-  const result = applyAction(state, action, rng, makeRollSource(ctx, room));
+  // Stamp authenticated seat on non-active actions
+  let stampedAction = action;
+  if (action.type === 'discard' || action.type === 'tradeRespond' || action.type === 'tradeCounter') {
+    stampedAction = { ...action, seat };
+  }
+
+  const result = applyAction(state, stampedAction, rng, makeRollSource(ctx, room));
   if (!result.ok) {
-    socket.emit('error', { message: result.error });
+    socket?.emit('error', { message: result.error });
     return;
   }
   room.game.state = result.state;
@@ -202,6 +221,74 @@ function handleGameAction(ctx: ServerContext, socket: Socket, room: Room, seat: 
   }
   broadcastGame(ctx, room);
   armTimer(ctx, room);
+  triggerBotTurnIfNeeded(ctx, room);
+}
+
+const botTimers = new Map<string, TimerHandle>();
+
+function triggerBotTurnIfNeeded(ctx: ServerContext, room: Room): void {
+  if (room.game === null || room.game.state.phase === 'finished') return;
+
+  const existing = botTimers.get(room.code);
+  if (existing !== undefined) {
+    clearTimeout(existing);
+    botTimers.delete(room.code);
+  }
+
+  const botSeats = new Set(room.seats.filter((s) => s.isBot).map((s) => s.seatIndex));
+  if (botSeats.size === 0) return;
+
+  const state = room.game.state;
+  let targetBotSeat: number | null = null;
+
+  if (state.phase === 'discard') {
+    const pendingBot = state.pendingDiscards.find((d) => !d.received && botSeats.has(d.seat));
+    if (pendingBot !== undefined) targetBotSeat = pendingBot.seat;
+  } else if (botSeats.has(state.activeSeat)) {
+    targetBotSeat = state.activeSeat;
+  } else if (state.phase === 'specialBuild' && state.specialBuild !== null && state.specialBuild.seat !== null && botSeats.has(state.specialBuild.seat)) {
+    targetBotSeat = state.specialBuild.seat;
+  } else if (state.phase === 'turnMain') {
+    const openTrade = state.trades.find((t) => t.status === 'open' && t.proposer !== state.activeSeat);
+    if (openTrade !== undefined) {
+      const botToRespond = room.seats.find((s) => s.isBot && s.seatIndex !== openTrade.proposer && !openTrade.declinedBy.includes(s.seatIndex));
+      if (botToRespond !== undefined) targetBotSeat = botToRespond.seatIndex;
+    }
+  }
+
+  if (targetBotSeat === null) return;
+
+  const botSeat = targetBotSeat;
+  const timer = setTimeout(() => {
+    botTimers.delete(room.code);
+    const currentRoom = ctx.rooms.getRoom(room.code);
+    if (currentRoom?.game === null || currentRoom === undefined || currentRoom.game === null) return;
+    if (currentRoom.game.state.phase === 'finished') return;
+
+    const act = computeBotAction(currentRoom.game.state, botSeat, ctx.rooms.gameRng(currentRoom));
+    if (act !== null) {
+      handleGameAction(ctx, null, currentRoom, botSeat, act);
+    }
+  }, 500);
+
+  botTimers.set(room.code, timer);
+}
+
+/**
+ * Cancel every pending turn timer and bot move for this context's rooms.
+ * Call before discarding a context (e.g. an offline host leaving) so no
+ * auto-action keeps playing in the background.
+ */
+export function stopRoomTimers(ctx: ServerContext): void {
+  for (const timer of ctx.timers.values()) clearTimeout(timer);
+  ctx.timers.clear();
+  ctx.timerDeadlines.clear();
+  for (const room of ctx.rooms.allRooms()) {
+    const timer = botTimers.get(room.code);
+    if (timer === undefined) continue;
+    clearTimeout(timer);
+    botTimers.delete(room.code);
+  }
 }
 
 function isActorAllowed(
@@ -238,9 +325,15 @@ function isActorAllowed(
       // Any pending discarder may submit their discard.
       return state.pendingDiscards.some((d) => d.seat === seat && !d.received);
     }
-    case 'tradeRespond':
+    case 'tradeRespond': {
+      // Others answer the active player's offers; the active player answers
+      // counter-offers made to them. The reducer enforces the same pairing.
+      const offer = state.trades.find((t) => t.id === action.offerId);
+      if (offer === undefined || offer.proposer === seat) return false;
+      return offer.proposer === state.activeSeat || seat === state.activeSeat;
+    }
     case 'tradeCounter':
-      // Any non-proposer may respond during the proposer's turn.
+      // Only non-active players counter the active player's offer.
       return seat !== state.activeSeat;
     case 'specialBuildActivate':
       return action.seat === seat && seat !== state.activeSeat;
@@ -322,6 +415,8 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       if (room.game !== null) {
         socket.emit('game:state', sanitize(room.game.state, seatIndex));
         armTimer(ctx, room);
+        // A resumed room (RoomManager.importState) has no pending bot move yet.
+        triggerBotTurnIfNeeded(ctx, room);
       }
     });
 
@@ -389,8 +484,7 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       if (joinedRoom === null) return;
       const room = ctx.rooms.getRoom(joinedRoom);
       if (room === undefined) return;
-      const count = room.settings.maxPlayers;
-      socket.emit('room:boardPreview', generateBoard(count >= 5 ? 5 : 4, room.seed));
+      socket.emit('room:boardPreview', generateBoard(room.settings.maxPlayers as PlayerCount, room.seed));
     });
 
     socket.on('room:start', () => {
@@ -409,6 +503,32 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       ctx.io.to(started.code).emit('room:started', { roomCode: started.code });
       broadcastGame(ctx, started);
       armTimer(ctx, started);
+      triggerBotTurnIfNeeded(ctx, started);
+    });
+
+    socket.on('room:addBot', () => {
+      if (joinedRoom === null || joinedSeat === null) return;
+      const room = ctx.rooms.getRoom(joinedRoom);
+      if (room === undefined) return;
+      const res = ctx.rooms.addBot(joinedRoom, joinedSeat);
+      if ('error' in res) {
+        socket.emit('error', { message: res.error });
+        return;
+      }
+      broadcastRoom(ctx, room);
+    });
+
+    socket.on('room:removeBot', (raw: unknown) => {
+      const parsed = z.object({ seatIndex: z.number().int().nonnegative() }).safeParse(raw);
+      if (!parsed.success || joinedRoom === null || joinedSeat === null) return;
+      const room = ctx.rooms.getRoom(joinedRoom);
+      if (room === undefined) return;
+      const res = ctx.rooms.removeBot(joinedRoom, joinedSeat, parsed.data.seatIndex);
+      if ('error' in res) {
+        socket.emit('error', { message: res.error });
+        return;
+      }
+      broadcastRoom(ctx, room);
     });
 
     socket.on('game:action', (raw: unknown) => {

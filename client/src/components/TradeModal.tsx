@@ -1,19 +1,24 @@
-// Trade modal: bank + player tabs, offers with counters, accept/decline.
+// Trade sheet: bank (harbour rates) + player offers with counters,
+// accept/decline. Bottom sheet on phones, centred dialog on larger screens.
 
 import { useMemo, useState } from 'react';
 import type { GameAction, Resource } from '@catan/shared';
 import { RESOURCES } from '@catan/shared';
 import { useStore } from '../store';
-
-const RESOURCE_EMOJI: Record<Resource, string> = {
-  wood: '🪵',
-  brick: '🧱',
-  sheep: '🐑',
-  wheat: '🌾',
-  ore: '⛰',
-};
+import { RESOURCE_META, ResourceCard } from './resourceArt';
+import { Avatar } from './PlayerStrip';
 
 type Bag = Partial<Record<Resource, number>>;
+
+function BagCards({ bag }: { bag: Bag }): React.JSX.Element {
+  return (
+    <span className="flex items-center gap-0.5">
+      {RESOURCES.filter((r) => (bag[r] ?? 0) > 0).map((r) => (
+        <ResourceCard key={r} resource={r} count={bag[r]} size="sm" />
+      ))}
+    </span>
+  );
+}
 
 export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
   const snap = useStore((s) => s.game)!;
@@ -25,10 +30,10 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
   const [counterOf, setCounterOf] = useState<string | null>(null);
 
   const isMyTurn = snap.activeSeat === mySeat;
+  const canTradeNow = isMyTurn && snap.phase === 'turnMain';
   const openOffers = useMemo(() => snap.trades.filter((t) => t.status === 'open'), [snap.trades]);
 
-  const bagTotal = (b: Bag): number =>
-    RESOURCES.reduce((n, r) => n + (b[r] ?? 0), 0);
+  const bagTotal = (b: Bag): number => RESOURCES.reduce((n, r) => n + (b[r] ?? 0), 0);
 
   const makeBag = (b: Bag): Record<Resource, number> => ({
     wood: b.wood ?? 0,
@@ -38,9 +43,8 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
     ore: b.ore ?? 0,
   });
 
+  // Best applicable harbour rate, mirroring the engine (specialty 2, generic 3).
   const bankRate = (giveResource: Resource): number => {
-    const me = snap.players[mySeat]!;
-    // Best applicable harbor rate, mirroring the engine (specialty 2, generic 3).
     let rate = 4;
     for (const [eid, harbor] of Object.entries(snap.board.harbors)) {
       const [v1, v2] = snap.board.topology.edgeEndpoints[eid] as [number, number];
@@ -49,18 +53,18 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
       if (harbor.type === 'generic') rate = Math.min(rate, 3);
       else if (harbor.resource === giveResource) rate = 2;
     }
-    void me;
     return rate;
   };
 
-  const bankGive = Object.keys(give).find((r) => (give[r as Resource] ?? 0) > 0) as Resource | undefined;
-  const bankReceive = Object.keys(receive).find((r) => (receive[r as Resource] ?? 0) > 0) as Resource | undefined;
+  const bankGive = RESOURCES.find((r) => (give[r] ?? 0) > 0);
+  const bankReceive = RESOURCES.find((r) => (receive[r] ?? 0) > 0);
   const rate = bankGive !== undefined ? bankRate(bankGive) : 4;
   const bankValid =
     bankGive !== undefined &&
     bankReceive !== undefined &&
     bankGive !== bankReceive &&
-    (snap.you.resources[bankGive] ?? 0) >= rate;
+    (snap.you.resources[bankGive] ?? 0) >= rate &&
+    (snap.bank[bankReceive] ?? 0) > 0;
 
   const submitBank = (): void => {
     if (bankGive === undefined || bankReceive === undefined) return;
@@ -70,22 +74,20 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
     setReceive({});
   };
 
-  const playerGiveTotal = bagTotal(give);
-  const playerReceiveTotal = bagTotal(receive);
   const playerValid =
     isMyTurn &&
-    playerGiveTotal > 0 &&
-    playerReceiveTotal > 0 &&
+    bagTotal(give) > 0 &&
+    bagTotal(receive) > 0 &&
     RESOURCES.every(
-      (r) =>
-        (give[r] ?? 0) <= (snap.you.resources[r] ?? 0) &&
-        !((give[r] ?? 0) > 0 && (receive[r] ?? 0) > 0),
+      (r) => (give[r] ?? 0) <= (snap.you.resources[r] ?? 0) && !((give[r] ?? 0) > 0 && (receive[r] ?? 0) > 0),
     );
+  const counterValid = counterOf !== null && bagTotal(give) > 0 && bagTotal(receive) > 0;
 
   const submitPlayerOffer = (): void => {
-    const action: GameAction = counterOf === null
-      ? { type: 'tradeOffer', give: makeBag(give), receive: makeBag(receive) }
-      : { type: 'tradeCounter', offerId: counterOf, give: makeBag(give), receive: makeBag(receive) };
+    const action: GameAction =
+      counterOf === null
+        ? { type: 'tradeOffer', give: makeBag(give), receive: makeBag(receive) }
+        : { type: 'tradeCounter', offerId: counterOf, give: makeBag(give), receive: makeBag(receive) };
     sendAction(action);
     setGive({});
     setReceive({});
@@ -99,11 +101,13 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
     max: number,
     side: 'give' | 'receive',
   ): React.JSX.Element => (
-    <div className="flex items-center gap-2" key={resource}>
-      <span className="w-6 text-xl">{RESOURCE_EMOJI[resource]}</span>
+    <div className="flex items-center gap-0.5" key={`${side}-${resource}`}>
       <button
         type="button"
-        className="h-7 w-7 rounded bg-black/30 text-lg leading-none"
+        aria-label={`Less ${resource}`}
+        className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 border-line bg-white text-xl font-bold leading-none text-ink active:translate-y-px ${
+          (bag[resource] ?? 0) === 0 ? 'opacity-30' : ''
+        }`}
         onClick={() => {
           const next = Math.max(0, (bag[resource] ?? 0) - 1);
           setBag({ ...bag, [resource]: next });
@@ -111,12 +115,15 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
       >
         −
       </button>
-      <span className="w-6 text-center font-bold" data-testid={`count-${side}-${resource}`}>
+      <span className="w-5 text-center font-display text-lg font-bold tabular-nums text-ink" data-testid={`count-${side}-${resource}`}>
         {bag[resource] ?? 0}
       </span>
       <button
         type="button"
-        className="h-7 w-7 rounded bg-black/30 text-lg leading-none"
+        aria-label={`More ${resource}`}
+        className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 border-line bg-white text-xl font-bold leading-none text-ink active:translate-y-px ${
+          (bag[resource] ?? 0) >= max ? 'opacity-30' : ''
+        }`}
         onClick={() => {
           const next = Math.min(max, (bag[resource] ?? 0) + 1);
           setBag({ ...bag, [resource]: next });
@@ -127,123 +134,135 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
     </div>
   );
 
+  // One row per resource: card | give stepper | receive stepper (fits 360px).
+  const tradeTable = (
+    giveLabel: string,
+    receiveLabel: string,
+    giveMax: (r: Resource) => number,
+    receiveMax: (r: Resource) => number,
+  ): React.JSX.Element => (
+    <div className="rounded-2xl border-2 border-line bg-white p-2">
+      <div className="mb-1 grid grid-cols-[28px_1fr_1fr] items-center gap-1 text-center text-xs font-bold uppercase text-ink-soft">
+        <span />
+        <span>{giveLabel}</span>
+        <span>{receiveLabel}</span>
+      </div>
+      <div className="flex flex-col gap-1">
+        {RESOURCES.map((r) => (
+          <div key={r} className="grid grid-cols-[28px_1fr_1fr] items-center justify-items-center gap-1">
+            <ResourceCard resource={r} size="sm" count={snap.you.resources[r] ?? 0} title={RESOURCE_META[r].label} />
+            {stepper(give, setGive, r, giveMax(r), 'give')}
+            {stepper(receive, setReceive, r, receiveMax(r), 'receive')}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const tabBtn = (id: 'bank' | 'player', label: string): React.JSX.Element => (
+    <button
+      type="button"
+      onClick={() => setTab(id)}
+      className={`h-11 flex-1 rounded-xl text-sm font-bold ${tab === id ? 'bg-ink text-white' : 'bg-parchment text-ink'}`}
+      aria-pressed={tab === id}
+    >
+      {label}
+    </button>
+  );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" data-testid="trade-modal">
-      <div className="w-[560px] rounded-xl bg-[#0a4986] p-5 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-[Bricolage_Grotesque,system-ui] text-2xl font-bold">Trade</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 sm:items-center sm:p-4"
+      data-testid="trade-modal"
+      onClick={() => setTradeModal(false)}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Trade"
+        className="flex max-h-[92dvh] w-full max-w-[560px] flex-col gap-3 overflow-y-auto rounded-t-3xl border-2 border-line bg-cream p-3 pb-[max(0.75rem,var(--safe-bottom))] text-ink shadow-2xl sm:rounded-3xl sm:p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Trade</h2>
           <button
             type="button"
             onClick={() => setTradeModal(false)}
-            className="rounded-lg bg-black/30 px-3 py-1 text-lg"
+            className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-line bg-white text-base font-bold"
+            aria-label="Close trade"
             data-testid="close-trade"
           >
             ✕
           </button>
         </div>
 
-        <div className="mb-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setTab('bank')}
-            className={`rounded-lg px-4 py-1.5 font-semibold ${tab === 'bank' ? 'bg-[#1062b0]' : 'bg-black/20'}`}
-          >
-            Bank
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('player')}
-            className={`rounded-lg px-4 py-1.5 font-semibold ${tab === 'player' ? 'bg-[#1062b0]' : 'bg-black/20'}`}
-          >
-            Players
-          </button>
+        <div className="flex gap-2">
+          {tabBtn('bank', 'Bank')}
+          {tabBtn('player', 'Players')}
         </div>
 
         {tab === 'bank' ? (
-          <div className="flex flex-col gap-4" data-testid="bank-tab">
-            <p className="text-sm text-[#cfe0ee]">
+          <div className="flex flex-col gap-3" data-testid="bank-tab">
+            <p className="text-sm text-ink-soft">
               {bankGive !== undefined
-                ? `Rate: ${rate}:1 (${snap.board.harbors !== undefined ? 'best harbor applies' : 'default 4:1'})`
-                : 'Pick one resource to give and one to receive.'}
+                ? `Your rate for ${RESOURCE_META[bankGive].label.toLowerCase()}: ${rate}:1`
+                : 'Pick one resource to give and one to receive. Harbours improve your rate.'}
             </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="mb-2 text-sm font-semibold">Give</h3>
-                <div className="flex flex-col gap-2">
-                  {RESOURCES.map((r) =>
-                    stepper(give, setGive, r, r === bankReceive ? 0 : snap.you.resources[r] ?? 0, 'give'),
-                  )}
-                </div>
-              </div>
-              <div>
-                <h3 className="mb-2 text-sm font-semibold">Receive</h3>
-                <div className="flex flex-col gap-2">
-                  {RESOURCES.map((r) => stepper(receive, setReceive, r, r === bankGive ? 0 : 9, 'receive'))}
-                </div>
-              </div>
-            </div>
+            {tradeTable(
+              'Give',
+              'Receive',
+              (r) => (r === bankReceive ? 0 : (snap.you.resources[r] ?? 0)),
+              (r) => (r === bankGive ? 0 : 9),
+            )}
             <button
               type="button"
-              disabled={!bankValid || !isMyTurn}
+              disabled={!bankValid || !canTradeNow}
               onClick={submitBank}
-              className="rounded-lg bg-[#f06800] px-4 py-2 font-bold text-white disabled:opacity-40"
+              className="h-12 rounded-2xl bg-cta px-4 font-display text-base font-bold text-ink shadow-[0_3px_0_#a86d08] active:translate-y-px disabled:opacity-40"
               data-testid="bank-submit"
             >
               Trade {rate}:1 with bank
             </button>
           </div>
         ) : (
-          <div className="flex flex-col gap-4" data-testid="player-tab">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 className="mb-2 text-sm font-semibold">You give</h3>
-                <div className="flex flex-col gap-2">
-                  {RESOURCES.map((r) => stepper(give, setGive, r, snap.you.resources[r] ?? 0, 'give'))}
-                </div>
-              </div>
-              <div>
-                <h3 className="mb-2 text-sm font-semibold">You receive</h3>
-                <div className="flex flex-col gap-2">
-                  {RESOURCES.map((r) => stepper(receive, setReceive, r, 9, 'receive'))}
-                </div>
-              </div>
-            </div>
+          <div className="flex flex-col gap-3" data-testid="player-tab">
+            {tradeTable('You give', 'You get', (r) => snap.you.resources[r] ?? 0, () => 9)}
             <button
               type="button"
-              disabled={!playerValid}
+              disabled={counterOf !== null ? !counterValid : !playerValid}
               onClick={submitPlayerOffer}
-              className="rounded-lg bg-[#f06800] px-4 py-2 font-bold text-white disabled:opacity-40"
+              className="h-12 rounded-2xl bg-cta px-4 font-display text-base font-bold text-ink shadow-[0_3px_0_#a86d08] active:translate-y-px disabled:opacity-40"
               data-testid="offer-submit"
             >
               {counterOf !== null ? 'Send counter-offer' : 'Offer to all players'}
             </button>
 
-            <div className="max-h-48 overflow-y-auto">
-              <h3 className="mb-2 text-sm font-semibold">Open offers</h3>
-              {openOffers.length === 0 ? (
-                <p className="text-sm text-[#9fb8cc]">No open offers.</p>
-              ) : null}
+            <div className="flex flex-col gap-1.5">
+              <h3 className="text-sm font-bold">Open offers</h3>
+              {openOffers.length === 0 ? <p className="text-sm text-ink-soft">No open offers.</p> : null}
               {openOffers.map((offer) => {
                 const proposer = snap.players[offer.proposer]!;
                 const isMine = offer.proposer === mySeat;
-                const canRespond = isMyTurn ? !isMine : true;
-                const iCanPay = RESOURCES.every(
-                  (r) => (offer.receive[r] ?? 0) <= (snap.you.resources[r] ?? 0),
-                );
+                // Others answer the active player's offers; the active player answers counters.
+                const canRespond = !isMine && (isMyTurn ? offer.proposer !== mySeat : offer.proposer === snap.activeSeat);
+                const iCanPay = RESOURCES.every((r) => (offer.receive[r] ?? 0) <= (snap.you.resources[r] ?? 0));
+                const smallBtn = 'h-11 rounded-xl px-3 text-xs font-bold active:translate-y-px disabled:opacity-40';
                 return (
                   <div
                     key={offer.id}
-                    className={`mb-2 rounded-lg bg-black/20 p-3 text-sm ${offer.counterOf !== null ? 'ml-4' : ''}`}
+                    className={`flex flex-col gap-1.5 rounded-2xl border-2 border-line bg-white p-2 text-sm ${offer.counterOf !== null ? 'ml-4' : ''}`}
                     data-testid={`offer-${offer.id}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">
-                        {proposer.name}: {RESOURCES.filter((r) => (offer.give[r] ?? 0) > 0).map((r) => `${RESOURCE_EMOJI[r]}${offer.give[r]}`).join(' ')}
-                        {' → '}
-                        {RESOURCES.filter((r) => (offer.receive[r] ?? 0) > 0).map((r) => `${RESOURCE_EMOJI[r]}${offer.receive[r]}`).join(' ')}
-                      </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Avatar name={proposer.name} color={proposer.color} size="sm" />
+                      <span className="font-bold">{isMine ? 'You' : proposer.name}</span>
+                      <BagCards bag={offer.give} />
+                      <span className="font-bold text-ink-soft">⇄</span>
+                      <BagCards bag={offer.receive} />
+                    </div>
+                    <div className="flex flex-wrap justify-end gap-1.5">
                       {canRespond ? (
-                        <div className="flex gap-2">
+                        <>
                           <button
                             type="button"
                             disabled={!iCanPay || isMine}
@@ -251,7 +270,7 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
                               const action: GameAction = { type: 'tradeRespond', offerId: offer.id, response: 'accept' };
                               sendAction(action);
                             }}
-                            className="rounded bg-[#1fab1c] px-2 py-1 text-xs font-bold disabled:opacity-40"
+                            className={`${smallBtn} bg-go text-white`}
                             data-testid={`accept-${offer.id}`}
                           >
                             Accept
@@ -262,12 +281,12 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
                               const action: GameAction = { type: 'tradeRespond', offerId: offer.id, response: 'decline' };
                               sendAction(action);
                             }}
-                            className="rounded bg-black/40 px-2 py-1 text-xs font-bold"
+                            className={`${smallBtn} border-2 border-line bg-parchment text-ink`}
                             data-testid={`decline-${offer.id}`}
                           >
                             Decline
                           </button>
-                          {isMyTurn || isMine ? null : (
+                          {isMyTurn || offer.counterOf !== null ? null : (
                             <button
                               type="button"
                               onClick={() => {
@@ -284,13 +303,13 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
                                 setCounterOf(offer.id);
                                 setTab('player');
                               }}
-                              className="rounded bg-[#1e90ff] px-2 py-1 text-xs font-bold"
+                              className={`${smallBtn} bg-[#2f93c9] text-white`}
                               data-testid={`counter-${offer.id}`}
                             >
                               Counter
                             </button>
                           )}
-                        </div>
+                        </>
                       ) : null}
                       {isMine ? (
                         <button
@@ -299,7 +318,7 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
                             const action: GameAction = { type: 'tradeCancel', offerId: offer.id };
                             sendAction(action);
                           }}
-                          className="rounded bg-[#ef3f2a] px-2 py-1 text-xs font-bold"
+                          className={`${smallBtn} bg-[#d7263d] text-white`}
                           data-testid={`cancel-offer-${offer.id}`}
                         >
                           Cancel

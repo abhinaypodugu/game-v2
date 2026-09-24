@@ -7,12 +7,12 @@ import {
   boardConfigForPlayers,
   BUILD_COSTS,
   canAfford,
+  DEFAULT_RULES,
   emptyResourceBag,
   PIECE_LIMITS,
   RESOURCES,
   subtractCost,
   TERRAIN_RESOURCE,
-  WIN_VP,
   type Resource,
   type ResourceBag,
 } from '../constants';
@@ -26,10 +26,12 @@ import {
   canPlaceRoad,
   canPlaceSettlement,
   canPlaceSetupRoad,
+  legalRoadEdges,
   legalRobberHexes,
   stealCandidates,
 } from './legal';
 import {
+  totalVp,
   type EngineOptions,
   type GameState,
   type InitialPlayer,
@@ -83,6 +85,10 @@ export function createGame(opts: EngineOptions): GameState {
   return {
     config: config.key,
     playerCount: opts.playerCount,
+    rules: {
+      victoryPointsToWin: opts.rules?.victoryPointsToWin ?? DEFAULT_RULES.victoryPointsToWin,
+      discardLimit: opts.rules?.discardLimit ?? DEFAULT_RULES.discardLimit,
+    },
     players,
     board,
     phase: 'setupForward',
@@ -103,6 +109,7 @@ export function createGame(opts: EngineOptions): GameState {
     largestArmy: { holder: null, knights: 0 },
     winner: null,
     devCardPlayedThisTurn: false,
+    knightBeforeRoll: false,
     version: 1,
   };
 }
@@ -138,6 +145,15 @@ export function applyAction(
   if (prev.phase === 'finished') {
     return fail('GAME_FINISHED');
   }
+  const result = dispatch(prev, action, rng, rollDice);
+  // Single victory gate: any accepted action (a build, a VP card bought, a
+  // knight taking Largest Army, free roads taking Longest Road, or the start
+  // of a turn where points were gained earlier) can end the game.
+  if (result.ok) maybeWin(result.state, result.events);
+  return result;
+}
+
+function dispatch(prev: GameState, action: GameAction, rng: Rng, rollDice: RollDiceFn): ActionResult {
   switch (action.type) {
     case 'setupPlace': return setupPlace(prev, action);
     case 'rollDice': return rollDiceAction(prev, rng, rollDice);
@@ -169,7 +185,8 @@ function fail(error: string): ActionResult {
 function cloneState(s: GameState): GameState {
   return {
     ...s,
-    players: s.players.map((p) => ({ ...p, resources: { ...p.resources }, devHand: [...p.devHand] })),
+    // Cards are copied too: playing a card flips `played`, which must never leak into `prev`.
+    players: s.players.map((p) => ({ ...p, resources: { ...p.resources }, devHand: p.devHand.map((c) => ({ ...c })) })),
     buildings: { ...s.buildings },
     roads: { ...s.roads },
     bank: { ...s.bank },
@@ -259,13 +276,10 @@ function rollDiceAction(prev: GameState, rng: Rng, rollDice: RollDiceFn): Action
   const events: GameEvent[] = [{ type: 'rolled', seat: prev.activeSeat, die1, die2 }];
 
   if (sum === 7) {
-    // Discard phase for every player with > 7 cards.
+    // Discard phase for every player holding more than the discard limit.
     state.phase = 'discard';
     state.pendingDiscards = state.players
-      .filter((p) => {
-        const total = RESOURCES.reduce((n, r) => n + p.resources[r], 0);
-        return total > 7;
-      })
+      .filter((p) => total(p) > state.rules.discardLimit)
       .map((p) => ({ seat: p.seat, count: Math.floor(total(p) / 2), received: false }));
     if (state.pendingDiscards.length === 0) {
       state.phase = 'robberMove';
@@ -328,15 +342,12 @@ function discard(prev: GameState, action: Extract<GameAction, { type: 'discard' 
   if (prev.phase !== 'discard') {
     return fail('NOT_DISCARD');
   }
-  const entry = prev.pendingDiscards.find((d) => d.received === false && d.seat !== -1);
-  // The discard action targets the acting socket's seat — the server passes
-  // only the current player's discard; find it explicitly:
   const pending = prev.pendingDiscards.filter((d) => !d.received);
   if (pending.length === 0) return fail('NO_PENDING_DISCARD');
-  // Which seat? The server wraps this: we accept the discard only when the
-  // caller matches ANY pending seat — enforced by sockets layer mapping seat.
-  // Here: the FIRST unreceived pending entry is the intended target.
-  const target = entry ?? pending[0]!;
+  const target = action.seat !== undefined
+    ? pending.find((d) => d.seat === action.seat)
+    : pending[0]!;
+  if (target === undefined) return fail('NO_PENDING_DISCARD');
   const seat = target.seat;
   const player = prev.players[seat]!;
 
@@ -386,7 +397,7 @@ function moveRobber(prev: GameState, hex: HexId): ActionResult {
   if (withCards.length > 0) {
     state.phase = 'robberSteal';
   } else {
-    state.phase = 'turnMain';
+    finishRobber(state);
   }
   return ok(state, events);
 }
@@ -409,11 +420,17 @@ function chooseSteal(prev: GameState, victimSeat: number, rng: Rng): ActionResul
     state.players[prev.activeSeat]!.resources[stolen] += 1;
     stolenResource = stolen;
   }
-  state.phase = 'turnMain';
+  finishRobber(state);
   const events: GameEvent[] = [
     { type: 'stolenFrom', seat: prev.activeSeat, victim: victimSeat, resource: stolenResource },
   ];
   return ok(state, events);
+}
+
+/** After the robber resolves: back to rolling if a knight was played before the roll. */
+function finishRobber(state: GameState): void {
+  state.phase = state.knightBeforeRoll ? 'turnPreroll' : 'turnMain';
+  state.knightBeforeRoll = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +441,10 @@ function buildRoad(prev: GameState, edge: EdgeId, rng: Rng, free: boolean): Acti
   const acting = prev.specialBuild !== null && prev.specialBuild.seat !== null
     ? prev.specialBuild.seat
     : prev.activeSeat;
-  if (prev.phase !== 'turnMain' && prev.phase !== 'specialBuild') {
+  // Free roads (Road Building) may be placed before rolling too.
+  const phaseOk =
+    prev.phase === 'turnMain' || prev.phase === 'specialBuild' || (free && prev.phase === 'turnPreroll');
+  if (!phaseOk) {
     return fail('NOT_BUILD_PHASE');
   }
   if (prev.phase === 'specialBuild') {
@@ -432,7 +452,7 @@ function buildRoad(prev: GameState, edge: EdgeId, rng: Rng, free: boolean): Acti
     if (sb === null || sb.seat === null) return fail('NO_SB_WINDOW');
     if (acting !== sb.seat) return fail('NOT_SB_ACTOR');
   }
-  if (!canPlaceRoad(prev, acting, edge)) {
+  if (!canPlaceRoad(prev, acting, edge, free)) {
     return fail('ILLEGAL_ROAD');
   }
   const state = cloneState(prev);
@@ -447,7 +467,6 @@ function buildRoad(prev: GameState, edge: EdgeId, rng: Rng, free: boolean): Acti
 
   const events: GameEvent[] = [{ type: 'roadBuilt', seat: acting, edge, ...(free ? { free: true } : {}) }];
   recomputeLongestRoad(state, events);
-  if (!free) maybeWin(state, events);
   return ok(state, events);
 }
 
@@ -475,7 +494,6 @@ function buildSettlement(prev: GameState, vertex: VertexId, _rng: Rng, free: boo
 
   const events: GameEvent[] = [{ type: 'settlementBuilt', seat: acting, vertex }];
   recomputeLongestRoad(state, events);
-  if (!free) maybeWin(state, events);
   return ok(state, events);
 }
 
@@ -502,7 +520,6 @@ function buildCity(prev: GameState, vertex: VertexId): ActionResult {
   state.buildings[vertex] = { seat: acting, type: 'city' };
 
   const events: GameEvent[] = [{ type: 'cityBuilt', seat: acting, vertex }];
-  maybeWin(state, events);
   return ok(state, events);
 }
 
@@ -579,15 +596,13 @@ function playDevCard(
       events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'knight' });
       // Largest army recompute after knight play.
       recomputeLargestArmy(state, events);
-      // Knight during preroll: after robber+steal, phase returns to preroll
-      // so the player still rolls. Track via flag:
-      (state as GameState & { knightFromPreroll?: boolean }).knightFromPreroll =
-        prev.phase === 'turnPreroll';
+      // Played before rolling: after the robber resolves, the player still rolls.
+      state.knightBeforeRoll = prev.phase === 'turnPreroll';
       return ok(state, events);
     }
     case 'roadBuilding': {
       const edges = action.payload?.edges;
-      if (edges === undefined || edges.length !== 2) return fail('RB_NEEDS_2_EDGES');
+      if (edges === undefined || edges.length === 0 || edges.length > 2) return fail('RB_NEEDS_2_EDGES');
       // Both roads placed as one action, validated in order.
       let working = state;
       for (const e of edges) {
@@ -596,6 +611,9 @@ function playDevCard(
         working = res.state;
         events.push(...res.events);
       }
+      // A single road is only allowed when no second road can legally be placed
+      // (out of road pieces or no connected free edge).
+      if (edges.length === 1 && legalRoadEdges(working, seat, true).length > 0) return fail('RB_NEEDS_2_EDGES');
       working.devCardPlayedThisTurn = true;
       const marked = working.players[seat]!;
       const c = marked.devHand.find((x) => x.id === action.cardId);
@@ -714,12 +732,14 @@ function tradeOffer(prev: GameState, action: Extract<GameAction, { type: 'tradeO
 
 function tradeCounter(prev: GameState, action: Extract<GameAction, { type: 'tradeCounter' }>): ActionResult {
   if (prev.phase !== 'turnMain') return fail('NOT_TRADE_PHASE');
-  const seat = prev.activeSeat;
   const target = prev.trades.find((t) => t.id === action.offerId);
   if (target === undefined || target.status !== 'open') return fail('OFFER_NOT_OPEN');
+  const seat = action.seat !== undefined ? action.seat : prev.activeSeat;
+  if (target.proposer === seat) return fail('CANNOT_COUNTER_OWN_OFFER');
   if (!validTradeAmounts(action.give, action.receive)) return fail('INVALID_TRADE');
   // The countering player must afford what they offer.
-  const p = prev.players[seat]!;
+  const p = prev.players[seat];
+  if (p === undefined) return fail('NO_SUCH_PLAYER');
   for (const r of RESOURCES) {
     if ((action.give[r] ?? 0) > p.resources[r]) return fail('OFFER_UNAFFORDABLE');
   }
@@ -744,8 +764,11 @@ function tradeRespond(prev: GameState, action: Extract<GameAction, { type: 'trad
   if (prev.phase !== 'turnMain') return fail('NOT_TRADE_PHASE');
   const offer = prev.trades.find((t) => t.id === action.offerId);
   if (offer === undefined || offer.status !== 'open') return fail('OFFER_NOT_OPEN');
-  const seat = prev.activeSeat;
+  const seat = action.seat !== undefined ? action.seat : prev.activeSeat;
   if (offer.proposer === seat) return fail('CANNOT_SELF_TRADE');
+  // Trades are always between the active player and someone else: the active
+  // player's offers are answered by others, counter-offers by the active player.
+  if (offer.proposer !== prev.activeSeat && seat !== prev.activeSeat) return fail('NOT_TRADE_PARTY');
 
   if (action.response === 'decline') {
     const state = cloneState(prev);
@@ -756,7 +779,8 @@ function tradeRespond(prev: GameState, action: Extract<GameAction, { type: 'trad
 
   // Accept: execute between offer.proposer (gives offer.give) and seat.
   const proposer = prev.players[offer.proposer]!;
-  const accepter = prev.players[seat]!;
+  const accepter = prev.players[seat];
+  if (accepter === undefined) return fail('NO_SUCH_PLAYER');
   for (const r of RESOURCES) {
     if ((offer.give[r] ?? 0) > proposer.resources[r]) return fail('OFFER_STALE');
     if ((offer.receive[r] ?? 0) > accepter.resources[r]) return fail('CANNOT_PAY_ACCEPT');
@@ -770,8 +794,12 @@ function tradeRespond(prev: GameState, action: Extract<GameAction, { type: 'trad
     ac.resources[r] -= offer.receive[r] ?? 0;
     ac.resources[r] += offer.give[r] ?? 0;
   }
-  const t = state.trades.find((x) => x.id === action.offerId)!;
-  t.status = 'completed';
+  // Close the whole negotiation thread: the root offer and every counter to it.
+  const root = offer.counterOf ?? offer.id;
+  for (const t of state.trades) {
+    if (t.id === action.offerId) t.status = 'completed';
+    else if (t.status === 'open' && (t.id === root || t.counterOf === root)) t.status = 'cancelled';
+  }
   const events: GameEvent[] = [
     { type: 'tradeCompleted', offerId: action.offerId, from: offer.proposer, to: seat, give: fillBag(offer.give), receive: fillBag(offer.receive) },
   ];
@@ -963,30 +991,20 @@ function recomputeLargestArmy(state: GameState, events: GameEvent[]): void {
 }
 
 function maybeWin(state: GameState, events: GameEvent[]): void {
-  // Win checks only on the acting player's own turn (SBP can't win).
-  if (state.phase === 'specialBuild') return;
+  // A player wins on their own turn (never during setup or someone's special build).
+  if (state.phase === 'specialBuild' || state.phase === 'finished') return;
+  if (state.phase === 'setupForward' || state.phase === 'setupReverse') return;
   const seat = state.activeSeat;
-  if (totalVpIncluding(state, seat) >= WIN_VP) {
+  const vp = totalVp(state, seat);
+  if (vp >= state.rules.victoryPointsToWin) {
     state.phase = 'finished';
     state.winner = seat;
-    // Reveal all VP cards of the winner.
+    // Reveal all VP cards of the winner (revealed cards keep counting via publicVp).
     for (const c of state.players[seat]!.devHand) {
       if (c.type === 'victoryPoint') c.played = true;
     }
-    events.push({ type: 'victory', seat, vp: totalVpIncluding(state, seat) });
+    events.push({ type: 'victory', seat, vp });
   }
-}
-
-function totalVpIncluding(state: GameState, seat: number): number {
-  const p = state.players[seat]!;
-  let vp = 0;
-  for (const b of Object.values(state.buildings)) {
-    if (b.seat === seat) vp += b.type === 'settlement' ? 1 : 2;
-  }
-  if (state.longestRoad.holder === seat) vp += 2;
-  if (state.largestArmy.holder === seat) vp += 2;
-  vp += p.devHand.filter((c) => c.type === 'victoryPoint' && !c.played).length;
-  return vp;
 }
 
 function ok(state: GameState, events: GameEvent[]): ActionResult {

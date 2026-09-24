@@ -100,3 +100,6 @@ export type TimerPayload = {
   phase: string;
   deadlineUnixMs: number;
 };
+
+/** Platform timer handle: `number` in browsers, `Timeout` on Node. */
+export type TimerHandle = ReturnType<typeof setTimeout>;

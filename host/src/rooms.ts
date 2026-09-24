@@ -2,15 +2,20 @@
 // Server-authoritative: all mutations flow through this module.
 
 import { customAlphabet } from 'nanoid';
+import { z } from 'zod';
 import {
+  boardConfigForPlayers,
+  DEFAULT_RULES,
   PLAYER_COLORS,
+  type BoardConfigKey,
   type PlayerColor,
+  type PlayerCount,
 } from '@catan/shared';
 import { createGame, type GameState } from '@catan/shared';
-import type { GameEvent ,
-  BOARD_CONFIGS} from '@catan/shared';
+import type { GameEvent } from '@catan/shared';
 import type { Rng } from '@catan/shared';
 import { createRng } from '@catan/shared';
+import { BOT_NAMES } from './bot';
 
 const codeAlphabet = customAlphabet('ABCDEFGHJKMNPQRSTUVWXYZ23456789', 4);
 const tokenAlphabet = customAlphabet('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 21);
@@ -19,13 +24,29 @@ export interface RoomSettings {
   maxPlayers: number;
   turnTimerSec: number; // 0 = off
   diceMode: 'random' | 'balanced';
+  /** VP needed to win (3..20). */
+  victoryPointsToWin: number;
+  /** On a 7, seats holding more than this many cards discard half (5..20). */
+  discardLimit: number;
 }
 
 export const DEFAULT_SETTINGS: RoomSettings = {
   maxPlayers: 4,
   turnTimerSec: 120,
   diceMode: 'random',
+  victoryPointsToWin: DEFAULT_RULES.victoryPointsToWin,
+  discardLimit: DEFAULT_RULES.discardLimit,
 };
+
+export const SETTINGS_LIMITS = {
+  maxPlayers: { min: 3, max: 8 },
+  victoryPointsToWin: { min: 3, max: 20 },
+  discardLimit: { min: 5, max: 20 },
+} as const;
+
+function inRange(n: number, lim: { min: number; max: number }): boolean {
+  return Number.isInteger(n) && n >= lim.min && n <= lim.max;
+}
 
 export interface Seat {
   seatIndex: number;
@@ -36,6 +57,7 @@ export interface Seat {
   reconnectToken: string;
   connected: boolean;
   disconnectedAt: number | null;
+  isBot?: boolean;
 }
 
 export interface StoredGame {
@@ -54,6 +76,45 @@ export interface Room {
   createdAt: number;
   lastActivity: number;
 }
+
+// Shape check for RoomManager.importState. Game state and events are produced
+// by this engine and only checked to be objects.
+const roomSnapshotSchema: z.ZodType<Room> = z.object({
+  code: z.string().length(4),
+  hostSeatIndex: z.number().int().nonnegative(),
+  seats: z.array(
+    z.object({
+      seatIndex: z.number().int().nonnegative(),
+      name: z.string(),
+      color: z.custom<PlayerColor>((v) => PLAYER_COLORS.includes(v as PlayerColor)).nullable(),
+      ready: z.boolean(),
+      socketId: z.string().nullable(),
+      reconnectToken: z.string(),
+      connected: z.boolean(),
+      disconnectedAt: z.number().nullable(),
+      isBot: z.boolean().optional(),
+    }),
+  ),
+  settings: z.object({
+    maxPlayers: z.number().int(),
+    turnTimerSec: z.number().int(),
+    diceMode: z.enum(['random', 'balanced']),
+    victoryPointsToWin: z.number().int(),
+    discardLimit: z.number().int(),
+  }),
+  game: z
+    .object({
+      state: z.custom<GameState>((v) => typeof v === 'object' && v !== null),
+      seed: z.string(),
+      events: z.array(z.custom<GameEvent>((v) => typeof v === 'object' && v !== null)),
+    })
+    .nullable(),
+  seed: z.string(),
+  createdAt: z.number(),
+  lastActivity: z.number(),
+});
+
+const exportedStateSchema = z.object({ v: z.literal(1), rooms: z.array(roomSnapshotSchema) });
 
 export class RoomManager {
   private rooms = new Map<string, Room>();
@@ -75,16 +136,17 @@ export class RoomManager {
     return room;
   }
 
-  private makeSeat(seatIndex: number, name: string): Seat {
+  private makeSeat(seatIndex: number, name: string, isBot = false): Seat {
     return {
       seatIndex,
       name,
       color: null,
-      ready: false,
+      ready: isBot,
       socketId: null,
       reconnectToken: tokenAlphabet(),
-      connected: false,
+      connected: isBot,
       disconnectedAt: null,
+      isBot,
     };
   }
 
@@ -105,6 +167,42 @@ export class RoomManager {
     return { room, seat };
   }
 
+  addBot(code: string, hostSeatIndex: number): { ok: true; seat: Seat } | { error: string } {
+    const room = this.getRoom(code);
+    if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
+    if (room.game !== null) return { error: 'GAME_ALREADY_STARTED' };
+    if (room.hostSeatIndex !== hostSeatIndex) return { error: 'NOT_HOST' };
+    if (room.seats.length >= room.settings.maxPlayers) return { error: 'ROOM_FULL' };
+
+    const availableColors = RoomManager.availableColors(room);
+    if (availableColors.length === 0) return { error: 'NO_COLORS_AVAILABLE' };
+
+    const takenNames = new Set(room.seats.map((s) => s.name));
+    const name = BOT_NAMES.find((n) => !takenNames.has(n)) ?? `Bot ${room.seats.length + 1}`;
+
+    const seat = this.makeSeat(room.seats.length, name, true);
+    seat.color = availableColors[0]!;
+    seat.ready = true;
+    room.seats.push(seat);
+    room.lastActivity = Date.now();
+    return { ok: true, seat };
+  }
+
+  removeBot(code: string, hostSeatIndex: number, seatIndex: number): { ok: true } | { error: string } {
+    const room = this.getRoom(code);
+    if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
+    if (room.game !== null) return { error: 'GAME_ALREADY_STARTED' };
+    if (room.hostSeatIndex !== hostSeatIndex) return { error: 'NOT_HOST' };
+    const seat = room.seats[seatIndex];
+    if (seat === undefined || !seat.isBot) return { error: 'NOT_A_BOT' };
+
+    room.seats = room.seats.filter((s) => s.seatIndex !== seatIndex);
+    room.seats.forEach((s, i) => {
+      s.seatIndex = i;
+    });
+    room.lastActivity = Date.now();
+    return { ok: true };
+  }
   /** Reattach a seat by token (or matching name) — works mid-game. */
   reattachSeat(
     code: string,
@@ -142,10 +240,11 @@ export class RoomManager {
     room.seats.forEach((s, i) => {
       s.seatIndex = i;
     });
-    if (room.seats.length === 0) {
+    if (room.seats.length === 0 || room.seats.every((s) => s.isBot)) {
       this.rooms.delete(room.code);
     } else if (room.hostSeatIndex === seatIndex) {
-      room.hostSeatIndex = room.seats[0]!.seatIndex;
+      const nextHuman = room.seats.find((s) => !s.isBot);
+      room.hostSeatIndex = nextHuman !== undefined ? nextHuman.seatIndex : room.seats[0]!.seatIndex;
     }
   }
 
@@ -165,19 +264,31 @@ export class RoomManager {
   updateSettings(
     code: string,
     seatIndex: number,
-    patch: Partial<Pick<RoomSettings, 'maxPlayers' | 'turnTimerSec' | 'diceMode'>>,
+    patch: Partial<RoomSettings>,
   ): { ok: true } | { error: string } {
     const room = this.getRoom(code);
     if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
     if (room.hostSeatIndex !== seatIndex) return { error: 'NOT_HOST' };
     if (room.game !== null) return { error: 'GAME_ALREADY_STARTED' };
+    // Validate the whole patch before applying any field (all-or-nothing).
     if (patch.maxPlayers !== undefined) {
-      if (patch.maxPlayers < 3 || patch.maxPlayers > 6) return { error: 'BAD_MAX_PLAYERS' };
+      if (!inRange(patch.maxPlayers, SETTINGS_LIMITS.maxPlayers)) return { error: 'BAD_MAX_PLAYERS' };
       if (patch.maxPlayers < room.seats.length) return { error: 'MAX_BELOW_SEATS' };
-      room.settings.maxPlayers = patch.maxPlayers;
     }
+    if (
+      patch.victoryPointsToWin !== undefined &&
+      !inRange(patch.victoryPointsToWin, SETTINGS_LIMITS.victoryPointsToWin)
+    ) {
+      return { error: 'BAD_VICTORY_POINTS' };
+    }
+    if (patch.discardLimit !== undefined && !inRange(patch.discardLimit, SETTINGS_LIMITS.discardLimit)) {
+      return { error: 'BAD_DISCARD_LIMIT' };
+    }
+    if (patch.maxPlayers !== undefined) room.settings.maxPlayers = patch.maxPlayers;
     if (patch.turnTimerSec !== undefined) room.settings.turnTimerSec = patch.turnTimerSec;
     if (patch.diceMode !== undefined) room.settings.diceMode = patch.diceMode;
+    if (patch.victoryPointsToWin !== undefined) room.settings.victoryPointsToWin = patch.victoryPointsToWin;
+    if (patch.discardLimit !== undefined) room.settings.discardLimit = patch.discardLimit;
     room.lastActivity = Date.now();
     return { ok: true };
   }
@@ -201,13 +312,21 @@ export class RoomManager {
     if (!room.seats.every((s) => s.ready)) return { error: 'NOT_ALL_READY' };
     if (!room.seats.every((s) => s.color !== null)) return { error: 'MISSING_COLORS' };
 
-    const playerCount = room.seats.length as 3 | 4 | 5 | 6;
+    const playerCount = room.seats.length as PlayerCount;
     const players = room.seats.map((s) => ({
       seat: s.seatIndex,
       name: s.name,
       color: s.color!,
     }));
-    const state = createGame({ playerCount, players, seed: room.seed });
+    const state = createGame({
+      playerCount,
+      players,
+      seed: room.seed,
+      rules: {
+        victoryPointsToWin: room.settings.victoryPointsToWin,
+        discardLimit: room.settings.discardLimit,
+      },
+    });
     room.game = { state, seed: room.seed, events: [{ type: 'gameStarted', playerCount, seed: room.seed }] };
     room.lastActivity = Date.now();
     return { ok: true, room };
@@ -235,18 +354,48 @@ export class RoomManager {
     return [...this.rooms.values()];
   }
 
+  /**
+   * Serialize every room (settings, seats with tokens, host seat, board seed,
+   * game state + event log) so a host can resume after a reload. The game RNG
+   * is derived from code + seed + event count, so no extra counters are needed.
+   */
+  exportState(): string {
+    return JSON.stringify({ v: 1, rooms: [...this.rooms.values()] });
+  }
+
+  /**
+   * Replace all rooms with an `exportState()` snapshot. Human seats come back
+   * disconnected with no socket; they reclaim their seat via reconnect token.
+   * Throws (leaving current rooms untouched) when the snapshot is malformed.
+   */
+  importState(json: string): void {
+    const { rooms } = exportedStateSchema.parse(JSON.parse(json));
+    const now = Date.now();
+    this.rooms.clear();
+    for (const room of rooms) {
+      for (const seat of room.seats) {
+        if (seat.isBot === true) continue;
+        if (seat.connected) seat.disconnectedAt = now;
+        seat.connected = false;
+        seat.socketId = null;
+      }
+      room.lastActivity = now;
+      this.rooms.set(room.code, room);
+    }
+  }
+
   /** Available colors given current seats (used by lobby UI). */
   static availableColors(room: Room): PlayerColor[] {
     const taken = new Set(room.seats.map((s) => s.color).filter((c): c is PlayerColor => c !== null));
     return PLAYER_COLORS.filter((c) => !taken.has(c));
   }
 
-  /** Config sanity: seat count must fit board config (3-4 base, 5-6 ext56). */
-  static configForCount(playerCount: number): 'base' | 'ext56' {
-    return playerCount >= 5 ? 'ext56' : 'base';
+  /** Config sanity: seat count must fit board config (3-4 base, 5-6 ext56, 7-8 ext78). */
+  static configForCount(playerCount: number): BoardConfigKey {
+    return boardConfigForPlayers(playerCount).key;
   }
 }
 
-export function boardPreviewConfig(playerCount: number): keyof typeof BOARD_CONFIGS {
-  return playerCount >= 5 ? 'ext56' : 'base';
+export function boardPreviewConfig(playerCount: number): BoardConfigKey {
+  return boardConfigForPlayers(playerCount).key;
 }

@@ -1,83 +1,96 @@
-// Event log panel: compact, fixed-height, auto-scrolling feed.
+// Event log: auto-scrolling feed of game events, colour-coded per player.
 
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { GameEvent } from '@catan/shared';
 import { useStore } from '../store';
-import { PIECE_COLORS } from '../theme';
-
-const RESOURCE_ICON: Record<string, string> = {
-  wood: '🪵',
-  brick: '🧱',
-  sheep: '🐑',
-  wheat: '🌾',
-  ore: '⛰',
-};
+import { playerColor } from './PlayerStrip';
+import { DEV_META, RESOURCE_META } from './resourceArt';
 
 function describe(event: GameEvent, names: string[]): string {
   const name = (seat: number | null | undefined): string =>
-    seat === null || seat === undefined ? '?' : (names[seat] ?? `P${seat}`);
+    seat === null || seat === undefined ? 'Nobody' : (names[seat] ?? `P${seat + 1}`);
+  const res = (r: keyof typeof RESOURCE_META): string => RESOURCE_META[r].label.toLowerCase();
   switch (event.type) {
-    case 'gameStarted': return `Game started (${event.playerCount} players)`;
-    case 'setupPlaced': return `${name(event.seat)} placed a settlement${event.second ? ' (2nd)' : ''}`;
-    case 'rolled': return `${name(event.seat)} rolled ${event.die1}+${event.die2} = ${event.die1 + event.die2}`;
-    case 'produced': return `${name(event.seat)} +${event.amount} ${RESOURCE_ICON[event.resource] ?? event.resource}${event.resource}`;
-    case 'bankShortage': return `Bank out of ${event.resource} — nobody receives`;
+    case 'gameStarted': return `Game started with ${event.playerCount} players`;
+    case 'setupPlaced': return `${name(event.seat)} placed a ${event.second ? 'second ' : ''}settlement and road`;
+    case 'rolled': return `${name(event.seat)} rolled ${event.die1} + ${event.die2} = ${event.die1 + event.die2}`;
+    case 'produced': return `${name(event.seat)} got ${event.amount} ${res(event.resource)}`;
+    case 'bankShortage': return `Bank is out of ${res(event.resource)} — nobody receives`;
     case 'roadBuilt': return `${name(event.seat)} built a road${event.free === true ? ' (free)' : ''}`;
     case 'settlementBuilt': return `${name(event.seat)} built a settlement`;
-    case 'cityBuilt': return `${name(event.seat)} upgraded a city`;
-    case 'devCardBought': return `${name(event.seat)} bought a dev card`;
-    case 'devCardPlayed': return `${name(event.seat)} played ${event.cardType}`;
-    case 'robberMoved': return `Robber moved by ${name(event.seat)}`;
-    case 'stolenFrom': return `${name(event.seat)} stole from ${name(event.victim)}`;
+    case 'cityBuilt': return `${name(event.seat)} upgraded to a city`;
+    case 'devCardBought': return `${name(event.seat)} bought a development card`;
+    case 'devCardPlayed': {
+      const label = (DEV_META as Record<string, { label: string } | undefined>)[event.cardType]?.label ?? event.cardType;
+      return `${name(event.seat)} played ${label}`;
+    }
+    case 'robberMoved': return `${name(event.seat)} moved the robber`;
+    case 'stolenFrom':
+      return `${name(event.seat)} stole ${event.resource !== null ? `1 ${res(event.resource)}` : 'a card'} from ${name(event.victim)}`;
     case 'discardRequired': return `${name(event.seat)} must discard ${event.count}`;
-    case 'discarded': return `${name(event.seat)} discarded`;
+    case 'discarded': return `${name(event.seat)} discarded cards`;
     case 'tradeOffered': return `${name(event.proposer)} offered a trade`;
-    case 'tradeCountered': return `${name(event.proposer)} countered`;
-    case 'tradeCompleted': return `Trade: ${name(event.from)} ↔ ${name(event.to)}`;
-    case 'tradeDeclined': return `${name(event.responder)} declined`;
+    case 'tradeCountered': return `${name(event.proposer)} made a counter-offer`;
+    case 'tradeCompleted': return `${name(event.from)} traded with ${name(event.to)}`;
+    case 'tradeDeclined': return `${name(event.responder)} declined the trade`;
     case 'tradeCancelled': return `${name(event.by)} cancelled a trade`;
-    case 'bankTraded': return `${name(event.seat)} traded with the bank`;
-    case 'longestRoadChanged': return `Longest Road (${event.length}) → ${name(event.to)}`;
-    case 'largestArmyChanged': return `Largest Army (${event.knights}⚔) → ${name(event.to)}`;
-    case 'specialBuildActivated': return `${name(event.seat)} special build window`;
-    case 'specialBuildDone': return `${name(event.seat)} finished building`;
-    case 'turnStarted': return `— ${name(event.seat)}'s turn ${event.turn} —`;
-    case 'turnEnded': return `${name(event.seat)} ended turn`;
-    case 'timedOut': return `${name(event.seat)} timed out (${event.autoAction})`;
-    case 'victory': return `🎉 ${name(event.seat)} wins with ${event.vp} VP!`;
+    case 'bankTraded': return `${name(event.seat)} traded ${event.giveAmount} ${res(event.give)} for 1 ${res(event.receive)}`;
+    case 'longestRoadChanged': return `${name(event.to)} holds Longest Road (${event.length})`;
+    case 'largestArmyChanged': return `${name(event.to)} holds Largest Army (${event.knights})`;
+    case 'specialBuildActivated': return `${name(event.seat)} may special-build`;
+    case 'specialBuildDone': return `${name(event.seat)} finished special building`;
+    case 'turnStarted': return `${name(event.seat)}'s turn ${event.turn}`;
+    case 'turnEnded': return `${name(event.seat)} ended their turn`;
+    case 'timedOut': return `${name(event.seat)} ran out of time (${event.autoAction})`;
+    case 'victory': return `${name(event.seat)} wins with ${event.vp} VP!`;
     default: return (event as { type: string }).type;
   }
 }
 
-export function EventLog(): React.JSX.Element {
+function seatOf(event: GameEvent): number | null {
+  if ('seat' in event && typeof event.seat === 'number') return event.seat;
+  if ('proposer' in event) return event.proposer;
+  if ('from' in event && typeof event.from === 'number' && event.type === 'tradeCompleted') return event.from;
+  if ('by' in event) return event.by;
+  if ('responder' in event) return event.responder;
+  return null;
+}
+
+export const EventLog = memo(function EventLog(): React.JSX.Element {
   const log = useStore((s) => s.log);
-  const game = useStore((s) => s.game);
+  const players = useStore((s) => s.game?.players);
   const ref = useRef<HTMLDivElement>(null);
-  const names = game?.players.map((p) => p.name) ?? [];
+  const names = players?.map((p) => p.name) ?? [];
 
   useEffect(() => {
     ref.current?.scrollTo({ top: ref.current.scrollHeight });
-  }, [log]);
+  }, [log.length]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-sky-700/50 bg-[#072644]/90 p-3 shadow-lg" data-testid="event-log">
-      <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-300">Game Log</h3>
-      <div ref={ref} className="min-h-0 flex-1 overflow-y-auto pr-1 text-xs leading-5">
-        {log.slice(-80).map((event, i) => {
-          const seat =
-            'seat' in event
-              ? (event as { seat: number }).seat
-              : 'proposer' in event
-                ? (event as { proposer: number }).proposer
-                : null;
-          const color = seat !== null ? PIECE_COLORS[game?.players[seat]?.color ?? '']?.main : undefined;
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border-2 border-line bg-white" data-testid="event-log">
+      <h3 className="border-b-2 border-line bg-parchment px-3 py-1.5 text-sm font-bold text-ink">Game log</h3>
+      <div ref={ref} className="min-h-0 flex-1 overflow-y-auto px-2 py-1 text-xs leading-5 text-ink">
+        {log.length === 0 ? <p className="py-1 text-ink-soft italic">Game events will appear here…</p> : null}
+        {log.slice(-120).map((event, i) => {
+          const seat = seatOf(event);
+          const p = seat !== null ? players?.[seat] : undefined;
+          const turnLine = event.type === 'turnStarted';
           return (
-            <p key={i} className="py-0.5" style={color !== undefined ? { color } : undefined}>
-              {describe(event, names)}
+            <p
+              key={i}
+              className={`flex items-start gap-1.5 py-0.5 ${turnLine ? 'mt-1 border-t border-line pt-1 font-bold' : ''} ${
+                event.type === 'victory' ? 'font-bold text-[#a15c00]' : ''
+              }`}
+            >
+              <span
+                className="mt-1.5 h-2.5 w-2.5 flex-none rounded-full border border-ink/40"
+                style={{ background: p !== undefined ? playerColor(p.color).main : 'transparent' }}
+              />
+              <span className="min-w-0 break-words">{describe(event, names)}</span>
             </p>
           );
         })}
       </div>
     </div>
   );
-}
+});

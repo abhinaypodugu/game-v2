@@ -14,7 +14,15 @@ export type Terrain =
 
 export type DevCardType = 'knight' | 'victoryPoint' | 'roadBuilding' | 'monopoly' | 'yearOfPlenty';
 
-export type PlayerColor = 'red' | 'blue' | 'orange' | 'white' | 'green' | 'brown';
+export type PlayerColor =
+  | 'red'
+  | 'blue'
+  | 'orange'
+  | 'white'
+  | 'green'
+  | 'brown'
+  | 'purple'
+  | 'pink';
 export const PLAYER_COLORS: readonly PlayerColor[] = [
   'red',
   'blue',
@@ -22,6 +30,8 @@ export const PLAYER_COLORS: readonly PlayerColor[] = [
   'white',
   'green',
   'brown',
+  'purple',
+  'pink',
 ] as const;
 
 /** Pips printed on number tokens = ways to roll that number out of 36. */
@@ -74,9 +84,16 @@ export const BUILD_COSTS = {
 
 export const PIECE_LIMITS = { roads: 15, settlements: 5, cities: 4 } as const;
 
-export const WIN_VP = 10;
+export interface GameRules {
+  /** Victory points needed to win (checked on the acting player's own turn). */
+  victoryPointsToWin: number;
+  /** On a 7, players holding MORE than this many cards discard half. */
+  discardLimit: number;
+}
 
-export type BoardConfigKey = 'base' | 'ext56';
+export const DEFAULT_RULES: Readonly<GameRules> = { victoryPointsToWin: 10, discardLimit: 7 };
+
+export type BoardConfigKey = 'base' | 'ext56' | 'ext78';
 
 export interface BoardConfig {
   key: BoardConfigKey;
@@ -87,7 +104,7 @@ export interface BoardConfig {
   /** Number tokens for all non-desert hexes (includes duplicates). */
   tokens: readonly number[];
   /** Harbor types: specialty 2:1 per listed resource + N generic 3:1. */
-  specialtyHarbors: readonly Resource[]; // one entry per specialty harbor (ext56 repeats 'sheep')
+  specialtyHarbors: readonly Resource[]; // one entry per specialty harbor (extensions repeat resources)
   genericHarbors: number;
   resourceBank: number; // per resource
   devDeck: Readonly<Record<DevCardType, number>>;
@@ -133,10 +150,34 @@ export const BOARD_CONFIGS: Record<BoardConfigKey, BoardConfig> = {
     resourceBank: 24,
     devDeck: { knight: 20, victoryPoint: 5, roadBuilding: 3, monopoly: 3, yearOfPlenty: 3 },
   },
+  ext78: {
+    key: 'ext78',
+    minPlayers: 7,
+    maxPlayers: 8,
+    terrains: [
+      'forest', 'forest', 'forest', 'forest', 'forest', 'forest', 'forest',
+      'hills', 'hills', 'hills', 'hills', 'hills', 'hills', 'hills',
+      'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture', 'pasture',
+      'fields', 'fields', 'fields', 'fields', 'fields', 'fields', 'fields',
+      'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains', 'mountains',
+      'desert', 'desert',
+    ],
+    tokens: [
+      2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6,
+      8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12,
+    ],
+    specialtyHarbors: ['wood', 'brick', 'sheep', 'wheat', 'ore', 'sheep', 'wood'],
+    genericHarbors: 6,
+    resourceBank: 29,
+    devDeck: { knight: 26, victoryPoint: 6, roadBuilding: 4, monopoly: 4, yearOfPlenty: 4 },
+  },
 } as const;
 
+/** Board config by seat count: 3-4 base, 5-6 ext56, 7-8 ext78. */
 export function boardConfigForPlayers(playerCount: number): BoardConfig {
-  return playerCount >= 5 ? BOARD_CONFIGS.ext56 : BOARD_CONFIGS.base;
+  if (playerCount >= 7) return BOARD_CONFIGS.ext78;
+  if (playerCount >= 5) return BOARD_CONFIGS.ext56;
+  return BOARD_CONFIGS.base;
 }
 
 /** Terrain -> produced resource (desert maps to null). */

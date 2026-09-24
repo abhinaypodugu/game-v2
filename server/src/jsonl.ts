@@ -4,6 +4,7 @@ import { createWriteStream, type WriteStream } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { GameEvent } from '@catan/shared';
+import type { GameLogSink } from '@catan/host';
 
 export interface JsonlLine {
   seq: number;
@@ -14,7 +15,7 @@ export interface JsonlLine {
   payload: unknown;
 }
 
-export class GameLog {
+export class GameLog implements GameLogSink {
   private streams = new Map<string, WriteStream>();
   private seqs = new Map<string, number>();
   private dir: string;

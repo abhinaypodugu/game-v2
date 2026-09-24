@@ -63,11 +63,11 @@ describe('base board topology (radius-2 hexagon)', () => {
 });
 
 describe('ext56 board topology (3-4-5-6-5-4-3 rows)', () => {
-  it('has exactly 30 hexes, 81 vertices, 110 edges, 40 border edges', () => {
+  it('has exactly 30 hexes, 80 vertices, 109 edges, 38 border edges', () => {
     expect(EXT56.hexes.length).toBe(30);
-    expect(EXT56.vertices.length).toBe(81);
-    expect(EXT56.edges.length).toBe(110);
-    expect(EXT56.borderEdges.length).toBe(40);
+    expect(EXT56.vertices.length).toBe(80);
+    expect(EXT56.edges.length).toBe(109);
+    expect(EXT56.borderEdges.length).toBe(38);
   });
 
   it('satisfies Euler disc invariant', () => {
@@ -89,6 +89,17 @@ describe('ext56 board topology (3-4-5-6-5-4-3 rows)', () => {
     }
     const widths = [...rows.entries()].sort((a, b) => a[0] - b[0]).map(([, w]) => w);
     expect(widths).toEqual([3, 4, 5, 6, 5, 4, 3]);
+  });
+
+  it('every row is centred on the same x (no skewed half)', () => {
+    const sums = new Map<number, { x: number; n: number }>();
+    for (const h of EXT56.hexes) {
+      const [q, r] = h.split(',').map(Number) as [number, number];
+      const acc = sums.get(r) ?? { x: 0, n: 0 };
+      sums.set(r, { x: acc.x + q + r / 2, n: acc.n + 1 });
+    }
+    const centres = new Set([...sums.values()].map(({ x, n }) => x / n));
+    expect(centres.size).toBe(1);
   });
 });
 

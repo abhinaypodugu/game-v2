@@ -3,11 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "packageManager": "pnpm@12.6.0",
   "engines": {
     "node": ">=22.12"
   },
   "scripts": {
     "dev": "pnpm --filter catan-server --filter catan-client --parallel dev",
+    "build": "pnpm --filter catan-client build",
+    "start": "pnpm --filter catan-server start",
     "test": "pnpm -r test",
     "lint": "eslint .",
     "typecheck": "pnpm -r typecheck"

@@ -3,13 +3,15 @@
 // are all derived from the seed.
 
 import {
-  BOARD_CONFIGS,
+  boardConfigForPlayers,
+  type BoardConfig,
   type BoardConfigKey,
   type Resource,
   type Terrain,
 } from './constants';
 import { createRng } from './rng';
 import {
+  type Axial,
   bigBoard,
   buildTopology,
   edgeOf,
@@ -46,7 +48,14 @@ export interface Board {
   seed: string;
 }
 
-export type PlayerCount = 3 | 4 | 5 | 6;
+export type PlayerCount = 3 | 4 | 5 | 6 | 7 | 8;
+
+/** Hex layout per board config: 19-hex, 30-hex extension, 37-hex radius-3. */
+function shapeFor(key: BoardConfigKey): Axial[] {
+  if (key === 'ext78') return hexagon(3);
+  if (key === 'ext56') return bigBoard();
+  return hexagon(2);
+}
 
 function isHot(token: number): boolean {
   return token === 6 || token === 8;
@@ -64,27 +73,47 @@ function tokensHaveAdjacentHot(topology: Topology, assignment: Record<HexId, num
   return false;
 }
 
-/** Deterministic fallback: fixed-order token assignment (official-style spiral). */
-function fixedOrderTokens(
+/**
+ * Deterministic constructive fallback: place 6/8 tokens first on a randomly
+ * grown independent set of hexes, then fill the rest. Always yields a valid
+ * assignment for every shipped config (hot tokens are far fewer than the
+ * board's independence number).
+ */
+function constructiveTokens(
   topology: Topology,
   terrains: Record<HexId, Terrain>,
-  config: typeof BOARD_CONFIGS.base,
+  config: BoardConfig,
+  seed: string,
 ): Record<HexId, number> {
-  const tokens = [...config.tokens];
-  const assignment: Record<HexId, number> = {};
-  let i = 0;
-  for (const h of topology.hexes) {
-    if (terrains[h] === 'desert') continue;
-    assignment[h] = tokens[i]!;
-    i++;
+  const hot = config.tokens.filter(isHot);
+  const cold = config.tokens.filter((t) => !isHot(t));
+  const landHexes = topology.hexes.filter((h) => terrains[h] !== 'desert');
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const rng = createRng(`${seed}:fallback#${attempt}`);
+    const order = rng.shuffle(landHexes);
+    const hotHexes = new Set<HexId>();
+    for (const h of order) {
+      if (hotHexes.size === hot.length) break;
+      if (topology.hexNeighbors[h]!.some((n) => hotHexes.has(n))) continue;
+      hotHexes.add(h);
+    }
+    if (hotHexes.size < hot.length) continue;
+    const hotTokens = rng.shuffle(hot);
+    const coldTokens = rng.shuffle(cold);
+    const assignment: Record<HexId, number> = {};
+    let hi = 0;
+    let ci = 0;
+    for (const h of landHexes) {
+      assignment[h] = hotHexes.has(h) ? hotTokens[hi++]! : coldTokens[ci++]!;
+    }
+    return assignment;
   }
-  return assignment;
+  throw new Error(`no valid 6/8 token layout for config ${config.key}`);
 }
 
 export function generateBoard(playerCount: PlayerCount, seed: string): Board {
-  const config = playerCount >= 5 ? BOARD_CONFIGS.ext56 : BOARD_CONFIGS.base;
-  const shape = playerCount >= 5 ? bigBoard() : hexagon(2);
-  const topology = buildTopology(shape);
+  const config = boardConfigForPlayers(playerCount);
+  const topology = buildTopology(shapeFor(config.key));
 
   // --- Terrain assignment: shuffled multiset over canonical hex order ---
   const terrainRng = createRng(`${seed}:terrain`);
@@ -113,8 +142,8 @@ export function generateBoard(playerCount: PlayerCount, seed: string): Board {
     attempt++;
   }
   if (tokens === null) {
-    // Deterministic fallback (validated in tests for both configs).
-    tokens = fixedOrderTokens(topology, terrains, config);
+    // Constructive fallback: always valid (defended by board tests).
+    tokens = constructiveTokens(topology, terrains, config, seed);
   }
 
   const hexes: Record<HexId, BoardHex> = {};

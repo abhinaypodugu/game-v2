@@ -9,14 +9,19 @@ import {
   legalSettlementVertices,
 } from '../rules/legal';
 import type { EdgeId, VertexId } from '../topology';
+import type { PlayerCount } from '../board';
+import { PLAYER_COLORS, type GameRules, type PlayerColor } from '../constants';
 
-export function makePlayers(n: number): Array<{ seat: number; name: string; color: 'red' | 'blue' | 'orange' | 'white' | 'green' }> {
-  const colors = ['red', 'blue', 'orange', 'white', 'green'] as const;
-  return Array.from({ length: n }, (_, i) => ({ seat: i, name: `P${i}`, color: colors[i]! }));
+export function makePlayers(n: number): Array<{ seat: number; name: string; color: PlayerColor }> {
+  return Array.from({ length: n }, (_, i) => ({ seat: i, name: `P${i}`, color: PLAYER_COLORS[i]! }));
 }
 
-export function newGame(playerCount: 3 | 4 | 5 | 6, seed = 'test-seed'): GameState {
-  return createGame({ playerCount, players: makePlayers(playerCount), seed });
+export function newGame(
+  playerCount: PlayerCount,
+  seed = 'test-seed',
+  rules?: Partial<GameRules>,
+): GameState {
+  return createGame({ playerCount, players: makePlayers(playerCount), seed, ...(rules ? { rules } : {}) });
 }
 
 export function act(

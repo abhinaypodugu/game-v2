@@ -10,15 +10,17 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@catan/host": "workspace:*",
     "@catan/shared": "workspace:*",
     "canvas-confetti": "catalog:",
     "framer-motion": "catalog:",
     "howler": "catalog:",
+    "jsqr": "catalog:",
+    "qrcode": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-zoom-pan-pinch": "catalog:",
     "socket.io-client": "catalog:",
-    "three": "catalog:",
     "zustand": "catalog:"
   },
   "devDependencies": {
@@ -30,9 +32,9 @@
     "@testing-library/react": "catalog:",
     "@testing-library/user-event": "catalog:",
     "@types/canvas-confetti": "catalog:",
+    "@types/qrcode": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@types/three": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",

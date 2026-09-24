@@ -177,17 +177,48 @@ describe('bank & harbor trading', () => {
   });
 
   it('harbor rates: 3:1 generic, 2:1 matching specialty', () => {
-    // Force-own a specialty sheep harbor: place settlement on one endpoint.
     let s = readyTurnState('harbor-seed');
+    // Clear buildings to test precise rate progression from default 4:1
+    s = { ...s, buildings: {} };
+    expect(bestTradeRate(s, 0, 'wood')).toBe(4);
+    expect(bestTradeRate(s, 0, 'sheep')).toBe(4);
+
+    // Force-own a specialty sheep harbor: place settlement on one endpoint.
     const sheepHarborEid = Object.keys(s.board.harbors).find(
       (eid) => s.board.harbors[eid]!.type === 'specialty' && s.board.harbors[eid]!.resource === 'sheep',
     );
     expect(sheepHarborEid).toBeDefined();
     if (sheepHarborEid === undefined) return;
     const [v1] = s.board.topology.edgeEndpoints[sheepHarborEid]!;
-    s = { ...s, buildings: { ...s.buildings, [v1]: { seat: 0, type: 'settlement' } } };
+    s = { ...s, buildings: { [v1]: { seat: 0, type: 'settlement' } } };
     expect(bestTradeRate(s, 0, 'sheep')).toBe(2);
-    expect(bestTradeRate(s, 0, 'wood')).toBeGreaterThanOrEqual(3);
+    expect(bestTradeRate(s, 0, 'wood')).toBe(4);
+
+    // Force-own a generic 3:1 harbor: place settlement on one endpoint.
+    const genericHarborEid = Object.keys(s.board.harbors).find(
+      (eid) => s.board.harbors[eid]!.type === 'generic',
+    );
+    expect(genericHarborEid).toBeDefined();
+    if (genericHarborEid === undefined) return;
+    const [gv1] = s.board.topology.edgeEndpoints[genericHarborEid]!;
+    s = { ...s, buildings: { ...s.buildings, [gv1]: { seat: 0, type: 'settlement' } } };
+    expect(bestTradeRate(s, 0, 'wood')).toBe(3);
+    expect(bestTradeRate(s, 0, 'ore')).toBe(3);
+    expect(bestTradeRate(s, 0, 'sheep')).toBe(2); // Still 2:1 for sheep because of sheep harbor
+
+    // Bank trade with 3 wood for 1 ore should succeed at 3:1 rate
+    s = give(s, 0, { wood: 3 });
+    const rolled = act(s, { type: 'rollDice' }, { rollDice: fixedRoll(1, 1) });
+    expect(rolled.ok).toBe(true);
+    if (!rolled.ok) return;
+    s = rolled.state;
+    const beforeOre = s.players[0]!.resources.ore;
+    const tradeResult = act(s, { type: 'bankTrade', give: 'wood', receive: 'ore' });
+    expect(tradeResult.ok).toBe(true);
+    if (tradeResult.ok) {
+      expect(tradeResult.state.players[0]!.resources.wood).toBe(0);
+      expect(tradeResult.state.players[0]!.resources.ore).toBe(beforeOre + 1);
+    }
   });
 
   it('same-resource trade rejected', () => {
@@ -277,5 +308,88 @@ describe('player trade offers', () => {
     expect(end.ok).toBe(true);
     if (!end.ok) return;
     expect(end.state.trades.find((t) => t.id === offerId)!.status).toBe('cancelled');
+  });
+
+  it('non-active player can accept offer directly using action.seat', () => {
+    let s = readyTurnState('seat-accept-seed');
+    s = give(s, 0, { wood: 2 });
+    s = give(s, 1, { wheat: 2 });
+    const rolled = act(s, { type: 'rollDice' }, { rollDice: fixedRoll(1, 1) });
+    expect(rolled.ok).toBe(true);
+    if (!rolled.ok) return;
+    s = rolled.state;
+    expect(s.activeSeat).toBe(0);
+
+    const offer = act(s, { type: 'tradeOffer', give: { wood: 1 }, receive: { wheat: 1 } });
+    expect(offer.ok).toBe(true);
+    if (!offer.ok) return;
+    s = offer.state;
+    const offerId = s.trades.at(-1)!.id;
+
+    const p1BeforeWood = s.players[1]!.resources.wood;
+    // Seat 1 accepts without mutating s.activeSeat
+    const accept = act(s, { type: 'tradeRespond', offerId, response: 'accept', seat: 1 });
+    expect(accept.ok).toBe(true);
+    if (!accept.ok) return;
+    expect(accept.state.players[0]!.resources.wood).toBe(1);
+    expect(accept.state.players[0]!.resources.wheat).toBe(1);
+    expect(accept.state.players[1]!.resources.wheat).toBe(1);
+    expect(accept.state.players[1]!.resources.wood).toBe(p1BeforeWood + 1);
+  });
+
+  it('non-active player can counter offer using action.seat', () => {
+    let s = readyTurnState('seat-counter-seed');
+    s = give(s, 0, { wood: 2 });
+    s = give(s, 2, { ore: 2 });
+    const rolled = act(s, { type: 'rollDice' }, { rollDice: fixedRoll(1, 1) });
+    expect(rolled.ok).toBe(true);
+    if (!rolled.ok) return;
+    s = rolled.state;
+
+    const offer = act(s, { type: 'tradeOffer', give: { wood: 1 }, receive: { ore: 1 } });
+    expect(offer.ok).toBe(true);
+    if (!offer.ok) return;
+    s = offer.state;
+    const offerId = s.trades.at(-1)!.id;
+
+    const counter = act(s, {
+      type: 'tradeCounter',
+      offerId,
+      seat: 2,
+      give: { ore: 1 },
+      receive: { wood: 2 },
+    });
+    expect(counter.ok).toBe(true);
+    if (!counter.ok) return;
+    const counterTrade = counter.state.trades.at(-1)!;
+    expect(counterTrade.proposer).toBe(2);
+    expect(counterTrade.counterOf).toBe(offerId);
+  });
+
+  it('multiple players discard independently using action.seat', () => {
+    let s = readyTurnState('multi-discard-seed');
+    s = give(s, 0, { wood: 8 }); // 8 cards -> must discard 4
+    s = give(s, 1, { brick: 10 }); // 10 cards -> must discard 5
+    const rolled = act(s, { type: 'rollDice' }, { rollDice: fixedRoll(3, 4) }); // 7 rolled!
+    expect(rolled.ok).toBe(true);
+    if (!rolled.ok) return;
+    s = rolled.state;
+    expect(s.phase).toBe('discard');
+    expect(s.pendingDiscards).toHaveLength(2);
+
+    const req1 = s.pendingDiscards.find((d) => d.seat === 1)!.count;
+    const req0 = s.pendingDiscards.find((d) => d.seat === 0)!.count;
+
+    // Seat 1 discards first (out of order from pendingDiscards array)
+    const d1 = act(s, { type: 'discard', seat: 1, resources: { brick: req1 } });
+    expect(d1.ok).toBe(true);
+    if (!d1.ok) return;
+    expect(d1.state.phase).toBe('discard'); // still waiting for seat 0
+
+    // Seat 0 discards second
+    const d0 = act(d1.state, { type: 'discard', seat: 0, resources: { wood: req0 } });
+    expect(d0.ok).toBe(true);
+    if (!d0.ok) return;
+    expect(d0.state.phase).toBe('robberMove'); // all discards completed!
   });
 });

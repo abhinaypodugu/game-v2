@@ -13,12 +13,10 @@ import type { EdgeId, HexId } from './topology';
 export const resourceSchema = z.enum(['wood', 'brick', 'sheep', 'wheat', 'ore']);
 /**
  * Partial resource bag over the wire: keys are resources, values non-negative.
- * All 5 keys are optional individually; the reducer validates sums.
+ * All 5 keys are optional individually (zod 4 `record` with enum keys would
+ * demand every key); the reducer validates sums.
  */
-export const resourceBagSchema = z.record(
-  resourceSchema,
-  z.number().int().nonnegative(),
-) as unknown as z.ZodType<Partial<Record<'wood' | 'brick' | 'sheep' | 'wheat' | 'ore', number>>>;
+export const resourceBagSchema = z.partialRecord(resourceSchema, z.number().int().nonnegative());
 
 export const gameActionSchema = z.discriminatedUnion('type', [
   z.object({
@@ -38,13 +36,17 @@ export const gameActionSchema = z.discriminatedUnion('type', [
       .object({
         resources: z.array(resourceSchema).max(2).optional(), // year of plenty
         resource: resourceSchema.optional(), // monopoly
-        edges: z.array(z.string()).length(2).optional(), // road building
+        edges: z.array(z.string()).min(1).max(2).optional(), // road building (1 only when a 2nd is impossible)
       })
       .optional(),
   }),
   z.object({ type: z.literal('moveRobber'), hex: z.string() }),
   z.object({ type: z.literal('chooseSteal'), victimSeat: z.number().int().nonnegative() }),
-  z.object({ type: z.literal('discard'), resources: resourceBagSchema }),
+  z.object({
+    type: z.literal('discard'),
+    seat: z.number().int().nonnegative().optional(),
+    resources: resourceBagSchema,
+  }),
   z.object({
     type: z.literal('bankTrade'),
     give: resourceSchema,
@@ -58,11 +60,13 @@ export const gameActionSchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('tradeRespond'),
+    seat: z.number().int().nonnegative().optional(),
     offerId: z.string(),
     response: z.enum(['accept', 'decline']),
   }),
   z.object({
     type: z.literal('tradeCounter'),
+    seat: z.number().int().nonnegative().optional(),
     offerId: z.string(),
     give: resourceBagSchema,
     receive: resourceBagSchema,

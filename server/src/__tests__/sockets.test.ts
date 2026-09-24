@@ -9,10 +9,8 @@ import { join } from 'node:path';
 import { Server } from 'socket.io';
 import { io as clientIo, type Socket as ClientSocket } from 'socket.io-client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { RoomManager, registerSocketHandlers, type PersonalSnapshot, type ServerContext } from '@catan/host';
 import { GameLog } from '../jsonl';
-import { RoomManager } from '../rooms';
-import { registerSocketHandlers, type ServerContext } from '../sockets';
-import type { PersonalSnapshot } from '../sanitize';
 
 interface Harness {
   io: Server;
@@ -115,8 +113,14 @@ async function createAndJoin(h: Harness, names: string[]): Promise<{ host: Clien
 interface RoomStatePayload {
   roomCode: string;
   host: number;
-  players: Array<{ seatIndex: number; name: string; color: string | null; ready: boolean; connected: boolean }>;
-  settings: { maxPlayers: number; turnTimerSec: number; diceMode: string };
+  players: Array<{ seatIndex: number; name: string; color: string | null; ready: boolean; connected: boolean; isBot?: boolean }>;
+  settings: {
+    maxPlayers: number;
+    turnTimerSec: number;
+    diceMode: string;
+    victoryPointsToWin: number;
+    discardLimit: number;
+  };
   seed: string;
   started: boolean;
 }
@@ -391,6 +395,51 @@ describe('anti-trust', () => {
   );
 });
 
+describe('discard after a seven (through the real socket path)', () => {
+  it(
+    'accepts a discard that lists only the chosen resources, as the phone sends it',
+    { timeout: 20000 },
+    async () => {
+      const h = harness!;
+      const { host, guests, code } = await createAndJoin(h, ['DisA', 'DisB', 'DisC']);
+      const players = [host, ...guests];
+      await pickColors(players);
+      await readyAll(players);
+      await startGame(host, players);
+
+      // Put the room into a discard: seat 1 holds 8 wood and owes 4.
+      const game = h.ctx.rooms.getRoom(code)!.game!;
+      const seat = guests[0]!.seatIndex;
+      game.state = {
+        ...game.state,
+        phase: 'discard',
+        pendingDiscards: [{ seat, count: 4, received: false }],
+        players: game.state.players.map((p) =>
+          p.seat === seat ? { ...p, resources: { wood: 8, brick: 0, sheep: 0, wheat: 0, ore: 0 } } : p,
+        ),
+      };
+
+      // Earlier broadcasts (setup) may still be in flight: wait for the robber
+      // step, or fail fast with the server's rejection reason.
+      const nextP = new Promise<PersonalSnapshot>((resolve, reject) => {
+        const onState = (snap: PersonalSnapshot): void => {
+          if (snap.phase !== 'robberMove') return;
+          guests[0]!.socket.off('game:state', onState);
+          resolve(snap);
+        };
+        guests[0]!.socket.on('game:state', onState);
+        guests[0]!.socket.once('error', (e: { message: string }) => reject(new Error(`rejected: ${e.message}`)));
+      });
+      guests[0]!.socket.emit('game:action', { type: 'discard', resources: { wood: 4 } });
+      const next = await nextP;
+
+      expect(next.you.resources.wood).toBe(4);
+
+      for (const p of players) p.socket.disconnect();
+    },
+  );
+});
+
 describe('sanitizer', () => {
   it(
     'snapshots expose counts, not other hands',
@@ -417,4 +466,156 @@ describe('sanitizer', () => {
       for (const p of players) p.socket.disconnect();
     },
   );
+});
+
+describe('bot players & lifecycle', () => {
+  it(
+    'adds bots, starts game with bots, and bots take turns automatically',
+    { timeout: 25000 },
+    async () => {
+      const h = harness!;
+      const host = await createRoom(h, 'SoloHost');
+
+      // Add bot 1
+      const s1Promise = waitFor<RoomStatePayload>(host.socket, 'room:state');
+      host.socket.emit('room:addBot');
+      const s1 = await s1Promise;
+      expect(s1.players).toHaveLength(2);
+      expect(s1.players[1]!.isBot).toBe(true);
+      expect(s1.players[1]!.ready).toBe(true);
+      expect(s1.players[1]!.color).not.toBeNull();
+
+      // Add bot 2
+      const s2Promise = waitFor<RoomStatePayload>(host.socket, 'room:state');
+      host.socket.emit('room:addBot');
+      const s2 = await s2Promise;
+      expect(s2.players).toHaveLength(3);
+      expect(s2.players[2]!.isBot).toBe(true);
+
+      // Host picks remaining color and readies
+      const available = ['red', 'blue', 'orange', 'white'].find(
+        (c) => c !== s2.players[1]!.color && c !== s2.players[2]!.color,
+      )!;
+      const cPromise = waitFor<RoomStatePayload>(host.socket, 'room:state');
+      host.socket.emit('room:pickColor', { color: available });
+      await cPromise;
+
+      const rPromise = waitFor<RoomStatePayload>(host.socket, 'room:state');
+      host.socket.emit('room:setReady', { ready: true });
+      await rPromise;
+
+      // Start game
+      const startPromise = waitFor<{ roomCode: string }>(host.socket, 'room:started');
+      const initialSnapPromise = nextGameState(host.socket);
+      host.socket.emit('room:start');
+      await startPromise;
+      const initialSnap = await initialSnapPromise;
+
+      expect(initialSnap.phase).toBe('setupForward');
+      expect(initialSnap.activeSeat).toBe(0);
+
+      // Host places first settlement and road
+      const vertex = Object.keys(initialSnap.board.topology.vertexPos).map(Number)[0]!;
+      const edge = initialSnap.board.topology.vertexEdges[vertex]![0]!;
+
+      const afterHostSnapPromise = nextGameState(host.socket);
+      host.socket.emit('game:action', {
+        type: 'setupPlace',
+        settlementVertex: vertex,
+        roadEdge: edge,
+      });
+      const afterHostSnap = await afterHostSnapPromise;
+      expect(afterHostSnap.buildings[vertex]).toBeDefined();
+
+      // Now activeSeat is bot 1. Bot should take turn automatically!
+      const bot1Snap = await nextGameState(host.socket);
+      expect(Object.keys(bot1Snap.buildings).length).toBeGreaterThan(1);
+
+      host.socket.disconnect();
+    },
+  );
+});
+
+describe('room settings: player count and rule variants', () => {
+  it('RoomManager validates ranges all-or-nothing and seats up to 8 bots with distinct colours', () => {
+    const rooms = new RoomManager();
+    const room = rooms.createRoom('Host');
+    expect(room.settings).toMatchObject({ maxPlayers: 4, victoryPointsToWin: 10, discardLimit: 7 });
+
+    expect(rooms.updateSettings(room.code, 0, { maxPlayers: 9 })).toEqual({ error: 'BAD_MAX_PLAYERS' });
+    expect(rooms.updateSettings(room.code, 0, { maxPlayers: 2 })).toEqual({ error: 'BAD_MAX_PLAYERS' });
+    expect(rooms.updateSettings(room.code, 0, { victoryPointsToWin: 2 })).toEqual({ error: 'BAD_VICTORY_POINTS' });
+    expect(rooms.updateSettings(room.code, 0, { victoryPointsToWin: 21 })).toEqual({ error: 'BAD_VICTORY_POINTS' });
+    expect(rooms.updateSettings(room.code, 0, { discardLimit: 4 })).toEqual({ error: 'BAD_DISCARD_LIMIT' });
+    expect(rooms.updateSettings(room.code, 0, { discardLimit: 21 })).toEqual({ error: 'BAD_DISCARD_LIMIT' });
+    // A bad field rejects the whole patch.
+    expect(rooms.updateSettings(room.code, 0, { maxPlayers: 8, discardLimit: 30 })).toEqual({ error: 'BAD_DISCARD_LIMIT' });
+    expect(room.settings).toMatchObject({ maxPlayers: 4, victoryPointsToWin: 10, discardLimit: 7 });
+
+    expect(rooms.updateSettings(room.code, 0, { maxPlayers: 8, victoryPointsToWin: 20, discardLimit: 5 })).toEqual({ ok: true });
+    for (let i = 0; i < 7; i++) expect(rooms.addBot(room.code, 0)).toMatchObject({ ok: true });
+    expect(rooms.addBot(room.code, 0)).toEqual({ error: 'ROOM_FULL' });
+    const botColors = room.seats.slice(1).map((st) => st.color);
+    expect(new Set(botColors).size).toBe(7);
+    expect(RoomManager.availableColors(room)).toHaveLength(1);
+    expect(rooms.updateSettings(room.code, 0, { maxPlayers: 7 })).toEqual({ error: 'MAX_BELOW_SEATS' });
+  });
+
+  it(
+    'room:state exposes rule settings, drops out-of-range patches, and the game uses them',
+    { timeout: 20000 },
+    async () => {
+      const h = harness!;
+      const host = await createRoom(h, 'RulesHost');
+
+      const setP = waitRoomStateWhere(host.socket, (st) => st.settings.maxPlayers === 8);
+      host.socket.emit('room:updateSettings', { maxPlayers: 8, victoryPointsToWin: 6, discardLimit: 9 });
+      const set = await setP;
+      expect(set.settings).toMatchObject({ maxPlayers: 8, victoryPointsToWin: 6, discardLimit: 9 });
+
+      // Out-of-range patches fail schema validation; a later valid patch
+      // proves they were processed (in order) without effect.
+      host.socket.emit('room:updateSettings', { victoryPointsToWin: 21 });
+      host.socket.emit('room:updateSettings', { discardLimit: 4 });
+      host.socket.emit('room:updateSettings', { maxPlayers: 9 });
+      const afterP = waitRoomStateWhere(host.socket, (st) => st.settings.turnTimerSec === 60);
+      host.socket.emit('room:updateSettings', { turnTimerSec: 60 });
+      const after = await afterP;
+      expect(after.settings).toMatchObject({ maxPlayers: 8, victoryPointsToWin: 6, discardLimit: 9 });
+
+      for (let i = 0; i < 2; i++) {
+        const botP = waitRoomStateWhere(host.socket, (st) => st.players.length === i + 2);
+        host.socket.emit('room:addBot');
+        await botP;
+      }
+      const colorP = waitRoomStateWhere(host.socket, (st) => st.players[0]!.color === 'pink');
+      host.socket.emit('room:pickColor', { color: 'pink' });
+      await colorP;
+      const readyP = waitRoomStateWhere(host.socket, (st) => st.players[0]!.ready);
+      host.socket.emit('room:setReady', { ready: true });
+      await readyP;
+
+      const snapP = nextGameState(host.socket);
+      host.socket.emit('room:start');
+      const snap = await snapP;
+      expect(snap.rules).toEqual({ victoryPointsToWin: 6, discardLimit: 9 });
+      expect(snap.config).toBe('base');
+
+      host.socket.disconnect();
+    },
+  );
+
+  it('room:boardPreview uses the ext78 board when maxPlayers is 7-8', { timeout: 10000 }, async () => {
+    const h = harness!;
+    const host = await createRoom(h, 'PreviewHost');
+    const setP = waitRoomStateWhere(host.socket, (st) => st.settings.maxPlayers === 7);
+    host.socket.emit('room:updateSettings', { maxPlayers: 7 });
+    await setP;
+    const previewP = waitFor<{ config: string; hexes: Record<string, unknown> }>(host.socket, 'room:boardPreview');
+    host.socket.emit('room:boardPreview');
+    const preview = await previewP;
+    expect(preview.config).toBe('ext78');
+    expect(Object.keys(preview.hexes)).toHaveLength(37);
+    host.socket.disconnect();
+  });
 });

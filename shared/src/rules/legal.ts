@@ -63,9 +63,10 @@ export function canPlaceCity(state: GameState, seat: number, vertex: VertexId): 
  * Placement rule: the edge must be empty and at least one endpoint must
  * touch the player's network (own building on that vertex OR own road
  * through it). Opponent buildings on a vertex do NOT forbid placement —
- * they only sever longest-road computation.
+ * they only sever longest-road computation. `free` roads (Road Building)
+ * skip the cost check.
  */
-export function canPlaceRoad(state: GameState, seat: number, edge: EdgeId): boolean {
+export function canPlaceRoad(state: GameState, seat: number, edge: EdgeId, free = false): boolean {
   const player = state.players[seat]!;
   if (player.roadsLeft <= 0) return false;
   if (state.roads[edge] !== undefined) return false;
@@ -79,7 +80,7 @@ export function canPlaceRoad(state: GameState, seat: number, edge: EdgeId): bool
     );
   };
   if (!networkAt(a) && !networkAt(b)) return false;
-  return canAfford(player.resources, BUILD_COSTS.road);
+  return free || canAfford(player.resources, BUILD_COSTS.road);
 }
 
 /** Setup road: must touch the settlement placed in the same draft step. */
@@ -112,11 +113,11 @@ export function legalCityVertices(state: GameState, seat: number): VertexId[] {
   return state.board.topology.vertices.filter((v) => canPlaceCity(state, seat, v));
 }
 
-/** All legal road edges for `seat`. */
-export function legalRoadEdges(state: GameState, seat: number): EdgeId[] {
+/** All legal road edges for `seat` (`free`: Road Building, no cost check). */
+export function legalRoadEdges(state: GameState, seat: number, free = false): EdgeId[] {
   return state.board.topology.edges
     .map((e) => (e[0] < e[1] ? `${e[0]}-${e[1]}` : `${e[1]}-${e[0]}`))
-    .filter((eid) => canPlaceRoad(state, seat, eid));
+    .filter((eid) => canPlaceRoad(state, seat, eid, free));
 }
 
 /** Legal robber destinations: any hex except the current robber hex. */
@@ -146,7 +147,7 @@ export function bestTradeRate(state: GameState, seat: number, give: Resource): n
     if (owns) return 2;
   }
   for (const [eid, harbor] of Object.entries(state.board.harbors)) {
-    if (harbor.type !== 'specialty') continue;
+    if (harbor.type !== 'generic') continue;
     const [v1, v2] = topology.edgeEndpoints[eid]!;
     const owns = [v1, v2].some((v) => state.buildings[v]?.seat === seat);
     if (owns) return 3;

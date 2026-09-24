@@ -1,7 +1,7 @@
 // App: routing between home/room/game via the store. Session rejoin from
 // localStorage on mount.
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { bootstrapSessionRejoin, useStore } from './store';
 import { createDemoSnapshot } from './demoState';
 import { HomePage } from './pages/HomePage';
@@ -11,9 +11,11 @@ import { GamePage } from './pages/GamePage';
 export function App(): React.JSX.Element {
   const connect = useStore((s) => s.connect);
   const route = useStore((s) => s.route);
+  const isDemo = window.location.search.includes('demo');
+  const [demoBanner, setDemoBanner] = useState(isDemo);
 
   useEffect(() => {
-    if (window.location.search.includes('demo')) {
+    if (isDemo) {
       const snap = createDemoSnapshot();
       useStore.setState({
         game: snap,
@@ -31,9 +33,25 @@ export function App(): React.JSX.Element {
     }
     bootstrapSessionRejoin();
     connect();
-  }, [connect]);
+  }, [connect, isDemo]);
   return (
-    <div className="min-h-screen bg-[#04182a] text-[#f6f8fa]">
+    <div className="min-h-[100dvh] bg-ocean text-ink">
+      {demoBanner ? (
+        <div className="fixed top-[calc(var(--safe-top)+7.5rem)] left-1/2 z-[55] flex -translate-x-1/2 items-center gap-2 rounded-full border-2 border-line bg-cream py-1 pr-1 pl-3 text-xs font-bold text-ink shadow-lg">
+          <span>Design demo</span>
+          <a href="/" className="rounded-full bg-go px-3 py-1.5 text-xs font-bold text-white">
+            Play real game ➜
+          </a>
+          <button
+            type="button"
+            onClick={() => setDemoBanner(false)}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-parchment"
+            aria-label="Dismiss demo banner"
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
       {route === 'home' ? <HomePage /> : null}
       {route === 'room' ? <RoomPage /> : null}
       {route === 'game' ? <GamePage /> : null}

@@ -2,7 +2,7 @@
 // interfaces; sanitize.ts owns the shapes — duplicated here because the
 // server package must not be a client dependency).
 
-import type { GameEvent, GameState, PlayerColor, Resource } from '@catan/shared';
+import type { BoardConfigKey, GameEvent, GameRules, GameState, PlayerColor, Resource } from '@catan/shared';
 
 export interface PublicPlayer {
   seat: number;
@@ -27,8 +27,9 @@ export interface OwnView {
 
 export interface PersonalSnapshot {
   version: number;
-  config: string;
+  config: BoardConfigKey;
   playerCount: number;
+  rules: GameRules;
   phase: GameState['phase'];
   activeSeat: number;
   specialBuildSeat: number | null;
@@ -44,10 +45,22 @@ export interface PersonalSnapshot {
   pendingDiscards: Array<{ seat: number; count: number; received: boolean }>;
   longestRoad: GameState['longestRoad'];
   largestArmy: GameState['largestArmy'];
+  /** The active player already played a development card this turn. */
+  devCardPlayedThisTurn: boolean;
   winner: number | null;
   players: PublicPlayer[];
   you: OwnView;
 }
+
+export interface RoomSettings {
+  maxPlayers: number;
+  turnTimerSec: number;
+  diceMode: 'random' | 'balanced';
+  victoryPointsToWin: number;
+  discardLimit: number;
+}
+
+export type RoomSettingsPatch = Partial<RoomSettings>;
 
 export interface RoomState {
   roomCode: string;
@@ -58,8 +71,9 @@ export interface RoomState {
     color: PlayerColor | null;
     ready: boolean;
     connected: boolean;
+    isBot?: boolean;
   }>;
-  settings: { maxPlayers: number; turnTimerSec: number; diceMode: 'random' | 'balanced' };
+  settings: RoomSettings;
   seed: string;
   started: boolean;
 }

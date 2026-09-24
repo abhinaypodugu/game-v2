@@ -1,11 +1,17 @@
-// Socket singleton: typed client wrapper over socket.io-client. Same-origin
-// via the vite dev proxy; auto-reconnect built in; resyncs on reconnect.
+// Socket singleton: typed client wrapper over the ACTIVE transport. Online
+// (default) that is socket.io-client — same-origin via the vite dev proxy,
+// auto-reconnect built in, resyncs on reconnect. Offline modes swap in an
+// in-page hub endpoint (host) or a WebRTC data channel (guest) via
+// setTransport(); resetToOnline() swaps socket.io back.
 
 import { io, type Socket } from 'socket.io-client';
 import type { GameAction } from '@catan/shared';
-import type { ErrorInfo, GameEvent, PersonalSnapshot, RoomState, TimerInfo } from './types';
+import type { ClientTransport, TransportListener } from './net/transport';
+import type { ErrorInfo, GameEvent, PersonalSnapshot, RoomSettingsPatch, RoomState, TimerInfo } from './types';
 
 export interface SocketHandlers {
+  onConnect?: () => void;
+  onDisconnect?: () => void;
   onRoomState?: (state: RoomState) => void;
   onRoomCreated?: (payload: { roomCode: string; seatIndex: number; reconnectToken: string }) => void;
   onRoomJoined?: (payload: { roomCode: string; seatIndex: number; reconnectToken: string }) => void;
@@ -16,79 +22,177 @@ export interface SocketHandlers {
   onError?: (err: ErrorInfo) => void;
 }
 
-let socket: Socket | null = null;
+const HANDLER_EVENTS: ReadonlyArray<readonly [keyof SocketHandlers, string]> = [
+  ['onConnect', 'connect'],
+  ['onDisconnect', 'disconnect'],
+  ['onRoomState', 'room:state'],
+  ['onRoomCreated', 'room:created'],
+  ['onRoomJoined', 'room:joined'],
+  ['onRoomStarted', 'room:started'],
+  ['onGameState', 'game:state'],
+  ['onGameEvent', 'game:event'],
+  ['onTimer', 'game:timer'],
+  ['onError', 'error'],
+];
 
+let socket: Socket | null = null;
+/** Offline transport overriding socket.io; null = online. */
+let override: ClientTransport | null = null;
+let handlers: SocketHandlers | null = null;
+/** Transport currently carrying `handlers`. */
+let bound: ClientTransport | null = null;
+/** The app connected online (App mount); resetToOnline() then reconnects socket.io. */
+let onlineWanted = false;
+
+/** The socket.io socket (online transport), created lazily without connecting. */
 export function getSocket(): Socket {
   if (socket === null) {
-    socket = io({ autoConnect: false });
+    // Same-origin by default (Vite proxy in dev, server-served build in prod).
+    // VITE_SERVER_URL points a separately hosted client (e.g. Vercel) at the game server.
+    const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
+    socket = serverUrl ? io(serverUrl, { autoConnect: false }) : io({ autoConnect: false });
   }
   return socket;
 }
 
-export function connectSocket(handlers: SocketHandlers): Socket {
-  const s = getSocket();
-  s.off('room:state');
-  s.off('room:created');
-  s.off('room:joined');
-  s.off('room:started');
-  s.off('game:state');
-  s.off('game:event');
-  s.off('game:timer');
-  s.off('error');
+/** The transport every emitter talks through right now. */
+export function getTransport(): ClientTransport {
+  return override ?? getSocket();
+}
 
-  if (handlers.onRoomState !== undefined) s.on('room:state', handlers.onRoomState);
-  if (handlers.onRoomCreated !== undefined) s.on('room:created', handlers.onRoomCreated);
-  if (handlers.onRoomJoined !== undefined) s.on('room:joined', handlers.onRoomJoined);
-  if (handlers.onRoomStarted !== undefined) s.on('room:started', handlers.onRoomStarted);
-  if (handlers.onGameState !== undefined) s.on('game:state', handlers.onGameState);
-  if (handlers.onGameEvent !== undefined) s.on('game:event', handlers.onGameEvent);
-  if (handlers.onTimer !== undefined) s.on('game:timer', handlers.onTimer);
-  if (handlers.onError !== undefined) s.on('error', handlers.onError);
-  s.connect();
-  return s;
+function detachHandlers(): void {
+  if (bound !== null && handlers !== null) {
+    for (const [key, event] of HANDLER_EVENTS) {
+      const handler = handlers[key];
+      if (handler !== undefined) bound.off(event, handler);
+    }
+  }
+  bound = null;
+}
+
+function attachHandlers(): ClientTransport {
+  const t = getTransport();
+  if (bound === t) return t;
+  detachHandlers();
+  if (handlers !== null) {
+    for (const [key, event] of HANDLER_EVENTS) {
+      const handler = handlers[key];
+      if (handler !== undefined) t.on(event, handler);
+    }
+  }
+  bound = t;
+  return t;
+}
+
+/** Install the store's handlers on the active transport without connecting it. */
+export function setSocketHandlers(next: SocketHandlers): void {
+  detachHandlers();
+  handlers = next;
+  attachHandlers();
+}
+
+export function hasSocketHandlers(): boolean {
+  return handlers !== null;
+}
+
+/** Install handlers and connect the active transport. */
+export function connectSocket(next: SocketHandlers): ClientTransport {
+  setSocketHandlers(next);
+  onlineWanted = true;
+  const t = getTransport();
+  t.connect();
+  return t;
+}
+
+/**
+ * Route all traffic through `t` (offline modes). The previous transport is
+ * disconnected with the handlers already detached, so the store only sees
+ * lifecycle events of the new one. Stops socket.io reconnect attempts.
+ */
+export function setTransport(t: ClientTransport): void {
+  const previous = override ?? socket;
+  if (previous === t) return;
+  detachHandlers();
+  override = t;
+  previous?.disconnect();
+  attachHandlers();
+  t.connect();
+}
+
+/** Stop socket.io and its reconnect attempts ahead of an offline transport. */
+export function disconnectOnline(): void {
+  if (override === null) socket?.disconnect();
+}
+
+/** Drop any offline transport and go back to socket.io, reconnecting it if the app went online. */
+export function resetToOnline(): void {
+  const previous = override;
+  if (previous !== null) {
+    detachHandlers();
+    override = null;
+    previous.disconnect();
+  }
+  // Never used online yet: handlers attach when connectSocket() first runs.
+  if (socket === null) return;
+  const t = attachHandlers();
+  if (onlineWanted && !t.connected) t.connect();
+}
+
+/** One-shot listener on the active transport. */
+export function onceEvent(event: string, handler: (payload?: unknown) => void): void {
+  const t = getTransport();
+  const wrapped: TransportListener = (payload?: unknown) => {
+    t.off(event, wrapped);
+    handler(payload);
+  };
+  t.on(event, wrapped);
 }
 
 // Client -> server emitters
 export function emitCreateRoom(name: string): void {
-  getSocket().emit('room:create', { name });
+  getTransport().emit('room:create', { name });
 }
 
 export function emitJoinRoom(payload: { code: string; name?: string; token?: string }): void {
-  getSocket().emit('room:join', payload);
+  getTransport().emit('room:join', payload);
 }
 
 export function emitLeaveRoom(): void {
-  getSocket().emit('room:leave');
+  getTransport().emit('room:leave');
 }
 
 export function emitSetReady(ready: boolean): void {
-  getSocket().emit('room:setReady', { ready });
+  getTransport().emit('room:setReady', { ready });
 }
 
 export function emitPickColor(color: string): void {
-  getSocket().emit('room:pickColor', { color });
+  getTransport().emit('room:pickColor', { color });
 }
 
-export function emitUpdateSettings(patch: {
-  maxPlayers?: number;
-  turnTimerSec?: number;
-  diceMode?: 'random' | 'balanced';
-}): void {
-  getSocket().emit('room:updateSettings', patch);
+export function emitUpdateSettings(patch: RoomSettingsPatch): void {
+  getTransport().emit('room:updateSettings', patch);
 }
 
 export function emitRegenerateBoard(): void {
-  getSocket().emit('room:regenerateBoard');
+  getTransport().emit('room:regenerateBoard');
 }
 
 export function emitStartGame(): void {
-  getSocket().emit('room:start');
+  getTransport().emit('room:start');
+}
+
+export function emitAddBot(): void {
+  getTransport().emit('room:addBot');
+}
+
+export function emitRemoveBot(seatIndex: number): void {
+  getTransport().emit('room:removeBot', { seatIndex });
 }
 
 export function emitAction(action: GameAction): void {
-  getSocket().emit('game:action', action);
+  getTransport().emit('game:action', action);
 }
 
 export function emitRequestState(): void {
-  getSocket().emit('game:requestState');
+  getTransport().emit('game:requestState');
 }

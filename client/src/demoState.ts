@@ -1,5 +1,5 @@
 // Demo game state for interactive showcase and visual verification.
-import { generateBoard } from '@catan/shared';
+import { DEFAULT_RULES, generateBoard } from '@catan/shared';
 import type { PersonalSnapshot } from './types';
 
 export function createDemoSnapshot(): PersonalSnapshot {
@@ -12,6 +12,7 @@ export function createDemoSnapshot(): PersonalSnapshot {
     version: 1,
     config: 'base',
     playerCount: 4,
+    rules: { ...DEFAULT_RULES },
     phase: 'turnMain',
     activeSeat: 0,
     specialBuildSeat: null,
@@ -46,6 +47,7 @@ export function createDemoSnapshot(): PersonalSnapshot {
     pendingDiscards: [],
     longestRoad: { holder: 0, length: 5 },
     largestArmy: { holder: 1, knights: 3 },
+    devCardPlayedThisTurn: false,
     winner: null,
     players: [
       {
