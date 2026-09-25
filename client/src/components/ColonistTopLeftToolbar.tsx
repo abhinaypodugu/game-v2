@@ -167,6 +167,18 @@ export const ColonistTopLeftToolbar = memo(function ColonistTopLeftToolbar({
                     <CostRow label="Settlement" cost={BUILD_COSTS.settlement} note="1 VP" />
                     <CostRow label="City" cost={BUILD_COSTS.city} note="2 VP, double production" />
                     <CostRow label="Development card" cost={BUILD_COSTS.devCard} note="Largest Army (3+ knights) = 2 VP" />
+                    <div className="rounded-xl border border-line bg-white p-2.5">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-ink">🎴 Development Cards Guide</span>
+                      </div>
+                      <div className="flex flex-col gap-1 text-[11px] text-ink-soft leading-tight">
+                        <div>⚔️ <b>Knight:</b> Move robber, steal 1 card. 3+ = Largest Army (2 VP).</div>
+                        <div>🛣️ <b>Road Building:</b> Place 2 free roads immediately.</div>
+                        <div>🌾 <b>Year of Plenty:</b> Take 2 free resources from bank.</div>
+                        <div>💰 <b>Monopoly:</b> Take all of 1 resource from all players.</div>
+                        <div>🏛️ <b>Victory Point:</b> Hidden card, grants +1 VP.</div>
+                      </div>
+                    </div>
                     {snap.config !== 'base' ? (
                       <p className="text-xs text-ink-soft">
                         Special build phase: after each turn, other players may build in order.

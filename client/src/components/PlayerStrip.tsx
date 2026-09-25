@@ -3,7 +3,7 @@
 // timer). Scrolls horizontally when seats don't fit (7-8 players on a phone).
 
 import { memo } from 'react';
-import type { PersonalSnapshot } from '../types';
+import type { PersonalSnapshot, PublicPlayer } from '../types';
 import { PIECE_COLORS } from '../theme';
 import { TurnTimer } from './Overlays';
 
@@ -35,7 +35,15 @@ export function Avatar({
   );
 }
 
-export const PlayerStrip = memo(function PlayerStrip({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
+export interface PlayerStripProps {
+  snap: PersonalSnapshot;
+  onSelectPlayer?: (player: PublicPlayer) => void;
+}
+
+export const PlayerStrip = memo(function PlayerStrip({
+  snap,
+  onSelectPlayer,
+}: PlayerStripProps): React.JSX.Element {
   const { players, activeSeat, you, longestRoad, largestArmy, specialBuildSeat, phase } = snap;
   return (
     <div
@@ -55,10 +63,16 @@ export const PlayerStrip = memo(function PlayerStrip({ snap }: { snap: PersonalS
             data-anchor={`player-${p.seat}`}
             data-testid={`player-card-${p.seat}`}
             aria-current={isActive ? 'true' : undefined}
-            className={`relative flex min-w-[88px] flex-1 basis-0 snap-start flex-col gap-0.5 rounded-xl border-2 bg-white px-1.5 py-1 shadow-[0_2px_0_rgba(0,0,0,0.12)] transition-[opacity,filter] ${
+            role="button"
+            tabIndex={0}
+            onClick={() => onSelectPlayer?.(p)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') onSelectPlayer?.(p);
+            }}
+            className={`relative flex min-w-[88px] flex-1 basis-0 snap-start flex-col gap-0.5 rounded-xl border-2 bg-white px-1.5 py-1 shadow-[0_2px_0_rgba(0,0,0,0.12)] transition-[opacity,filter,transform] cursor-pointer hover:border-cta active:scale-[0.98] ${
               isActive ? 'border-cta bg-[#fff8e6]' : 'border-transparent'
             } ${p.connected ? '' : 'opacity-50 grayscale'}`}
-            title={`${p.name}${isYou ? ' (you)' : ''} — ${vp} VP${p.connected ? '' : ' (disconnected)'}`}
+            title={`${p.name}${isYou ? ' (you)' : ''} — ${vp} VP (tap to view cards & stats)`}
           >
             <div className="flex min-w-0 items-center gap-1">
               <span className="relative flex-none">

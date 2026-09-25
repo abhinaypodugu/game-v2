@@ -2,10 +2,11 @@
 // Mobile-first single column; seats/settings beside the preview on ≥1024px.
 // Offline games swap the invite link for QR pairing ("Add player").
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DEFAULT_RULES, PLAYER_COLORS, boardConfigForPlayers, generateBoard } from '@catan/shared';
 import type { PlayerColor, PlayerCount } from '@catan/shared';
 import { BoardSvg } from '../board/BoardSvg';
+import { sounds } from '../sound';
 import { useStore } from '../store';
 import type { PersonalSnapshot, RoomSettings } from '../types';
 import { Avatar, playerColor } from '../components/PlayerStrip';
@@ -73,6 +74,15 @@ export function RoomPage(): React.JSX.Element {
   const started = room?.started ?? true;
   const vpToWin = room?.settings.victoryPointsToWin ?? DEFAULT_RULES.victoryPointsToWin;
   const discardLimit = room?.settings.discardLimit ?? DEFAULT_RULES.discardLimit;
+
+  const playerCount = room?.players.length ?? 0;
+  const prevCount = useRef(playerCount);
+  useEffect(() => {
+    if (playerCount > prevCount.current && prevCount.current > 0) {
+      sounds.lobbyJoin();
+    }
+    prevCount.current = playerCount;
+  }, [playerCount]);
 
   // Derived board preview — a pure function of seat count + seed.
   const preview: PersonalSnapshot | null = useMemo(() => {
@@ -264,7 +274,10 @@ export function RoomPage(): React.JSX.Element {
                     {isMe ? (
                       <button
                         type="button"
-                        onClick={() => setReady(!(me?.ready ?? false))}
+                        onClick={() => {
+                          sounds.click();
+                          setReady(!(me?.ready ?? false));
+                        }}
                         className={`h-11 rounded-xl px-3 text-sm font-bold active:translate-y-px ${
                           me?.ready === true
                             ? 'bg-go text-white shadow-[0_3px_0_#1d7a2c]'
@@ -452,7 +465,10 @@ export function RoomPage(): React.JSX.Element {
             <button
               type="button"
               disabled={!canStart}
-              onClick={startGame}
+              onClick={() => {
+                sounds.gameStart();
+                startGame();
+              }}
               className="h-14 rounded-2xl bg-go px-4 font-display text-xl font-bold text-white shadow-[0_4px_0_#1d7a2c] active:translate-y-px disabled:opacity-40"
               data-testid="start-game"
             >

@@ -21,14 +21,14 @@ import { DiscardModal, VictimPicker } from '../components/RobberFlow';
 import { OfflineHostBanner, ReconnectBanner, ToastStack } from '../components/Overlays';
 import { TradeModal } from '../components/TradeModal';
 import { VictoryOverlay } from '../components/VictoryOverlay';
-import { DevCardConfirmModal, MonopolyModal, YearOfPlentyModal } from '../components/DevCardModals';
+import { DevCardConfirmModal, DevCardsGuideModal, MonopolyModal, PlayerInspectModal, YearOfPlentyModal } from '../components/DevCardModals';
 import { FlyingCards } from '../components/FlyingCards';
 import { PlayerStrip } from '../components/PlayerStrip';
 import { TurnStatusBar, type StatusPrompt } from '../components/TurnStatusBar';
 import { useGameSounds } from '../hooks/useGameSounds';
 import { useLegalMoves } from '../hooks/useLegalMoves';
 import { useStore, type PlacementMode } from '../store';
-import type { GameEvent, PersonalSnapshot } from '../types';
+import type { GameEvent, PersonalSnapshot, PublicPlayer } from '../types';
 
 export function GamePage(): React.JSX.Element {
   const snap = useStore((s) => s.game);
@@ -113,7 +113,14 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
   const log = useStore((s) => s.log);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [setupSel, setSetupSel] = useState<{ key: string; vertex: number } | null>(null);
-  const [confirmDevCard, setConfirmDevCard] = useState<{ id: string; type: DevCardType } | null>(null);
+  const [inspectPlayer, setInspectPlayer] = useState<PublicPlayer | null>(null);
+  const [showDevGuide, setShowDevGuide] = useState(false);
+  const [confirmDevCard, setConfirmDevCard] = useState<{
+    id: string;
+    type: DevCardType;
+    playable?: boolean;
+    reason?: string;
+  } | null>(null);
   const [devModal, setDevModal] = useState<{ type: 'monopoly' | 'yearOfPlenty'; cardId: string } | null>(null);
   const [roadBuildingSel, setRoadBuildingSel] = useState<RoadBuildingState | null>(null);
   const mySeat = snap.you?.seat ?? session?.seatIndex ?? -1;
@@ -246,7 +253,7 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
 
       <div className="relative flex min-w-0 flex-1 flex-col">
         <header className="relative z-20 mx-auto flex w-full max-w-3xl flex-col gap-1 px-2 pt-1 lg:px-0 lg:pt-0">
-          <PlayerStrip snap={snap} />
+          <PlayerStrip snap={snap} onSelectPlayer={(p) => setInspectPlayer(p)} />
           <TurnStatusBar
             snap={snap}
             prompt={prompt}
@@ -295,13 +302,20 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
             setupVertex={setupVertex}
             onArm={(kind) => setPlacement(armed?.kind === kind ? null : { kind })}
             onPlayDevCard={(card) => {
-              setConfirmDevCard(card as { id: string; type: DevCardType });
+              setConfirmDevCard(card as { id: string; type: DevCardType; playable?: boolean; reason?: string });
             }}
+            onOpenDevGuide={() => setShowDevGuide(true)}
           />
         </footer>
       </div>
 
-      <ColonistRightSidebar snap={snap} open={detailsOpen} onClose={() => setDetailsOpen(false)} />
+      <ColonistRightSidebar
+        snap={snap}
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        onSelectPlayer={(p) => setInspectPlayer(p)}
+        onOpenDevGuide={() => setShowDevGuide(true)}
+      />
 
       <FlyingCards />
 
@@ -309,6 +323,16 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
       <DiscardModal mySeat={mySeat} />
       <VictimPicker mySeat={mySeat} />
       <VictoryOverlay />
+      {inspectPlayer !== null ? (
+        <PlayerInspectModal
+          player={inspectPlayer}
+          snap={snap}
+          onClose={() => setInspectPlayer(null)}
+          onOpenGuide={() => setShowDevGuide(true)}
+          onInspectCard={(card) => setConfirmDevCard(card)}
+        />
+      ) : null}
+      {showDevGuide ? <DevCardsGuideModal onClose={() => setShowDevGuide(false)} /> : null}
       {confirmDevCard !== null ? (
         <DevCardConfirmModal
           card={confirmDevCard}

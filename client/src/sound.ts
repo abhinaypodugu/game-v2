@@ -231,6 +231,88 @@ class SoundEngine {
     });
   }
 
+  /** Grand opening fanfare when the game commences. */
+  gameStart(): void {
+    this.play(() => {
+      const notes = [261.63, 329.63, 392.0, 523.25];
+      for (const [i, freq] of notes.entries()) {
+        const at = i * 0.12;
+        this.tone({ type: 'triangle', at, freq, attack: 0.015, decay: 0.35, gain: 0.28 });
+        this.tone({ type: 'sine', at, freq: freq * 2, attack: 0.01, decay: 0.25, gain: 0.1 });
+        this.tone({ type: 'sawtooth', at, freq, attack: 0.02, decay: 0.2, gain: 0.06, lowpass: 1200 });
+      }
+      const chordAt = notes.length * 0.12 + 0.02;
+      for (const freq of [261.63, 329.63, 392.0, 523.25]) {
+        this.tone({ type: 'triangle', at: chordAt, freq, attack: 0.02, decay: 1.4, gain: 0.16 });
+      }
+      this.tone({ type: 'sine', at: chordAt, freq: 130.81, attack: 0.02, decay: 1.5, gain: 0.3 });
+      this.noise({ at: chordAt, attack: 0.01, decay: 0.15, gain: 0.1, filter: 'lowpass', freq: 800 });
+    });
+  }
+
+  /** Coin clink + cheerful major chime — successful trade. */
+  tradeDone(): void {
+    this.play(() => {
+      for (const [i, at] of [0, 0.08].entries()) {
+        this.tone({ type: 'sine', at, freq: 2400 + i * 400, attack: 0.001, decay: 0.08, gain: 0.2 });
+        this.noise({ at, attack: 0.001, decay: 0.04, gain: 0.18, filter: 'bandpass', freq: 4800, q: 6 });
+      }
+      for (const [i, freq] of [523.25, 659.25, 783.99].entries()) {
+        this.tone({ type: 'sine', at: 0.12 + i * 0.06, freq, attack: 0.005, decay: 0.45, gain: 0.18 });
+      }
+    });
+  }
+
+  /** Dramatic warning alert — forced discard on 7. */
+  discardAlert(): void {
+    this.play(() => {
+      for (const [i, at] of [0, 0.14].entries()) {
+        this.tone({ type: 'sawtooth', at, freq: 240 - i * 40, freqEnd: 150, attack: 0.02, decay: 0.22, gain: 0.2, lowpass: 500 });
+        this.tone({ type: 'sine', at, freq: 120 - i * 20, decay: 0.25, gain: 0.25 });
+        this.noise({ at, decay: 0.08, gain: 0.15, filter: 'lowpass', freq: 700 });
+      }
+    });
+  }
+
+  /** Spirited bugle fanfare — Longest Road claimed! */
+  longestRoad(): void {
+    this.play(() => {
+      const notes = [392.0, 523.25, 659.25, 783.99];
+      for (const [i, freq] of notes.entries()) {
+        const at = i * 0.1;
+        this.tone({ type: 'triangle', at, freq, attack: 0.01, decay: 0.28, gain: 0.24 });
+        this.tone({ type: 'sawtooth', at, freq, attack: 0.02, decay: 0.2, gain: 0.06, lowpass: 1400 });
+      }
+    });
+  }
+
+  /** Martial brass cadence — Largest Army claimed! */
+  largestArmy(): void {
+    this.play(() => {
+      const notes = [293.66, 369.99, 440.0, 587.33];
+      for (const [i, freq] of notes.entries()) {
+        const at = i * 0.11;
+        this.tone({ type: 'triangle', at, freq, attack: 0.012, decay: 0.3, gain: 0.25 });
+        this.tone({ type: 'square', at, freq, attack: 0.015, decay: 0.18, gain: 0.07, lowpass: 1100 });
+      }
+    });
+  }
+
+  /** Clock tick-tock pulse — turn timer running out. */
+  timerTick(): void {
+    this.play(() => {
+      this.tone({ type: 'sine', freq: 880, freqEnd: 440, attack: 0.002, decay: 0.035, gain: 0.16 });
+      this.noise({ attack: 0.001, decay: 0.02, gain: 0.1, filter: 'bandpass', freq: 3200, q: 4 });
+    });
+  }
+
+  /** Soft friendly bubble pop — player joins room / clicks ready. */
+  lobbyJoin(): void {
+    this.play(() => {
+      this.tone({ type: 'sine', freq: 440, freqEnd: 880, attack: 0.005, decay: 0.09, gain: 0.18 });
+    });
+  }
+
   // --- Plumbing ------------------------------------------------------------
 
   private ensureContext(): AudioContext | null {
@@ -361,6 +443,7 @@ export const sounds = {
   city: (): void => engine.city(),
   card: (): void => engine.card(),
   trade: (): void => engine.trade(),
+  tradeDone: (): void => engine.tradeDone(),
   turn: (): void => engine.turn(),
   robber: (): void => engine.robber(),
   steal: (): void => engine.steal(),
@@ -368,6 +451,12 @@ export const sounds = {
   error: (): void => engine.error(),
   click: (): void => engine.click(),
   devCard: (): void => engine.devCard(),
+  gameStart: (): void => engine.gameStart(),
+  discardAlert: (): void => engine.discardAlert(),
+  longestRoad: (): void => engine.longestRoad(),
+  largestArmy: (): void => engine.largestArmy(),
+  timerTick: (): void => engine.timerTick(),
+  lobbyJoin: (): void => engine.lobbyJoin(),
   setMuted: (muted: boolean): void => engine.setMuted(muted),
   isMuted: (): boolean => engine.isMuted(),
 };

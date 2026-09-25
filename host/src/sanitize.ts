@@ -17,6 +17,9 @@ export interface PublicPlayer {
   roadsLeft: number;
   settlementsLeft: number;
   citiesLeft: number;
+  totalVp?: number;
+  resources?: Record<Resource, number>;
+  devCards?: Array<{ id: string; type: string; played: boolean }>;
 }
 
 export interface OwnView {
@@ -58,6 +61,7 @@ function ownTotalVp(state: GameState, seat: number): number {
 }
 
 export function sanitize(state: GameState, seat: number): PersonalSnapshot {
+  const isFinished = state.winner !== null;
   const players: PublicPlayer[] = state.players.map((p) => {
     const resourceCount =
       p.resources.wood + p.resources.brick + p.resources.sheep + p.resources.wheat + p.resources.ore;
@@ -73,6 +77,13 @@ export function sanitize(state: GameState, seat: number): PersonalSnapshot {
       roadsLeft: p.roadsLeft,
       settlementsLeft: p.settlementsLeft,
       citiesLeft: p.citiesLeft,
+      ...(isFinished
+        ? {
+            totalVp: totalVp(state, p.seat),
+            resources: { ...p.resources },
+            devCards: p.devHand.map((c) => ({ id: c.id, type: c.type, played: c.played === true })),
+          }
+        : {}),
     };
   });
 

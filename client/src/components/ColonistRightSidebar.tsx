@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { RESOURCES } from '@catan/shared';
 import { useStore } from '../store';
-import type { PersonalSnapshot } from '../types';
+import type { PersonalSnapshot, PublicPlayer } from '../types';
 import { EventLog } from './EventLog';
 import { Avatar } from './PlayerStrip';
 import { ResourceCard } from './resourceArt';
@@ -15,6 +15,8 @@ export interface ColonistRightSidebarProps {
   /** Mobile sheet open state (ignored on ≥1024px, where it is always shown). */
   open: boolean;
   onClose: () => void;
+  onSelectPlayer?: (player: PublicPlayer) => void;
+  onOpenDevGuide?: () => void;
 }
 
 function Stat({ label, value, highlight = false }: { label: string; value: string | number; highlight?: boolean }): React.JSX.Element {
@@ -32,6 +34,8 @@ export const ColonistRightSidebar = memo(function ColonistRightSidebar({
   snap,
   open,
   onClose,
+  onSelectPlayer,
+  onOpenDevGuide,
 }: ColonistRightSidebarProps): React.JSX.Element {
   const { players, activeSeat, longestRoad, largestArmy, you, bank, devDeckCount, rules } = snap;
 
@@ -83,29 +87,34 @@ export const ColonistRightSidebar = memo(function ColonistRightSidebar({
           {RESOURCES.map((r) => (
             <ResourceCard key={r} resource={r} count={bank[r]} size="md" dim={bank[r] === 0} title={`${bank[r]} ${r} in the bank`} />
           ))}
-          <div
-            className="relative flex h-14 w-10 flex-none items-center justify-center rounded-lg border-2 border-[#5b3b8c] bg-[#b89ee6] font-bold text-white shadow-[0_2px_0_rgba(0,0,0,0.25)]"
-            title={`${devDeckCount} development cards left`}
+          <button
+            type="button"
+            onClick={onOpenDevGuide}
+            className="relative flex h-14 w-10 flex-none items-center justify-center rounded-lg border-2 border-[#5b3b8c] bg-[#b89ee6] font-bold text-white shadow-[0_2px_0_rgba(0,0,0,0.25)] transition-transform active:translate-y-px hover:brightness-105"
+            title={`${devDeckCount} development cards left (click to open guide)`}
+            aria-label="Development cards guide"
           >
             ?
             <span className="absolute bottom-0.5 left-1/2 flex h-5 min-w-5 -translate-x-1/2 items-center justify-center rounded-full bg-white px-1 text-xs font-bold text-ink">
               {devDeckCount}
             </span>
-          </div>
+          </button>
         </div>
 
         {/* Player details */}
         <ul className="flex flex-col gap-1" data-testid="player-details">
           {players.map((p) => {
             const isYou = p.seat === you.seat;
-            const vp = isYou ? you.totalVp : p.publicVp;
+            const vp = isYou ? you.totalVp : (p.totalVp ?? p.publicVp);
             const roadsBuilt = 15 - p.roadsLeft;
             return (
               <li
                 key={p.seat}
-                className={`flex items-center gap-1.5 rounded-xl border-2 bg-white px-1.5 py-1 ${
+                onClick={() => onSelectPlayer?.(p)}
+                className={`flex items-center gap-1.5 rounded-xl border-2 bg-white px-1.5 py-1 cursor-pointer transition-colors hover:border-cta active:scale-[0.99] ${
                   p.seat === activeSeat ? 'border-cta' : 'border-transparent'
                 } ${p.connected ? '' : 'opacity-50 grayscale'}`}
+                title={`Click to inspect ${p.name}'s cards and stats`}
               >
                 <Avatar name={p.name} color={p.color} />
                 <div className="flex min-w-0 flex-1 flex-col leading-tight">

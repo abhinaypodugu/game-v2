@@ -9,7 +9,7 @@ import { generateBoard } from '@catan/shared';
 import { TradeModal } from '../components/TradeModal';
 import { DiscardModal, VictimPicker } from '../components/RobberFlow';
 import { VictoryOverlay } from '../components/VictoryOverlay';
-import { DevCardConfirmModal, MonopolyModal, YearOfPlentyModal } from '../components/DevCardModals';
+import { DevCardConfirmModal, DevCardsGuideModal, MonopolyModal, PlayerInspectModal, YearOfPlentyModal } from '../components/DevCardModals';
 import type { PersonalSnapshot } from '../types';
 import { useStore } from '../store';
 
@@ -234,5 +234,58 @@ describe('DevCardModals', () => {
     render(<DevCardConfirmModal card={{ id: 'k1', type: 'knight' }} onConfirm={onConfirm} onClose={onClose} />);
     await user.click(screen.getByTestId('dev-confirm-play'));
     expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('DevCardConfirmModal shows inspection mode with reason when card cannot be played', () => {
+    const onClose = vi.fn();
+    render(
+      <DevCardConfirmModal
+        card={{
+          id: 'k1',
+          type: 'knight',
+          playable: false,
+          reason: 'Wait for your turn! You can play dev cards on your turn.',
+        }}
+        onConfirm={vi.fn()}
+        onClose={onClose}
+      />,
+    );
+
+    expect(screen.getByRole('heading', { name: 'Knight' })).toBeInTheDocument();
+    expect(screen.getByText(/Wait for your turn/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('dev-confirm-play')).toBeNull();
+  });
+
+  it('DevCardsGuideModal lists all 5 development cards and their descriptions', () => {
+    const onClose = vi.fn();
+    render(<DevCardsGuideModal onClose={onClose} />);
+
+    expect(screen.getByText('Development Cards Guide')).toBeInTheDocument();
+    expect(screen.getByText('Knight')).toBeInTheDocument();
+    expect(screen.getByText('Road Building')).toBeInTheDocument();
+    expect(screen.getByText('Year of Plenty')).toBeInTheDocument();
+    expect(screen.getByText('Monopoly')).toBeInTheDocument();
+    expect(screen.getByText('Victory Point')).toBeInTheDocument();
+  });
+
+  it('PlayerInspectModal displays player profile, VP breakdown, and holdings', () => {
+    const snap = snapshotFor();
+    const player = snap.players[0]!;
+    const onClose = vi.fn();
+    const onOpenGuide = vi.fn();
+
+    render(
+      <PlayerInspectModal
+        player={player}
+        snap={snap}
+        onClose={onClose}
+        onOpenGuide={onOpenGuide}
+      />,
+    );
+
+    expect(screen.getByTestId('player-inspect-modal')).toBeInTheDocument();
+    expect(screen.getByText(/Victory Point Breakdown/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pieces & Cards/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Development Cards/i })).toBeInTheDocument();
   });
 });

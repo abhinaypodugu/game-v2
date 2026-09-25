@@ -16,6 +16,9 @@ export interface PublicPlayer {
   roadsLeft: number;
   settlementsLeft: number;
   citiesLeft: number;
+  totalVp?: number;
+  resources?: Record<Resource, number>;
+  devCards?: Array<{ id: string; type: string; played: boolean }>;
 }
 
 export interface OwnView {

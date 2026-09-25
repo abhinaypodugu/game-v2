@@ -2,6 +2,7 @@
 // turn-timer countdown pill.
 
 import { useEffect, useState } from 'react';
+import { sounds } from '../sound';
 import { useStore } from '../store';
 import { GuestPairingSheet, HostPairingSheet } from './OfflinePairing';
 
@@ -172,11 +173,21 @@ export function TurnTimer({ className = '' }: { className?: string }): React.JSX
     return () => clearInterval(interval);
   }, []);
 
+  const activeSeat = useStore((s) => s.game?.activeSeat ?? null);
+  const mySeat = useStore((s) => s.session?.seatIndex ?? s.game?.you.seat ?? null);
+  const isMyTurn = activeSeat !== null && activeSeat === mySeat;
+
   if (timer === null || phase === null || phase === 'finished' || now === 0) return null;
   const remaining = Math.max(0, Math.round((timer.deadlineUnixMs - now) / 1000));
   const minutes = Math.floor(remaining / 60);
   const seconds = remaining % 60;
   const urgent = remaining <= 10;
+
+  useEffect(() => {
+    if (isMyTurn && urgent && remaining > 0) {
+      sounds.timerTick();
+    }
+  }, [isMyTurn, urgent, remaining]);
 
   return (
     <span

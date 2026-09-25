@@ -20,7 +20,8 @@ export interface ColonistBottomDockProps {
   placement: PlacementMode | null;
   setupVertex?: number | null;
   onArm: (kind: 'settlement' | 'city' | 'road') => void;
-  onPlayDevCard: (card: { id: string; type: string }) => void;
+  onPlayDevCard: (card: { id: string; type: string; playable?: boolean; reason?: string }) => void;
+  onOpenDevGuide?: () => void;
 }
 
 type PieceKind = 'road' | 'settlement' | 'city';
@@ -72,6 +73,7 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
   setupVertex,
   onArm,
   onPlayDevCard,
+  onOpenDevGuide,
 }: ColonistBottomDockProps): React.JSX.Element {
   const sendAction = useStore((s) => s.sendAction);
   const setTradeModal = useStore((s) => s.setTradeModal);
@@ -229,18 +231,29 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
             const meta = DEV_META[g.type];
             const isVp = g.type === 'victoryPoint';
             const playable = !isVp && !g.fresh && devWindow && !(g.type === 'roadBuilding' && noFreeRoad);
+
+            let reason: string | undefined;
+            if (isVp) {
+              reason = '🏛️ Victory Point cards remain hidden in your hand and automatically count toward your victory points to win!';
+            } else if (g.fresh) {
+              reason = '🔒 Purchased this turn — development cards can only be played starting on your next turn.';
+            } else if (!myTurn) {
+              reason = '⏳ Wait for your turn! You can play development cards before or after rolling dice on your turn.';
+            } else if (snap.devCardPlayedThisTurn) {
+              reason = '⚠️ You already played a development card this turn (rules allow max 1 per turn).';
+            } else if (g.type === 'roadBuilding' && noFreeRoad) {
+              reason = '🛣️ No legal road placements available on the board.';
+            }
+
             return (
               <button
                 key={g.key}
                 type="button"
-                disabled={!playable}
-                onClick={() => onPlayDevCard({ id: g.ids[0]!, type: g.type })}
+                onClick={() => onPlayDevCard({ id: g.ids[0]!, type: g.type, playable, reason })}
                 className={`relative flex h-16 w-11 flex-none flex-col items-center justify-center gap-0.5 rounded-xl border-2 px-0.5 shadow-[0_2px_0_rgba(0,0,0,0.25)] transition-transform active:translate-y-px sm:h-20 sm:w-14 ${
-                  isVp ? 'border-[#a87a07] bg-[#fff4cc]' : 'border-[#5b3b8c] bg-[#efe7fb]'
-                } ${playable ? '' : 'cursor-default'} ${g.fresh ? 'opacity-60' : ''}`}
-                title={`${meta.label}: ${meta.blurb}${g.fresh ? ' (bought this turn — playable next turn)' : ''}${isVp ? ' (counts automatically)' : ''}${
-                  !isVp && !g.fresh && myTurn && snap.devCardPlayedThisTurn ? ' (already played a card this turn)' : ''
-                }`}
+                  isVp ? 'border-[#a87a07] bg-[#fff4cc]' : playable ? 'border-[#5b3b8c] bg-[#efe7fb] ring-2 ring-[#7c4dbe]/40' : 'border-[#5b3b8c] bg-[#efe7fb]'
+                } ${g.fresh ? 'opacity-70' : ''}`}
+                title={`${meta.label}: ${meta.blurb}${reason ? ` — ${reason}` : ''}`}
                 data-testid={`dev-card-${g.type}`}
               >
                 {g.ids.length > 1 ? <CountBadge n={g.ids.length} /> : null}
@@ -256,6 +269,19 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
               </button>
             );
           })}
+          {onOpenDevGuide !== undefined ? (
+            <button
+              type="button"
+              onClick={onOpenDevGuide}
+              className="flex h-16 w-7 sm:h-20 sm:w-8 flex-none flex-col items-center justify-center rounded-xl border border-dashed border-line bg-white/70 text-ink-soft hover:bg-white active:translate-y-px transition-colors"
+              title="Development Cards Guide (tap to read what each card does)"
+              aria-label="Development cards guide"
+              data-testid="btn-dev-guide"
+            >
+              <span className="text-sm">📖</span>
+              <span className="text-[7px] font-bold uppercase leading-none mt-0.5">Info</span>
+            </button>
+          ) : null}
         </div>
       </div>
 

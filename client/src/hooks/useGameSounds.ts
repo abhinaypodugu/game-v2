@@ -15,6 +15,8 @@ type SoundName = Exclude<keyof typeof sounds, 'setMuted' | 'isMuted'>;
 
 function soundFor(e: GameEvent, me: number | null): SoundName | null {
   switch (e.type) {
+    case 'gameStarted':
+      return 'gameStart';
     case 'rolled':
       return 'dice';
     case 'produced':
@@ -33,18 +35,21 @@ function soundFor(e: GameEvent, me: number | null): SoundName | null {
       return 'robber';
     case 'stolenFrom':
       return e.seat === me || e.victim === me ? 'steal' : null;
+    case 'discardRequired':
+      return e.seat === me ? 'discardAlert' : null;
     case 'discarded':
       return e.seat === me ? 'card' : null;
     case 'tradeOffered':
     case 'tradeCountered':
       return e.proposer === me ? null : 'trade';
     case 'tradeCompleted':
-      return e.from === me || e.to === me ? 'trade' : 'card';
+      return e.from === me || e.to === me ? 'tradeDone' : 'card';
     case 'bankTraded':
-      return e.seat === me ? 'trade' : null;
+      return e.seat === me ? 'tradeDone' : null;
     case 'longestRoadChanged':
+      return 'longestRoad';
     case 'largestArmyChanged':
-      return e.to !== null && e.to === me ? 'devCard' : null;
+      return 'largestArmy';
     case 'turnStarted':
     case 'specialBuildActivated':
       return e.seat === me ? 'turn' : null;
