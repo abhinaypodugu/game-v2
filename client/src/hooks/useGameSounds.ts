@@ -29,8 +29,30 @@ function soundFor(e: GameEvent, me: number | null): SoundName | null {
     case 'cityBuilt':
       return 'city';
     case 'devCardBought':
-    case 'devCardPlayed':
       return 'devCard';
+    case 'devCardPlayed': {
+      const ct = e.cardType;
+      if (ct === 'merchant') return 'merchant';
+      if (ct === 'taxCollector') return 'taxCollector';
+      if (ct === 'bountifulHarvest') return 'bountifulHarvest';
+      if (ct === 'alchemist') return 'alchemist';
+      if (ct === 'surveyor') return 'surveyor';
+      if (ct === 'fortification') return 'fortification';
+      if (ct === 'spy') return 'spy';
+      if (ct === 'oracle') return 'oracle';
+      if (ct === 'portRenovation') return 'portRenovation';
+      return 'devCard';
+    }
+    case 'tokensSwapped':
+      return 'surveyor';
+    case 'harborsSwapped':
+      return 'portRenovation';
+    case 'fortified':
+      return 'fortification';
+    case 'merchantActivated':
+      return 'merchant';
+    case 'taxCollected':
+      return 'taxCollector';
     case 'robberMoved':
       return 'robber';
     case 'stolenFrom':

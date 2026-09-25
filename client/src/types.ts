@@ -16,6 +16,8 @@ export interface PublicPlayer {
   roadsLeft: number;
   settlementsLeft: number;
   citiesLeft: number;
+  isFortified?: boolean;
+  spyResources?: Record<Resource, number>;
   totalVp?: number;
   resources?: Record<Resource, number>;
   devCards?: Array<{ id: string; type: string; played: boolean }>;
@@ -26,6 +28,7 @@ export interface OwnView {
   resources: Record<Resource, number>;
   devHand: Array<{ id: string; type: string; boughtOnTurn: number; played: boolean }>;
   totalVp: number;
+  oraclePreview?: Array<{ id: string; type: string }>;
 }
 
 export interface PersonalSnapshot {
@@ -50,6 +53,8 @@ export interface PersonalSnapshot {
   largestArmy: GameState['largestArmy'];
   /** The active player already played a development card this turn. */
   devCardPlayedThisTurn: boolean;
+  merchantSeat?: number | null;
+  fortifiedSeats?: number[];
   winner: number | null;
   players: PublicPlayer[];
   you: OwnView;

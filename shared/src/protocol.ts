@@ -18,6 +18,8 @@ export const resourceSchema = z.enum(['wood', 'brick', 'sheep', 'wheat', 'ore'])
  */
 export const resourceBagSchema = z.partialRecord(resourceSchema, z.number().int().nonnegative());
 
+export const terrainSchema = z.enum(['forest', 'hills', 'pasture', 'fields', 'mountains']);
+
 export const gameActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('setupPlace'),
@@ -35,8 +37,16 @@ export const gameActionSchema = z.discriminatedUnion('type', [
     payload: z
       .object({
         resources: z.array(resourceSchema).max(2).optional(), // year of plenty
-        resource: resourceSchema.optional(), // monopoly
+        resource: resourceSchema.optional(), // monopoly, spy
         edges: z.array(z.string()).min(1).max(2).optional(), // road building (1 only when a 2nd is impossible)
+        roll: z.object({ die1: z.number().int().min(1).max(6), die2: z.number().int().min(1).max(6) }).optional(), // alchemist
+        terrain: terrainSchema.optional(), // bountiful harvest
+        hex1: z.string().optional(), // surveyor
+        hex2: z.string().optional(), // surveyor
+        edge1: z.string().optional(), // port renovation
+        edge2: z.string().optional(), // port renovation
+        victim: z.number().int().min(0).max(7).optional(), // spy
+        chosenCardId: z.string().optional(), // oracle
       })
       .optional(),
   }),
@@ -112,6 +122,11 @@ export type GameEvent =
   | { type: 'turnStarted'; seat: number; turn: number }
   | { type: 'turnEnded'; seat: number }
   | { type: 'timedOut'; seat: number; autoAction: string }
+  | { type: 'tokensSwapped'; seat: number; hex1: string; hex2: string; token1: number; token2: number }
+  | { type: 'harborsSwapped'; seat: number; edge1: string; edge2: string }
+  | { type: 'fortified'; seat: number; untilTurn: number }
+  | { type: 'merchantActivated'; seat: number }
+  | { type: 'taxCollected'; seat: number; totalCards: number }
   | { type: 'victory'; seat: number; vp: number };
 
 export const DEV_CARD_ID_PREFIX = 'dev';

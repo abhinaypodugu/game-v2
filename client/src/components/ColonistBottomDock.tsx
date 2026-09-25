@@ -230,7 +230,9 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
           {devGroups.map((g) => {
             const meta = DEV_META[g.type];
             const isVp = g.type === 'victoryPoint';
-            const playable = !isVp && !g.fresh && devWindow && !(g.type === 'roadBuilding' && noFreeRoad);
+            const isAlchemist = g.type === 'alchemist';
+            const alchemistBlocked = isAlchemist && phase !== 'turnPreroll';
+            const playable = !isVp && !g.fresh && devWindow && !alchemistBlocked && !(g.type === 'roadBuilding' && noFreeRoad);
 
             let reason: string | undefined;
             if (isVp) {
@@ -241,6 +243,8 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
               reason = '⏳ Wait for your turn! You can play development cards before or after rolling dice on your turn.';
             } else if (snap.devCardPlayedThisTurn) {
               reason = '⚠️ You already played a development card this turn (rules allow max 1 per turn).';
+            } else if (alchemistBlocked) {
+              reason = '🧪 The Alchemist can only be played in pre-roll before rolling the dice.';
             } else if (g.type === 'roadBuilding' && noFreeRoad) {
               reason = '🛣️ No legal road placements available on the board.';
             }

@@ -21,7 +21,19 @@ import { DiscardModal, VictimPicker } from '../components/RobberFlow';
 import { OfflineHostBanner, ReconnectBanner, ToastStack } from '../components/Overlays';
 import { TradeModal } from '../components/TradeModal';
 import { VictoryOverlay } from '../components/VictoryOverlay';
-import { DevCardConfirmModal, DevCardsGuideModal, MonopolyModal, PlayerInspectModal, YearOfPlentyModal } from '../components/DevCardModals';
+import {
+  AlchemistModal,
+  BountifulHarvestModal,
+  DevCardConfirmModal,
+  DevCardsGuideModal,
+  MonopolyModal,
+  OracleModal,
+  PlayerInspectModal,
+  PortRenovationModal,
+  SpyModal,
+  SurveyorModal,
+  YearOfPlentyModal,
+} from '../components/DevCardModals';
 import { FlyingCards } from '../components/FlyingCards';
 import { PlayerStrip } from '../components/PlayerStrip';
 import { TurnStatusBar, type StatusPrompt } from '../components/TurnStatusBar';
@@ -121,7 +133,18 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
     playable?: boolean;
     reason?: string;
   } | null>(null);
-  const [devModal, setDevModal] = useState<{ type: 'monopoly' | 'yearOfPlenty'; cardId: string } | null>(null);
+  const [devModal, setDevModal] = useState<{
+    type:
+      | 'monopoly'
+      | 'yearOfPlenty'
+      | 'alchemist'
+      | 'bountifulHarvest'
+      | 'surveyor'
+      | 'portRenovation'
+      | 'spy'
+      | 'oracle';
+    cardId: string;
+  } | null>(null);
   const [roadBuildingSel, setRoadBuildingSel] = useState<RoadBuildingState | null>(null);
   const mySeat = snap.you?.seat ?? session?.seatIndex ?? -1;
   const legal = useLegalMoves(snap, mySeat);
@@ -340,13 +363,27 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
           onConfirm={() => {
             const card = confirmDevCard;
             setConfirmDevCard(null);
-            if (card.type === 'knight') {
+            if (
+              card.type === 'knight' ||
+              card.type === 'merchant' ||
+              card.type === 'taxCollector' ||
+              card.type === 'fortification'
+            ) {
               sendAction({ type: 'playDevCard', cardId: card.id });
-            } else if (card.type === 'monopoly' || card.type === 'yearOfPlenty') {
-              setDevModal({ type: card.type, cardId: card.id });
             } else if (card.type === 'roadBuilding') {
               setPlacement(null);
               setRoadBuildingSel({ cardId: card.id, turn: snap.turn, edges: [] });
+            } else if (
+              card.type === 'monopoly' ||
+              card.type === 'yearOfPlenty' ||
+              card.type === 'alchemist' ||
+              card.type === 'bountifulHarvest' ||
+              card.type === 'surveyor' ||
+              card.type === 'portRenovation' ||
+              card.type === 'spy' ||
+              card.type === 'oracle'
+            ) {
+              setDevModal({ type: card.type, cardId: card.id });
             }
           }}
         />
@@ -354,6 +391,24 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
       {devModal?.type === 'monopoly' ? <MonopolyModal cardId={devModal.cardId} onClose={() => setDevModal(null)} /> : null}
       {devModal?.type === 'yearOfPlenty' ? (
         <YearOfPlentyModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
+      ) : null}
+      {devModal?.type === 'alchemist' ? (
+        <AlchemistModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
+      ) : null}
+      {devModal?.type === 'bountifulHarvest' ? (
+        <BountifulHarvestModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
+      ) : null}
+      {devModal?.type === 'surveyor' ? (
+        <SurveyorModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
+      ) : null}
+      {devModal?.type === 'portRenovation' ? (
+        <PortRenovationModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
+      ) : null}
+      {devModal?.type === 'spy' ? (
+        <SpyModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
+      ) : null}
+      {devModal?.type === 'oracle' ? (
+        <OracleModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
       ) : null}
     </div>
   );

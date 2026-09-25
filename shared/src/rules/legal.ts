@@ -133,11 +133,16 @@ export function stealCandidates(state: GameState, hex: HexId): number[] {
     if (b !== undefined) seats.add(b.seat);
   }
   const active = state.activeSeat;
-  return [...seats].filter((s) => s !== active);
+  return [...seats].filter((s) => {
+    if (s === active) return false;
+    const isFortified = state.fortifiedUntilTurn?.[s] !== undefined && state.turn < state.fortifiedUntilTurn[s]!;
+    return !isFortified;
+  });
 }
 
 /** Best bank-trade rate for `give` for `seat` (4 / 3 / 2). */
 export function bestTradeRate(state: GameState, seat: number, give: Resource): number {
+  if (state.merchantSeat === seat) return 2;
   const topology = state.board.topology;
   for (const [eid, harbor] of Object.entries(state.board.harbors)) {
     if (harbor.type === 'generic') continue;
@@ -181,6 +186,9 @@ export function producingHexesForPlayer(
 
 /** Player's harbor rate info for UI (rate per resource). */
 export function harborRates(state: GameState, seat: number): Record<Resource, number> {
+  if (state.merchantSeat === seat) {
+    return { wood: 2, brick: 2, sheep: 2, wheat: 2, ore: 2 };
+  }
   const rates: Record<Resource, number> = {
     wood: 4, brick: 4, sheep: 4, wheat: 4, ore: 4,
   };

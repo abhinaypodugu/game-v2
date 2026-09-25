@@ -118,10 +118,14 @@ export const ColonistRightSidebar = memo(function ColonistRightSidebar({
               >
                 <Avatar name={p.name} color={p.color} />
                 <div className="flex min-w-0 flex-1 flex-col leading-tight">
-                  <span className="truncate text-sm font-bold text-ink">
-                    {p.name}
-                    {isYou ? ' (you)' : ''}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className="truncate text-sm font-bold text-ink">
+                      {p.name}
+                      {isYou ? ' (you)' : ''}
+                    </span>
+                    {p.isFortified ? <span className="text-xs" title="Fortified! Immune to robber steals & 7 discard">🛡️</span> : null}
+                    {snap.merchantSeat === p.seat ? <span className="text-xs" title="Active Merchant: 2:1 bank trades">⚖️</span> : null}
+                  </div>
                   <span className="truncate text-[10px] font-bold text-ink-soft">
                     {p.connected ? `${p.settlementsLeft} houses · ${p.citiesLeft} cities · ${p.roadsLeft} roads left` : 'Disconnected'}
                   </span>

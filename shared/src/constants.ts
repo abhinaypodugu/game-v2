@@ -12,7 +12,21 @@ export type Terrain =
   | 'mountains' // produces ore
   | 'desert'; // produces nothing
 
-export type DevCardType = 'knight' | 'victoryPoint' | 'roadBuilding' | 'monopoly' | 'yearOfPlenty';
+export type DevCardType =
+  | 'knight'
+  | 'victoryPoint'
+  | 'roadBuilding'
+  | 'monopoly'
+  | 'yearOfPlenty'
+  | 'merchant'
+  | 'taxCollector'
+  | 'bountifulHarvest'
+  | 'alchemist'
+  | 'surveyor'
+  | 'fortification'
+  | 'spy'
+  | 'oracle'
+  | 'portRenovation';
 
 export type PlayerColor =
   | 'red'
@@ -127,7 +141,22 @@ export const BOARD_CONFIGS: Record<BoardConfigKey, BoardConfig> = {
     specialtyHarbors: ['wood', 'brick', 'sheep', 'wheat', 'ore'],
     genericHarbors: 4,
     resourceBank: 19,
-    devDeck: { knight: 14, victoryPoint: 5, roadBuilding: 2, monopoly: 2, yearOfPlenty: 2 },
+    devDeck: {
+      knight: 14,
+      victoryPoint: 5,
+      roadBuilding: 2,
+      monopoly: 2,
+      yearOfPlenty: 2,
+      merchant: 2,
+      taxCollector: 2,
+      bountifulHarvest: 2,
+      alchemist: 1,
+      surveyor: 1,
+      fortification: 1,
+      spy: 1,
+      oracle: 1,
+      portRenovation: 1,
+    },
   },
   ext56: {
     key: 'ext56',
@@ -148,7 +177,22 @@ export const BOARD_CONFIGS: Record<BoardConfigKey, BoardConfig> = {
     specialtyHarbors: ['wood', 'brick', 'sheep', 'wheat', 'ore', 'sheep'],
     genericHarbors: 5,
     resourceBank: 24,
-    devDeck: { knight: 20, victoryPoint: 5, roadBuilding: 3, monopoly: 3, yearOfPlenty: 3 },
+    devDeck: {
+      knight: 20,
+      victoryPoint: 5,
+      roadBuilding: 3,
+      monopoly: 3,
+      yearOfPlenty: 3,
+      merchant: 3,
+      taxCollector: 2,
+      bountifulHarvest: 3,
+      alchemist: 2,
+      surveyor: 2,
+      fortification: 2,
+      spy: 2,
+      oracle: 2,
+      portRenovation: 2,
+    },
   },
   ext78: {
     key: 'ext78',
@@ -169,7 +213,22 @@ export const BOARD_CONFIGS: Record<BoardConfigKey, BoardConfig> = {
     specialtyHarbors: ['wood', 'brick', 'sheep', 'wheat', 'ore', 'sheep', 'wood'],
     genericHarbors: 6,
     resourceBank: 29,
-    devDeck: { knight: 26, victoryPoint: 6, roadBuilding: 4, monopoly: 4, yearOfPlenty: 4 },
+    devDeck: {
+      knight: 26,
+      victoryPoint: 6,
+      roadBuilding: 4,
+      monopoly: 4,
+      yearOfPlenty: 4,
+      merchant: 3,
+      taxCollector: 3,
+      bountifulHarvest: 4,
+      alchemist: 2,
+      surveyor: 2,
+      fortification: 2,
+      spy: 2,
+      oracle: 2,
+      portRenovation: 2,
+    },
   },
 } as const;
 

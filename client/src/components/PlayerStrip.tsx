@@ -107,6 +107,16 @@ export const PlayerStrip = memo(function PlayerStrip({
                   ⚔️
                 </span>
               ) : null}
+              {p.isFortified ? (
+                <span className="rounded bg-sky-100 px-0.5 text-sky-800" title="Fortified! Immune to robber steals & 7-roll discard">
+                  🛡️
+                </span>
+              ) : null}
+              {snap.merchantSeat === p.seat ? (
+                <span className="rounded bg-amber-100 px-0.5 text-amber-800" title="Active Merchant: 2:1 bank trades this turn">
+                  ⚖️
+                </span>
+              ) : null}
               {!p.connected ? <span title="Disconnected">📡</span> : null}
             </div>
             {isActive ? (

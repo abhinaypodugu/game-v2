@@ -214,6 +214,33 @@ export function computeBotAction(
   // 5. TURN PREROLL
   if (state.phase === 'turnPreroll') {
     const p = state.players[botSeat]!;
+    // Consider playing Alchemist before rolling
+    const alchemist = p.devHand.find((c) => c.type === 'alchemist' && !c.played && c.boughtOnTurn < state.turn);
+    if (alchemist !== undefined && !state.devCardPlayedThisTurn) {
+      // Find the roll that yields the bot the most resources
+      let bestRoll = { die1: 3, die2: 4 }; // 7 by default
+      let maxYield = -1;
+      for (let d1 = 1; d1 <= 6; d1++) {
+        for (let d2 = 1; d2 <= 6; d2++) {
+          const sum = d1 + d2;
+          if (sum === 7) continue;
+          let sumYield = 0;
+          for (const hex of state.board.topology.hexes) {
+            if (hex === state.robber || state.board.hexes[hex]!.token !== sum) continue;
+            for (const v of state.board.topology.hexVertices[hex] ?? []) {
+              const b = state.buildings[v];
+              if (b?.seat === botSeat) sumYield += b.type === 'settlement' ? 1 : 2;
+            }
+          }
+          if (sumYield > maxYield) {
+            maxYield = sumYield;
+            bestRoll = { die1: d1, die2: d2 };
+          }
+        }
+      }
+      return { type: 'playDevCard', cardId: alchemist.id, payload: { roll: bestRoll } };
+    }
+
     // Consider playing Knight before rolling if robber is on one of bot's tiles
     const knight = p.devHand.find((c) => c.type === 'knight' && !c.played && c.boughtOnTurn < state.turn);
     if (knight !== undefined && !state.devCardPlayedThisTurn) {
@@ -305,6 +332,58 @@ export function computeBotAction(
         if (robberVertices.some((v) => state.buildings[v]?.seat === botSeat)) {
           return { type: 'playDevCard', cardId: knight.id };
         }
+      }
+
+      // 5. Merchant
+      const merchant = p.devHand.find((c) => c.type === 'merchant' && !c.played && c.boughtOnTurn < state.turn);
+      if (merchant !== undefined) {
+        return { type: 'playDevCard', cardId: merchant.id };
+      }
+
+      // 6. Tax Collector
+      const tax = p.devHand.find((c) => c.type === 'taxCollector' && !c.played && c.boughtOnTurn < state.turn);
+      if (tax !== undefined) {
+        return { type: 'playDevCard', cardId: tax.id };
+      }
+
+      // 7. Bountiful Harvest
+      const harvest = p.devHand.find((c) => c.type === 'bountifulHarvest' && !c.played && c.boughtOnTurn < state.turn);
+      if (harvest !== undefined) {
+        // Pick terrain with most bot buildings
+        const counts: Record<string, number> = { forest: 0, hills: 0, pasture: 0, fields: 0, mountains: 0 };
+        for (const hex of state.board.topology.hexes) {
+          const t = state.board.hexes[hex]!.terrain;
+          if (t === 'desert') continue;
+          for (const v of state.board.topology.hexVertices[hex] ?? []) {
+            if (state.buildings[v]?.seat === botSeat) counts[t] = (counts[t] ?? 0) + 1;
+          }
+        }
+        const bestTerrain = (Object.keys(counts) as Array<keyof typeof counts>).reduce((best, t) =>
+          (counts[t] ?? 0) > (counts[best] ?? 0) ? t : best, 'forest');
+        return { type: 'playDevCard', cardId: harvest.id, payload: { terrain: bestTerrain as never } };
+      }
+
+      // 8. Fortification
+      const fort = p.devHand.find((c) => c.type === 'fortification' && !c.played && c.boughtOnTurn < state.turn);
+      if (fort !== undefined && totalResources(p.resources) >= 6) {
+        return { type: 'playDevCard', cardId: fort.id };
+      }
+
+      // 9. Spy
+      const spy = p.devHand.find((c) => c.type === 'spy' && !c.played && c.boughtOnTurn < state.turn);
+      if (spy !== undefined) {
+        const others = state.players.filter((o) => o.seat !== botSeat && totalResources(o.resources) > 0);
+        if (others.length > 0) {
+          const victim = others[0]!;
+          const res = RESOURCES.find((r) => victim.resources[r] > 0) ?? 'wood';
+          return { type: 'playDevCard', cardId: spy.id, payload: { victim: victim.seat, resource: res } };
+        }
+      }
+
+      // 10. Oracle
+      const oracle = p.devHand.find((c) => c.type === 'oracle' && !c.played && c.boughtOnTurn < state.turn);
+      if (oracle !== undefined) {
+        return { type: 'playDevCard', cardId: oracle.id };
       }
     }
 

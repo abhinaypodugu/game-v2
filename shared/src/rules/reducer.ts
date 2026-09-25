@@ -271,15 +271,29 @@ function rollDiceAction(prev: GameState, rng: Rng, rollDice: RollDiceFn): Action
   }
   const state = cloneState(prev);
   const { die1, die2 } = rollDice(rng);
+  return resolveRoll(state, die1, die2);
+}
+
+function resolveRoll(
+  state: GameState,
+  die1: number,
+  die2: number,
+  initialEvents: GameEvent[] = [],
+): ActionResult {
   state.dice = { die1, die2 };
   const sum = die1 + die2;
-  const events: GameEvent[] = [{ type: 'rolled', seat: prev.activeSeat, die1, die2 }];
+  const events: GameEvent[] = [...initialEvents, { type: 'rolled', seat: state.activeSeat, die1, die2 }];
 
   if (sum === 7) {
-    // Discard phase for every player holding more than the discard limit.
+    // Discard phase for every non-fortified player holding more than the discard limit.
     state.phase = 'discard';
     state.pendingDiscards = state.players
-      .filter((p) => total(p) > state.rules.discardLimit)
+      .filter((p) => {
+        const isFortified =
+          state.fortifiedUntilTurn?.[p.seat] !== undefined && state.turn < state.fortifiedUntilTurn[p.seat]!;
+        if (isFortified) return false;
+        return total(p) > state.rules.discardLimit;
+      })
       .map((p) => ({ seat: p.seat, count: Math.floor(total(p) / 2), received: false }));
     if (state.pendingDiscards.length === 0) {
       state.phase = 'robberMove';
@@ -655,9 +669,222 @@ function playDevCard(
       events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'yearOfPlenty' });
       return ok(state, events);
     }
+    case 'merchant': {
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+      state.merchantSeat = seat;
+      events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'merchant' });
+      events.push({ type: 'merchantActivated', seat });
+      return ok(state, events);
+    }
+    case 'taxCollector': {
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+      events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'taxCollector' });
+
+      const myVp = playerPublicVp(state, seat);
+      const richer = state.players.filter(
+        (other) => other.seat !== seat && playerPublicVp(state, other.seat) > myVp && total(other) > 0,
+      );
+
+      let totalCollected = 0;
+      if (richer.length > 0) {
+        for (const target of richer) {
+          const stolen = stealRandomCard(target, rng);
+          if (stolen !== null) {
+            player.resources[stolen] += 1;
+            totalCollected += 1;
+            events.push({ type: 'stolenFrom', seat, victim: target.seat, resource: stolen });
+          }
+        }
+      } else {
+        const opponents = state.players
+          .filter((other) => other.seat !== seat && total(other) > 0)
+          .sort((a, b) => total(b) - total(a));
+        if (opponents.length > 0) {
+          const target = opponents[0]!;
+          const stolen = stealRandomCard(target, rng);
+          if (stolen !== null) {
+            player.resources[stolen] += 1;
+            totalCollected += 1;
+            events.push({ type: 'stolenFrom', seat, victim: target.seat, resource: stolen });
+          }
+        }
+      }
+      events.push({ type: 'taxCollected', seat, totalCards: totalCollected });
+      return ok(state, events);
+    }
+    case 'bountifulHarvest': {
+      const terrain = action.payload?.terrain;
+      if (!terrain) return fail('HARVEST_NEEDS_TERRAIN');
+      const resource = TERRAIN_RESOURCE[terrain];
+      if (resource === null) return fail('HARVEST_NEEDS_TERRAIN');
+
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+      events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'bountifulHarvest' });
+
+      const payouts: Record<number, number> = {};
+      for (const hex of state.board.topology.hexes) {
+        if (state.board.hexes[hex]!.terrain !== terrain) continue;
+        for (const v of state.board.topology.hexVertices[hex]!) {
+          const b = state.buildings[v];
+          if (b === undefined) continue;
+          payouts[b.seat] = (payouts[b.seat] ?? 0) + (b.type === 'settlement' ? 1 : 2);
+        }
+      }
+
+      const totalDue = Object.values(payouts).reduce((a, b) => a + b, 0);
+      const avail = state.bank[resource];
+      if (totalDue <= avail) {
+        for (const [sStr, amt] of Object.entries(payouts)) {
+          const s = Number(sStr);
+          state.players[s]!.resources[resource] += amt;
+          state.bank[resource] -= amt;
+          events.push({ type: 'produced', seat: s, resource, amount: amt });
+        }
+      } else if (Object.keys(payouts).length === 1) {
+        const s = Number(Object.keys(payouts)[0]);
+        state.players[s]!.resources[resource] += avail;
+        state.bank[resource] = 0;
+        events.push({ type: 'produced', seat: s, resource, amount: avail });
+        events.push({ type: 'bankShortage', resource });
+      } else {
+        events.push({ type: 'bankShortage', resource });
+      }
+      return ok(state, events);
+    }
+    case 'alchemist': {
+      if (prev.phase !== 'turnPreroll') return fail('ALCHEMIST_ONLY_IN_PREROLL');
+      const roll = action.payload?.roll;
+      const die1 = roll?.die1 ?? 3;
+      const die2 = roll?.die2 ?? 4;
+      if (die1 < 1 || die1 > 6 || die2 < 1 || die2 > 6) return fail('INVALID_DICE');
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+      const devEvents: GameEvent[] = [{ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'alchemist' }];
+      return resolveRoll(state, die1, die2, devEvents);
+    }
+    case 'surveyor': {
+      const hex1 = action.payload?.hex1;
+      const hex2 = action.payload?.hex2;
+      if (!hex1 || !hex2 || hex1 === hex2) return fail('SURVEYOR_NEEDS_2_HEXES');
+      const h1 = state.board.hexes[hex1];
+      const h2 = state.board.hexes[hex2];
+      if (!h1 || !h2) return fail('NO_SUCH_HEX');
+      if (h1.terrain === 'desert' || h2.terrain === 'desert') return fail('CANNOT_SWAP_DESERT');
+      if (h1.token === undefined || h2.token === undefined || h1.token === null || h2.token === null) {
+        return fail('CANNOT_SWAP_DESERT');
+      }
+
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+      const t1 = h1.token;
+      const t2 = h2.token;
+      h1.token = t2;
+      h2.token = t1;
+      events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'surveyor' });
+      events.push({ type: 'tokensSwapped', seat, hex1, hex2, token1: t2, token2: t1 });
+      return ok(state, events);
+    }
+    case 'fortification': {
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+      const untilTurn = state.turn + state.playerCount;
+      state.fortifiedUntilTurn = { ...(state.fortifiedUntilTurn ?? {}), [seat]: untilTurn };
+      events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'fortification' });
+      events.push({ type: 'fortified', seat, untilTurn });
+      return ok(state, events);
+    }
+    case 'spy': {
+      const victimSeat = action.payload?.victim;
+      const resource = action.payload?.resource;
+      if (victimSeat === undefined || !resource) return fail('SPY_NEEDS_TARGET');
+      if (victimSeat === seat) return fail('CANNOT_STEAL_SELF');
+      const victim = state.players[victimSeat];
+      if (!victim) return fail('NO_SUCH_PLAYER');
+      if (state.fortifiedUntilTurn?.[victimSeat] !== undefined && state.turn < state.fortifiedUntilTurn[victimSeat]!) {
+        return fail('TARGET_IS_FORTIFIED');
+      }
+      if (victim.resources[resource] <= 0) return fail('VICTIM_LACKS_RESOURCE');
+
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+      victim.resources[resource] -= 1;
+      player.resources[resource] += 1;
+      events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'spy' });
+      events.push({ type: 'stolenFrom', seat, victim: victimSeat, resource });
+      return ok(state, events);
+    }
+    case 'oracle': {
+      const chosenCardId = action.payload?.chosenCardId;
+      const top3 = state.devDeck.slice(state.devDeckIndex, state.devDeckIndex + 3);
+      if (top3.length === 0) return fail('DEV_DECK_EMPTY');
+
+      const chosen = top3.find((c) => c.id === chosenCardId) ?? top3[0]!;
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+
+      const chosenIdx = state.devDeck.findIndex((c) => c.id === chosen.id);
+      state.devDeck.splice(chosenIdx, 1);
+      player.devHand.push({
+        id: chosen.id,
+        type: chosen.type,
+        boughtOnTurn: state.turn,
+        played: false,
+      });
+
+      const remaining = state.devDeck.slice(state.devDeckIndex);
+      const shuffledRemaining = rng.shuffle(remaining);
+      state.devDeck = [...state.devDeck.slice(0, state.devDeckIndex), ...shuffledRemaining];
+
+      events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'oracle' });
+      events.push({ type: 'devCardBought', seat });
+      return ok(state, events);
+    }
+    case 'portRenovation': {
+      const edge1 = action.payload?.edge1;
+      const edge2 = action.payload?.edge2;
+      if (!edge1 || !edge2 || edge1 === edge2) return fail('PORT_NEEDS_2_HARBORS');
+      const h1 = state.board.harbors[edge1];
+      const h2 = state.board.harbors[edge2];
+      if (!h1 || !h2) return fail('NO_SUCH_HARBOR');
+
+      theCard.played = true;
+      state.devCardPlayedThisTurn = true;
+      state.board.harbors = {
+        ...state.board.harbors,
+        [edge1]: h2,
+        [edge2]: h1,
+      };
+      events.push({ type: 'devCardPlayed', seat, cardId: theCard.id, cardType: 'portRenovation' });
+      events.push({ type: 'harborsSwapped', seat, edge1, edge2 });
+      return ok(state, events);
+    }
     default:
       return fail('UNPLAYABLE_CARD');
   }
+}
+
+function stealRandomCard(from: PlayerState, rng: Rng): Resource | null {
+  const cards: Resource[] = [];
+  for (const r of RESOURCES) {
+    for (let i = 0; i < from.resources[r]; i++) cards.push(r);
+  }
+  if (cards.length === 0) return null;
+  const picked = rng.pick(cards);
+  from.resources[picked] -= 1;
+  return picked;
+}
+
+function playerPublicVp(state: GameState, seat: number): number {
+  let vp = 0;
+  for (const b of Object.values(state.buildings)) {
+    if (b.seat === seat) vp += b.type === 'settlement' ? 1 : 2;
+  }
+  if (state.longestRoad.holder === seat) vp += 2;
+  if (state.largestArmy.holder === seat) vp += 2;
+  return vp;
 }
 
 // ---------------------------------------------------------------------------
@@ -843,6 +1070,7 @@ function endTurn(prev: GameState): ActionResult {
   );
   state.dice = null;
   state.devCardPlayedThisTurn = false;
+  state.merchantSeat = null;
 
   // 5-6p: enter the special build sequence before the next turn. Windows
   // auto-advance clockwise; each non-active seat may build once per round.
@@ -923,6 +1151,16 @@ function advanceTurn(state: GameState, events: GameEvent[]): void {
   state.turn += 1;
   state.phase = 'turnPreroll';
   state.devCardPlayedThisTurn = false;
+  state.merchantSeat = null;
+
+  if (state.fortifiedUntilTurn) {
+    for (const [stStr, expTurn] of Object.entries(state.fortifiedUntilTurn)) {
+      if (state.turn >= expTurn) {
+        delete state.fortifiedUntilTurn[Number(stStr)];
+      }
+    }
+  }
+
   events.push({ type: 'turnStarted', seat: nextSeat, turn: state.turn });
 }
 

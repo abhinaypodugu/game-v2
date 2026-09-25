@@ -313,6 +313,126 @@ class SoundEngine {
     });
   }
 
+  /** Gold scales balancing & coins clinking — Merchant 2:1 trade activated. */
+  merchant(): void {
+    this.play(() => {
+      const freqs = [1760, 2200, 2637, 3520];
+      for (const [i, freq] of freqs.entries()) {
+        const at = i * 0.06;
+        this.tone({ type: 'sine', at, freq, attack: 0.002, decay: 0.18, gain: 0.18 });
+        this.tone({ type: 'triangle', at, freq: freq * 1.5, attack: 0.002, decay: 0.08, gain: 0.08 });
+      }
+      const chordAt = freqs.length * 0.06 + 0.02;
+      for (const freq of [523.25, 659.25, 783.99, 1046.5]) {
+        this.tone({ type: 'triangle', at: chordAt, freq, attack: 0.01, decay: 0.5, gain: 0.12 });
+      }
+    });
+  }
+
+  /** Quick swooping pocket pick & coin purse jingle — Tax Collector. */
+  taxCollector(): void {
+    this.play(() => {
+      this.noise({ attack: 0.01, decay: 0.12, gain: 0.28, filter: 'bandpass', freq: 3500, freqEnd: 1200, q: 2 });
+      for (let i = 0; i < 3; i++) {
+        const at = 0.07 + i * 0.05;
+        const freq = 2000 + i * 400;
+        this.tone({ type: 'sine', at, freq, attack: 0.002, decay: 0.14, gain: 0.16 });
+        this.tone({ type: 'sine', at: at + 0.01, freq: freq * 1.25, attack: 0.002, decay: 0.1, gain: 0.1 });
+      }
+    });
+  }
+
+  /** Lush agrarian major chord with wind rustling — Bountiful Harvest. */
+  bountifulHarvest(): void {
+    this.play(() => {
+      this.noise({ attack: 0.03, decay: 0.45, gain: 0.12, filter: 'bandpass', freq: 1200, freqEnd: 800, q: 1 });
+      const notes = [329.63, 440, 554.37, 659.25, 880];
+      for (const [i, freq] of notes.entries()) {
+        const at = i * 0.08;
+        this.tone({ type: 'triangle', at, freq, attack: 0.01, decay: 0.6, gain: 0.18 });
+        this.tone({ type: 'sine', at, freq: freq * 2, attack: 0.005, decay: 0.3, gain: 0.07 });
+      }
+    });
+  }
+
+  /** Bubbling potion transmuting with magical shimmer — The Alchemist. */
+  alchemist(): void {
+    this.play(() => {
+      const bubbleFreqs = [260, 340, 420, 520, 680];
+      for (const [i, freq] of bubbleFreqs.entries()) {
+        const at = i * 0.05;
+        this.tone({ type: 'sine', at, freq, freqEnd: freq * 1.4, attack: 0.005, decay: 0.08, gain: 0.18 });
+      }
+      const shimmerAt = bubbleFreqs.length * 0.05 + 0.02;
+      for (const [i, freq] of [1318.5, 1760, 2093, 2637, 3136].entries()) {
+        this.tone({ type: 'sine', at: shimmerAt + i * 0.03, freq, attack: 0.005, decay: 0.4, gain: 0.08 });
+      }
+      this.noise({ at: shimmerAt, attack: 0.02, decay: 0.35, gain: 0.09, filter: 'highpass', freq: 4000 });
+    });
+  }
+
+  /** Stone sliding friction and crisp placement clacks — The Surveyor. */
+  surveyor(): void {
+    this.play(() => {
+      this.noise({ attack: 0.02, decay: 0.22, gain: 0.35, filter: 'bandpass', freq: 600, freqEnd: 300, q: 2 });
+      this.tone({ type: 'sawtooth', freq: 140, freqEnd: 90, attack: 0.02, decay: 0.2, gain: 0.12, lowpass: 350 });
+      for (const at of [0.18, 0.32]) {
+        this.tone({ type: 'sine', at, freq: 880, freqEnd: 440, attack: 0.002, decay: 0.04, gain: 0.22 });
+        this.noise({ at, attack: 0.002, decay: 0.03, gain: 0.2, filter: 'highpass', freq: 2500 });
+      }
+    });
+  }
+
+  /** Heavy castle portcullis slam & defensive barrier hum — Fortification. */
+  fortification(): void {
+    this.play(() => {
+      this.tone({ type: 'sine', freq: 70, freqEnd: 35, attack: 0.01, decay: 0.45, gain: 0.4 });
+      this.noise({ attack: 0.005, decay: 0.2, gain: 0.3, filter: 'lowpass', freq: 400 });
+      this.tone({ type: 'triangle', freq: 440, freqEnd: 180, attack: 0.005, decay: 0.35, gain: 0.25 });
+      this.tone({ type: 'square', freq: 220, freqEnd: 110, attack: 0.01, decay: 0.3, gain: 0.15, lowpass: 600 });
+      const humAt = 0.18;
+      this.tone({ type: 'sine', at: humAt, freq: 587.33, freqEnd: 880, attack: 0.03, decay: 0.8, gain: 0.16 });
+      this.tone({ type: 'sine', at: humAt, freq: 880, attack: 0.03, decay: 0.8, gain: 0.1 });
+    });
+  }
+
+  /** Stealth whisper sweep and secret magnifying glass ping — The Spy. */
+  spy(): void {
+    this.play(() => {
+      this.noise({ attack: 0.02, decay: 0.3, gain: 0.22, filter: 'bandpass', freq: 2800, freqEnd: 1200, q: 3 });
+      for (const [i, freq] of [1567.98, 2349.32].entries()) {
+        const at = 0.12 + i * 0.08;
+        this.tone({ type: 'sine', at, freq, attack: 0.003, decay: 0.2, gain: 0.16 });
+        this.tone({ type: 'triangle', at, freq: freq * 0.5, attack: 0.003, decay: 0.12, gain: 0.06 });
+      }
+    });
+  }
+
+  /** Ethereal crystalline divination chimes — The Oracle. */
+  oracle(): void {
+    this.play(() => {
+      const crystalNotes = [1046.5, 1318.51, 1567.98, 2093.0, 2637.02];
+      for (const [i, freq] of crystalNotes.entries()) {
+        const at = i * 0.07;
+        this.tone({ type: 'sine', at, freq, attack: 0.008, decay: 0.7, gain: 0.14 });
+        this.tone({ type: 'sine', at, freq: freq * 2, attack: 0.004, decay: 0.35, gain: 0.04 });
+      }
+      this.noise({ attack: 0.05, decay: 0.5, gain: 0.06, filter: 'highpass', freq: 6000 });
+    });
+  }
+
+  /** Maritime ship's bell and sea wave wash — Port Renovation. */
+  portRenovation(): void {
+    this.play(() => {
+      this.noise({ attack: 0.08, decay: 0.6, gain: 0.25, filter: 'lowpass', freq: 500, freqEnd: 200 });
+      for (const strike of [0.08, 0.28]) {
+        this.tone({ type: 'sine', at: strike, freq: 1174.66, attack: 0.003, decay: 0.6, gain: 0.2 });
+        this.tone({ type: 'sine', at: strike, freq: 1180, attack: 0.003, decay: 0.6, gain: 0.15 });
+        this.tone({ type: 'triangle', at: strike, freq: 2349.32, attack: 0.003, decay: 0.25, gain: 0.07 });
+      }
+    });
+  }
+
   // --- Plumbing ------------------------------------------------------------
 
   private ensureContext(): AudioContext | null {
@@ -457,6 +577,15 @@ export const sounds = {
   largestArmy: (): void => engine.largestArmy(),
   timerTick: (): void => engine.timerTick(),
   lobbyJoin: (): void => engine.lobbyJoin(),
+  merchant: (): void => engine.merchant(),
+  taxCollector: (): void => engine.taxCollector(),
+  bountifulHarvest: (): void => engine.bountifulHarvest(),
+  alchemist: (): void => engine.alchemist(),
+  surveyor: (): void => engine.surveyor(),
+  fortification: (): void => engine.fortification(),
+  spy: (): void => engine.spy(),
+  oracle: (): void => engine.oracle(),
+  portRenovation: (): void => engine.portRenovation(),
   setMuted: (muted: boolean): void => engine.setMuted(muted),
   isMuted: (): boolean => engine.isMuted(),
 };

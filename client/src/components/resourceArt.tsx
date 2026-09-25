@@ -170,4 +170,13 @@ export const DEV_META: Record<DevCardType, { label: string; icon: string; blurb:
   roadBuilding: { label: 'Road Building', icon: '🛣️', blurb: 'Place 2 roads for free.' },
   monopoly: { label: 'Monopoly', icon: '👑', blurb: 'Take every card of one resource.' },
   yearOfPlenty: { label: 'Year of Plenty', icon: '🎁', blurb: 'Take any 2 resources from the bank.' },
+  merchant: { label: 'The Merchant', icon: '⚖️', blurb: 'Trade all resources 2:1 with the bank for the rest of your turn.' },
+  taxCollector: { label: 'Tax Collector', icon: '💰', blurb: 'Steal 1 card from players with more VP (or player with most cards).' },
+  bountifulHarvest: { label: 'Bountiful Harvest', icon: '🌾', blurb: 'Pick 1 terrain; all settlements & cities on it harvest immediately.' },
+  alchemist: { label: 'The Alchemist', icon: '🧪', blurb: 'Choose the exact dice roll (2-12) before rolling in pre-roll.' },
+  surveyor: { label: 'The Surveyor', icon: '🗺️', blurb: 'Swap number tokens between any 2 non-desert resource hexes.' },
+  fortification: { label: 'Fortification', icon: '🏰', blurb: 'Immune to robber steals and 7-roll discard until your next turn.' },
+  spy: { label: 'The Spy', icon: '👁️', blurb: 'Inspect an opponent hand and steal 1 specific resource of your choice.' },
+  oracle: { label: 'The Oracle', icon: '🔮', blurb: 'Inspect top 3 dev cards in deck, keep 1, shuffle the rest back.' },
+  portRenovation: { label: 'Port Renovation', icon: '⚓', blurb: 'Swap any 2 coastal harbors on the island.' },
 };

@@ -17,6 +17,8 @@ export interface PublicPlayer {
   roadsLeft: number;
   settlementsLeft: number;
   citiesLeft: number;
+  isFortified?: boolean;
+  spyResources?: Record<Resource, number>;
   totalVp?: number;
   resources?: Record<Resource, number>;
   devCards?: Array<{ id: string; type: string; played: boolean }>;
@@ -27,6 +29,7 @@ export interface OwnView {
   resources: Record<Resource, number>;
   devHand: Array<{ id: string; type: string; boughtOnTurn: number; played: boolean }>;
   totalVp: number;
+  oraclePreview?: Array<{ id: string; type: string }>;
 }
 
 export interface PersonalSnapshot {
@@ -51,6 +54,8 @@ export interface PersonalSnapshot {
   largestArmy: GameState['largestArmy'];
   /** The active player already played a development card this turn. */
   devCardPlayedThisTurn: boolean;
+  merchantSeat?: number | null;
+  fortifiedSeats?: number[];
   winner: number | null;
   players: PublicPlayer[];
   you: OwnView;
@@ -62,9 +67,17 @@ function ownTotalVp(state: GameState, seat: number): number {
 
 export function sanitize(state: GameState, seat: number): PersonalSnapshot {
   const isFinished = state.winner !== null;
+  const own = state.players[seat]!;
+  const canSpy = seat === state.activeSeat && own.devHand.some((c) => c.type === 'spy' && !c.played);
+
+  const fortifiedSeats = Object.keys(state.fortifiedUntilTurn ?? {})
+    .map(Number)
+    .filter((s) => state.turn < (state.fortifiedUntilTurn?.[s] ?? 0));
+
   const players: PublicPlayer[] = state.players.map((p) => {
     const resourceCount =
       p.resources.wood + p.resources.brick + p.resources.sheep + p.resources.wheat + p.resources.ore;
+    const isFortified = fortifiedSeats.includes(p.seat);
     return {
       seat: p.seat,
       name: p.name,
@@ -77,6 +90,8 @@ export function sanitize(state: GameState, seat: number): PersonalSnapshot {
       roadsLeft: p.roadsLeft,
       settlementsLeft: p.settlementsLeft,
       citiesLeft: p.citiesLeft,
+      isFortified,
+      ...(canSpy && p.seat !== seat ? { spyResources: { ...p.resources } } : {}),
       ...(isFinished
         ? {
             totalVp: totalVp(state, p.seat),
@@ -87,7 +102,10 @@ export function sanitize(state: GameState, seat: number): PersonalSnapshot {
     };
   });
 
-  const own = state.players[seat]!;
+  const canOracle = seat === state.activeSeat && own.devHand.some((c) => c.type === 'oracle' && !c.played);
+  const oraclePreview = canOracle
+    ? state.devDeck.slice(state.devDeckIndex, state.devDeckIndex + 3).map((c) => ({ id: c.id, type: c.type }))
+    : undefined;
 
   return {
     version: state.version,
@@ -110,16 +128,18 @@ export function sanitize(state: GameState, seat: number): PersonalSnapshot {
     longestRoad: state.longestRoad,
     largestArmy: state.largestArmy,
     devCardPlayedThisTurn: state.devCardPlayedThisTurn,
+    merchantSeat: state.merchantSeat ?? null,
+    fortifiedSeats,
     winner: state.winner,
     players,
     you: {
       seat,
       resources: { ...own.resources },
-      // Revealed VP cards (flipped at victory) stay visible; other played cards drop out.
       devHand: own.devHand
         .filter((c) => !c.played || c.type === 'victoryPoint')
         .map((c) => ({ id: c.id, type: c.type, boughtOnTurn: c.boughtOnTurn, played: c.played === true })),
       totalVp: ownTotalVp(state, seat),
+      oraclePreview,
     },
   };
 }

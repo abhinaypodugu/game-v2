@@ -100,6 +100,10 @@ export interface GameState {
   devCardPlayedThisTurn: boolean;
   /** A knight was played before rolling: after the robber resolves, return to turnPreroll. */
   knightBeforeRoll: boolean;
+  /** Active seat enjoying 2:1 bank trade rate for all resources via Merchant card. */
+  merchantSeat?: number | null;
+  /** Map of seat -> turn number when fortification wears off. */
+  fortifiedUntilTurn?: Record<number, number>;
   /** Monotonic version — bumped on every accepted action (client cache key). */
   version: number;
 }
