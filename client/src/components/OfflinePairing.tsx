@@ -312,6 +312,9 @@ export function HostPairingSheet({ onClose }: { onClose: () => void }): React.JS
   const invite = step.kind === 'invite' ? step : null;
   return (
     <PairingSheet title="Add player" onClose={onClose} closeLabel="Cancel" testId="host-pairing">
+      <div className="w-full rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed font-bold text-amber-900">
+        💡 <b>Offline Network Required:</b> No internet or mobile data needed! Turn on <b>Personal Hotspot</b> on this phone (or connect all phones to the same Wi-Fi) so devices can communicate locally.
+      </div>
       <p className="w-full text-sm font-bold text-ink-soft">
         The guest joins your Wi-Fi or hotspot, opens the app and taps <b>Join a game</b>.
       </p>
@@ -455,12 +458,15 @@ export function GuestPairingSheet({
   if (step.kind === 'reply') {
     return (
       <PairingSheet title="Join offline game" onClose={cancel} closeLabel="Cancel" testId="guest-pairing">
+        <div className="w-full rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed font-bold text-amber-900">
+          💡 <b>Offline Network Required:</b> Make sure you are connected to the host's <b>Personal Hotspot</b> or shared Wi-Fi. (No internet or mobile data needed).
+        </div>
         <StepHeading n={2}>Show this to the host</StepHeading>
         <p className="w-full text-sm font-bold text-ink-soft">The host scans it under “Scan the guest's code”.</p>
         <QrCode value={step.replyCode} label="Reply code for the host to scan" />
         <div className="flex items-center gap-2 font-bold text-ink-soft" data-testid="waiting-host">
           <span className="h-5 w-5 animate-spin rounded-full border-[3px] border-line border-t-cta" aria-hidden="true" />
-          Waiting for host…
+          Waiting for host to scan and connect…
         </div>
         <TextFallback>
           <p className="text-sm font-bold">Send this reply code to the host:</p>
@@ -476,6 +482,9 @@ export function GuestPairingSheet({
   const answering = step.kind === 'answering';
   return (
     <PairingSheet title="Join offline game" onClose={cancel} closeLabel="Cancel" testId="guest-pairing">
+      <div className="w-full rounded-2xl border-2 border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed font-bold text-amber-900">
+        💡 <b>Offline Network Required:</b> No internet or mobile data needed, but both devices must be on the same local network: connect to the host's <b>Personal Hotspot</b> or shared Wi-Fi.
+      </div>
       <p className="w-full text-sm font-bold text-ink-soft">
         Join the host's Wi-Fi or hotspot first. The host taps <b>Add player</b> to show a code.
       </p>

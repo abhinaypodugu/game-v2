@@ -181,7 +181,7 @@ export function HomePage(): React.JSX.Element {
             📡 Play offline / peer-to-peer
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
-            One phone taps <b>Host a game</b>. Other players can join instantly by entering the 4-letter room code above or scanning the host's QR code once (0 return scans!). Pure offline 2-way scan is available if you have zero signal.
+            Play anywhere with <b>zero internet or cellular data</b>! Turn on <b>Personal Hotspot</b> on one phone (even in Airplane mode) and have friends connect to its Wi-Fi. Host shows the invite QR, guests scan it, and play directly device-to-device.
           </p>
         </div>
         {canResume ? (

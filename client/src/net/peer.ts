@@ -10,12 +10,14 @@ import { decodeFrame, encodeFrame } from './transport';
 export const CHANNEL_LABEL = 'game';
 /** Upper bound on ICE gathering; whatever was gathered by then is used. */
 export const ICE_GATHER_TIMEOUT_MS = 4000;
+/** Timeout for WebRTC data channel to connect after signaling exchange. */
+export const PAIRING_CONNECT_TIMEOUT_MS = 15000;
 
 // Negotiated (id 0) on both sides: no 'datachannel' event to wait for.
 const CHANNEL_INIT: RTCDataChannelInit = { negotiated: true, id: 0, ordered: true };
 
 const CONNECT_FAILED =
-  'Could not connect. Make sure both phones are on the same Wi-Fi or hotspot, then pair again.';
+  'Could not connect. Both phones must be on the same local network: turn on Personal Hotspot on one phone, or connect both to the same Wi-Fi (no mobile data or internet needed), then try again.';
 
 /** Events a peer must never inject into the hub: they are lifecycle signals, not requests. */
 const RESERVED_EVENTS = new Set(['connect', 'connection', 'disconnect', 'disconnecting']);
@@ -217,9 +219,11 @@ function trackPairing(
   let abort = (): void => undefined;
   const opened = new Promise<RTCDataChannel>((resolve, reject) => {
     let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const settle = (err: Error | null): void => {
       if (settled) return;
       settled = true;
+      if (timer !== null) clearTimeout(timer);
       stopWatching();
       channel.removeEventListener('open', onOpen);
       if (err === null) resolve(channel);
@@ -228,6 +232,9 @@ function trackPairing(
     const onOpen = (): void => settle(null);
     const stopWatching = watchLink(pc, channel, () => settle(new Error(CONNECT_FAILED)));
     channel.addEventListener('open', onOpen);
+    timer = setTimeout(() => {
+      settle(new Error(CONNECT_FAILED));
+    }, PAIRING_CONNECT_TIMEOUT_MS);
     abort = () => settle(new Error('Pairing cancelled.'));
   });
   // Callers may drop `opened` (e.g. a cancelled pairing sheet): never an unhandled rejection.

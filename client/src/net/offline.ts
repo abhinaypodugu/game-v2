@@ -235,6 +235,7 @@ export class OfflineController {
       accept: async (replyCode) => {
         await offer.accept(replyCode);
         link.accepted = true;
+        await offer.opened;
       },
       cancel: () => {
         if (link.bridge !== null || host.links.get(id) !== link) return;
