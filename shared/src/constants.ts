@@ -105,6 +105,8 @@ export interface GameRules {
   discardLimit: number;
   /** Custom distribution of development cards in the deck. */
   customDevDeck?: Partial<Record<DevCardType, number>>;
+  /** When true, hide the bank resource card counts from players. */
+  hideBankCardsCount?: boolean;
 }
 
 export const DEFAULT_RULES: Readonly<GameRules> = { victoryPointsToWin: 10, discardLimit: 7 };

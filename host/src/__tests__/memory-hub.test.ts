@@ -354,5 +354,42 @@ describe('RoomManager kickPlayer', () => {
     host.client.send('room:kickPlayer', { seatIndex: 0 });
     expect((await hostError).message).toBe('CANNOT_KICK_HOST');
   });
+
+  it('updates hideBankCardsCount, applies it to game rules, and sanitizes bank counts to players', async () => {
+    const { ctx, hub } = startHost();
+    const host = await createRoom(hub, 'Ann');
+    const code = host.joined.roomCode;
+    const ben = await joinRoom(hub, code, 'Ben');
+    const cal = await joinRoom(hub, code, 'Cal');
+
+    // Host updates settings to hide bank cards count
+    const settingsUpdated = host.client.next<any>('room:state', (s) => s.settings.hideBankCardsCount === true);
+    host.client.send('room:updateSettings', { hideBankCardsCount: true });
+    await settingsUpdated;
+
+    const colored = host.client.next<RoomStatePayload>('room:state', (s) =>
+      s.players.length === 3 && s.players.every((p) => p.color !== null),
+    );
+    [host.client, ben.client, cal.client].forEach((c, i) => c.send('room:pickColor', { color: ['red', 'blue', 'orange'][i] }));
+    await colored;
+
+    const ready = host.client.next<RoomStatePayload>('room:state', (s) => s.players.every((p) => p.ready));
+    for (const c of [host.client, ben.client, cal.client]) c.send('room:setReady', { ready: true });
+    await ready;
+
+    // Start game
+    const started = host.client.next<PersonalSnapshot>('game:state');
+    host.client.send('room:start');
+    const snap = await started;
+
+    expect(snap.rules.hideBankCardsCount).toBe(true);
+    // Bank counts should be masked to -1
+    expect(snap.bank).toEqual({ wood: -1, brick: -1, sheep: -1, wheat: -1, ore: -1 });
+
+    // Internal game state still retains full accurate bank
+    const room = ctx.rooms.getRoom(code)!;
+    expect(room.game!.state.bank.wood).toBeGreaterThan(0);
+  });
 });
+
 

@@ -84,9 +84,19 @@ export const ColonistRightSidebar = memo(function ColonistRightSidebar({
           <span className="mr-auto flex flex-col text-[10px] font-bold uppercase leading-tight text-ink-soft">
             <span className="text-base leading-none">🏦</span>Bank
           </span>
-          {RESOURCES.map((r) => (
-            <ResourceCard key={r} resource={r} count={bank[r]} size="md" dim={bank[r] === 0} title={`${bank[r]} ${r} in the bank`} />
-          ))}
+          {RESOURCES.map((r) => {
+            const isHidden = rules.hideBankCardsCount === true || bank[r] < 0;
+            return (
+              <ResourceCard
+                key={r}
+                resource={r}
+                count={isHidden ? '?' : bank[r]}
+                size="md"
+                dim={!isHidden && bank[r] === 0}
+                title={isHidden ? `${r} (bank count hidden)` : `${bank[r]} ${r} in the bank`}
+              />
+            );
+          })}
           <button
             type="button"
             onClick={onOpenDevGuide}

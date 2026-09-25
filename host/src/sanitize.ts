@@ -121,7 +121,9 @@ export function sanitize(state: GameState, seat: number): PersonalSnapshot {
     buildings: state.buildings,
     roads: state.roads,
     robber: state.robber,
-    bank: state.bank,
+    bank: !isFinished && state.rules.hideBankCardsCount
+      ? { wood: -1, brick: -1, sheep: -1, wheat: -1, ore: -1 }
+      : state.bank,
     devDeckCount: state.devDeck.length - state.devDeckIndex,
     trades: state.trades,
     pendingDiscards: state.pendingDiscards.map((d) => ({ ...d })),

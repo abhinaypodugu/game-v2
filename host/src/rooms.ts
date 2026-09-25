@@ -30,6 +30,8 @@ export interface RoomSettings {
   /** On a 7, seats holding more than this many cards discard half (5..20). */
   discardLimit: number;
   customDevDeck?: Partial<Record<DevCardType, number>>;
+  /** When true, hide the bank resource card counts from players. */
+  hideBankCardsCount?: boolean;
 }
 
 export const DEFAULT_SETTINGS: RoomSettings = {
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: RoomSettings = {
   diceMode: 'random',
   victoryPointsToWin: DEFAULT_RULES.victoryPointsToWin,
   discardLimit: DEFAULT_RULES.discardLimit,
+  hideBankCardsCount: false,
 };
 
 export const SETTINGS_LIMITS = {
@@ -104,6 +107,7 @@ const roomSnapshotSchema: z.ZodType<Room> = z.object({
     victoryPointsToWin: z.number().int(),
     discardLimit: z.number().int(),
     customDevDeck: z.record(z.string(), z.number().int().min(0).max(99)).optional(),
+    hideBankCardsCount: z.boolean().optional(),
   }),
   game: z
     .object({
@@ -331,6 +335,7 @@ export class RoomManager {
     if (patch.diceMode !== undefined) room.settings.diceMode = patch.diceMode;
     if (patch.victoryPointsToWin !== undefined) room.settings.victoryPointsToWin = patch.victoryPointsToWin;
     if (patch.discardLimit !== undefined) room.settings.discardLimit = patch.discardLimit;
+    if (patch.hideBankCardsCount !== undefined) room.settings.hideBankCardsCount = Boolean(patch.hideBankCardsCount);
     if (patch.customDevDeck !== undefined) {
       const validated: Partial<Record<DevCardType, number>> = {};
       for (const [k, v] of Object.entries(patch.customDevDeck)) {
@@ -376,7 +381,8 @@ export class RoomManager {
       rules: {
         victoryPointsToWin: room.settings.victoryPointsToWin,
         discardLimit: room.settings.discardLimit,
-        customDevDeck: room.settings.customDevDeck,
+        ...(room.settings.customDevDeck !== undefined ? { customDevDeck: room.settings.customDevDeck } : {}),
+        ...(room.settings.hideBankCardsCount ? { hideBankCardsCount: true } : {}),
       },
     });
     room.game = { state, seed: room.seed, events: [{ type: 'gameStarted', playerCount, seed: room.seed }] };

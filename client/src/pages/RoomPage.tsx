@@ -94,6 +94,7 @@ export function RoomPage(): React.JSX.Element {
   const started = room?.started ?? true;
   const vpToWin = room?.settings.victoryPointsToWin ?? DEFAULT_RULES.victoryPointsToWin;
   const discardLimit = room?.settings.discardLimit ?? DEFAULT_RULES.discardLimit;
+  const hideBankCardsCount = room?.settings.hideBankCardsCount ?? false;
   const customDevDeck = room?.settings.customDevDeck;
 
   const defaultDeck = useMemo(
@@ -588,6 +589,23 @@ export function RoomPage(): React.JSX.Element {
               ) : (
                 <ReadOnlyValue testId="dice-mode-value">
                   {settings.diceMode === 'random' ? 'Random' : 'Balanced'}
+                </ReadOnlyValue>
+              )}
+            </SettingRow>
+            <SettingRow label="Bank cards" hint="Hide counts to test players' memory">
+              {isHost ? (
+                <select
+                  value={hideBankCardsCount ? 'hidden' : 'visible'}
+                  onChange={(e) => updateSettings({ hideBankCardsCount: e.target.value === 'hidden' })}
+                  className={selectClass}
+                  data-testid="hide-bank-cards-select"
+                >
+                  <option value="visible">Visible (standard)</option>
+                  <option value="hidden">Hidden (memory)</option>
+                </select>
+              ) : (
+                <ReadOnlyValue testId="hide-bank-cards-value">
+                  {hideBankCardsCount ? 'Hidden (memory)' : 'Visible'}
                 </ReadOnlyValue>
               )}
             </SettingRow>

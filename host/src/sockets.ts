@@ -53,6 +53,7 @@ const settingsSchema = z.object({
   victoryPointsToWin: z.number().int().min(3).max(20).optional(),
   discardLimit: z.number().int().min(5).max(20).optional(),
   customDevDeck: z.record(z.string(), z.number().int().min(0).max(99)).optional(),
+  hideBankCardsCount: z.boolean().optional(),
 });
 
 export function roomStatePayload(room: Room): unknown {

@@ -97,6 +97,7 @@ export function createGame(opts: EngineOptions): GameState {
       victoryPointsToWin: opts.rules?.victoryPointsToWin ?? DEFAULT_RULES.victoryPointsToWin,
       discardLimit: opts.rules?.discardLimit ?? DEFAULT_RULES.discardLimit,
       ...(opts.rules?.customDevDeck !== undefined ? { customDevDeck: opts.rules.customDevDeck } : {}),
+      ...(opts.rules?.hideBankCardsCount ? { hideBankCardsCount: true } : {}),
     },
     players,
     board,

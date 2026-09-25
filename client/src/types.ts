@@ -67,6 +67,8 @@ export interface RoomSettings {
   victoryPointsToWin: number;
   discardLimit: number;
   customDevDeck?: Partial<Record<DevCardType, number>>;
+  /** When true, hide the bank resource card counts from players. */
+  hideBankCardsCount?: boolean;
 }
 
 export type RoomSettingsPatch = Partial<RoomSettings>;

@@ -102,7 +102,7 @@ export const ResourceCard = memo(function ResourceCard({
   title,
 }: {
   resource: Resource;
-  count?: number;
+  count?: number | string;
   size?: CardSize;
   dim?: boolean;
   title?: string;

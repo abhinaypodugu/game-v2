@@ -162,6 +162,12 @@ export const ColonistTopLeftToolbar = memo(function ColonistTopLeftToolbar({
                         <div className="text-ink-soft">Players</div>
                         <div className="text-sm font-bold">{snap.players.length} · Turn {snap.turn}</div>
                       </div>
+                      <div className="rounded-xl bg-parchment px-3 py-2 col-span-2">
+                        <div className="text-ink-soft">Bank cards count</div>
+                        <div className="text-sm font-bold" data-testid="rules-bank-cards">
+                          {snap.rules.hideBankCardsCount ? 'Hidden (Memory mode)' : 'Visible (Standard)'}
+                        </div>
+                      </div>
                     </div>
                     <CostRow label="Road" cost={BUILD_COSTS.road} note="Longest Road (5+) = 2 VP" />
                     <CostRow label="Settlement" cost={BUILD_COSTS.settlement} note="1 VP" />

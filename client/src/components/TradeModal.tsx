@@ -74,13 +74,16 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
       return count % rate === 0 && count <= (snap.you.resources[r] ?? 0);
     });
 
-  // Check that receive cards match total credits, bank has enough stock, and no give/receive overlap
+  const isBankCountHidden = snap.rules.hideBankCardsCount === true || Object.values(snap.bank).some((n) => n < 0);
+
+  // Check that receive cards match total credits, bank has enough stock (if visible), and no give/receive overlap
   const receiveValid =
     totalReceiveCards === totalCredits &&
     RESOURCES.every((r) => {
       const count = receive[r] ?? 0;
       if (count === 0) return true;
-      return (give[r] ?? 0) === 0 && count <= (snap.bank[r] ?? 0);
+      if ((give[r] ?? 0) > 0) return false;
+      return isBankCountHidden ? true : count <= (snap.bank[r] ?? 0);
     });
 
   const bankValid = giveValid && receiveValid;
@@ -309,10 +312,10 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
                 (receive[r] ?? 0) > 0
                   ? 0
                   : Math.floor((snap.you.resources[r] ?? 0) / bankRate(r)) * bankRate(r),
-              (r) => ((give[r] ?? 0) > 0 ? 0 : Math.max(0, snap.bank[r] ?? 0)),
+              (r) => ((give[r] ?? 0) > 0 ? 0 : isBankCountHidden ? totalCredits || 9 : Math.max(0, snap.bank[r] ?? 0)),
               (r) => bankRate(r),
               (r) => `${bankRate(r)}:1 rate`,
-              (r) => `${snap.bank[r] ?? 0} in bank`,
+              (r) => (isBankCountHidden ? 'in bank: ?' : `${snap.bank[r] ?? 0} in bank`),
             )}
             <button
               type="button"
