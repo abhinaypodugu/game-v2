@@ -159,10 +159,13 @@ describe('extractRoomCode and isAcceptableQrCode', () => {
   it('extracts room code from plain 4 letters, room URLs, or broker prefixes', () => {
     expect(extractRoomCode('ABCD')).toBe('ABCD');
     expect(extractRoomCode('wxyz')).toBe('WXYZ');
+    expect(extractRoomCode('6ENY')).toBe('6ENY');
     expect(extractRoomCode('https://domain.com/#/ABCD')).toBe('ABCD');
     expect(extractRoomCode('https://domain.com/#WXYZ')).toBe('WXYZ');
+    expect(extractRoomCode('https://abhinaypodugu.github.io/game-v2/#/6ENY')).toBe('6ENY');
     expect(extractRoomCode('https://domain.com/?room=ABCD')).toBe('ABCD');
     expect(extractRoomCode('catan-v2-EFGH')).toBe('EFGH');
+    expect(extractRoomCode('catan-v2-6ENY')).toBe('6ENY');
     expect(extractRoomCode('LC1.invite-code')).toBeNull();
     expect(extractRoomCode('invalid-string')).toBeNull();
   });
@@ -170,8 +173,11 @@ describe('extractRoomCode and isAcceptableQrCode', () => {
   it('accepts valid Catan QR codes (pairing codes or room links/codes) and rejects foreign ones', () => {
     expect(isAcceptableQrCode('LC1.sample-pairing-code')).toBe(true);
     expect(isAcceptableQrCode('https://abhinaypodugu.github.io/game-v2/#/ABCD')).toBe(true);
+    expect(isAcceptableQrCode('https://abhinaypodugu.github.io/game-v2/#/6ENY')).toBe(true);
     expect(isAcceptableQrCode('ABCD')).toBe(true);
+    expect(isAcceptableQrCode('6ENY')).toBe(true);
     expect(isAcceptableQrCode('catan-v2-ABCD')).toBe(true);
+    expect(isAcceptableQrCode('catan-v2-6ENY')).toBe(true);
     expect(isAcceptableQrCode('WIFI:S:MyNetwork;T:WPA;P:secret;;')).toBe(false);
     expect(isAcceptableQrCode('https://google.com')).toBe(false);
     expect(isAcceptableQrCode('random-text')).toBe(false);

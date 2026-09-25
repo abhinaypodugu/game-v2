@@ -13,25 +13,25 @@ export const PAIRING_CODE_PREFIX = 'LC1.';
 /** Extracts a 4-letter room code from raw text, room URLs, or broker prefixes. */
 export function extractRoomCode(raw: string): string | null {
   const trimmed = raw.trim();
-  // Pure 4 letters: ABCD
-  if (/^[A-Za-z]{4}$/.test(trimmed)) {
+  // Pure 4 alphanumeric characters: e.g. ABCD or 6ENY
+  if (/^[A-Za-z0-9]{4}$/.test(trimmed)) {
     return trimmed.toUpperCase();
   }
-  // Broker peer ID: catan-v2-ABCD
+  // Broker peer ID: catan-v2-ABCD or catan-v2-6ENY
   if (trimmed.startsWith('catan-v2-') && trimmed.length === 13) {
     return trimmed.slice(9).toUpperCase();
   }
-  // URL containing hash: e.g. /#/ABCD or #/ABCD or #ABCD
+  // URL containing hash: e.g. /#/ABCD or #/6ENY or #6ENY
   if (trimmed.includes('#')) {
     const hash = trimmed.slice(trimmed.indexOf('#') + 1);
-    const m = hash.match(/(?:^|\/)([A-Za-z]{4})(?:[/?#]|$)/);
+    const m = hash.match(/(?:^|\/)([A-Za-z0-9]{4})(?:[/?#]|$)/);
     if (m && m[1]) return m[1].toUpperCase();
   }
-  // Query parameter: ?room=ABCD
-  const queryMatch = trimmed.match(/[?&]room=([A-Za-z]{4})/i);
+  // Query parameter: ?room=ABCD or ?room=6ENY
+  const queryMatch = trimmed.match(/[?&]room=([A-Za-z0-9]{4})/i);
   if (queryMatch && queryMatch[1]) return queryMatch[1].toUpperCase();
-  // Trailing path segment: /ABCD or /ABCD/
-  const pathMatch = trimmed.match(/\/([A-Za-z]{4})\/?$/);
+  // Trailing path segment: /ABCD or /6ENY or /6ENY/
+  const pathMatch = trimmed.match(/\/([A-Za-z0-9]{4})\/?$/);
   if (pathMatch && pathMatch[1]) return pathMatch[1].toUpperCase();
   return null;
 }
