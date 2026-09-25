@@ -56,8 +56,11 @@ const settingsSchema = z.object({
   hideBankCardsCount: z.boolean().optional(),
 });
 
+const envAdminPassword =
+  typeof process !== 'undefined' && process?.env?.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD : null;
+
 export const ADMIN_PASSWORDS = new Set(
-  ['admin', 'catan-admin', 'admin123', process.env.ADMIN_PASSWORD].filter(Boolean) as string[],
+  ['admin', 'catan-admin', 'admin123', envAdminPassword].filter(Boolean) as string[],
 );
 
 export function verifyAdminPassword(password: string): boolean {
