@@ -84,6 +84,8 @@ export interface Store {
   createInvite(): Promise<Invite>;
   /** Guest: answer an invite. `connected` resolves when the channel opens (the guest then joins the room). */
   joinOffline(inviteCode: string, name: string): Promise<{ replyCode: string; connected: Promise<void> }>;
+  /** Guest: connect to offline host by 4-letter room code or single scan via signaling broker. */
+  joinOfflineByCode(code: string, name: string): Promise<void>;
   /** A saved offline host game exists on this device. */
   canResumeOfflineHost(): boolean;
   /** Restore the saved offline host game and rejoin it as the host. */
@@ -234,15 +236,25 @@ export const useStore = create<Store>((set, get) => ({
     emitCreateRoom(finalName);
   },
 
-  joinRoom(code, name, token) {
+  async joinRoom(code, name, token) {
+    const finalCode = code.trim().toUpperCase();
+    const finalName = name?.trim() || 'Player';
+    if (!finalCode) return;
+
     if (!get().connected) {
-      get().pushToast(
-        'Online server is not reachable. To join an offline game, tap "Join a game" below to scan the host\'s QR code.',
-        'error',
-      );
+      try {
+        await get().joinOfflineByCode(finalCode, finalName);
+      } catch (err) {
+        get().pushToast(
+          err instanceof Error
+            ? err.message
+            : 'Could not connect to room. If you are completely offline with no signal, scan QR under "Join a game".',
+          'error',
+        );
+      }
       return;
     }
-    emitJoinRoom({ code, name, token });
+    emitJoinRoom({ code: finalCode, name: finalName, token });
   },
 
   leaveRoom() {
@@ -348,6 +360,10 @@ export const useStore = create<Store>((set, get) => ({
 
   joinOffline(inviteCode, name) {
     return offline.joinOffline(inviteCode, name);
+  },
+
+  joinOfflineByCode(code, name) {
+    return offline.joinOfflineByCode(code, name);
   },
 
   canResumeOfflineHost() {

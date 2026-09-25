@@ -18,6 +18,7 @@ import type { RoomState } from '../types';
 import { ChannelTransport } from './channelTransport';
 import { EndpointTransport } from './endpointTransport';
 import { acceptOffer, bridgeChannelToHub, createOffer, watchLink, type GuestAnswer, type HostOffer, type HubBridge } from './peer';
+import { startBrokerHost, connectBrokerGuest, type BrokerHostHandle } from './peerBroker';
 import type { ClientTransport, TransportListener } from './transport';
 
 export type OfflineRole = 'host' | 'guest';
@@ -78,11 +79,12 @@ interface SavedHostGame {
 }
 
 interface HostPeerLink {
-  offer: HostOffer;
+  offer: HostOffer | null;
   bridge: HubBridge | null;
   /** The guest's reply was applied; a later failure is worth telling the host. */
   accepted: boolean;
   seatIndex: number | null;
+  close?: () => void;
 }
 
 interface HostRuntime {
@@ -92,12 +94,14 @@ interface HostRuntime {
   transport: EndpointTransport;
   links: Map<string, HostPeerLink>;
   persistTimer: TimerHandle | null;
+  broker: BrokerHostHandle | null;
 }
 
 interface GuestLink {
-  answer: GuestAnswer;
+  answer: GuestAnswer | null;
   transport: ChannelTransport | null;
   stopWatching: (() => void) | null;
+  closeBroker?: (() => void) | null;
 }
 
 export class OfflineController {
@@ -135,6 +139,10 @@ export class OfflineController {
     }
     this.persistHost();
     this.startHostingServices();
+    const session = this.bridge.getSession();
+    if (session !== null) {
+      this.attachBrokerHost(session.roomCode, host);
+    }
   }
 
   canResumeOfflineHost(): boolean {
@@ -171,6 +179,7 @@ export class OfflineController {
       throw err;
     }
     this.startHostingServices();
+    this.attachBrokerHost(saved.session.roomCode, host);
   }
 
   async createInvite(): Promise<Invite> {
@@ -272,6 +281,47 @@ export class OfflineController {
     return { replyCode: answer.replyCode, connected };
   }
 
+  async joinOfflineByCode(code: string, name: string): Promise<void> {
+    if (this.host !== null) throw new Error('This phone is hosting a game. Stop hosting before joining another one.');
+    const roomCode = code.trim().toUpperCase();
+    if (!roomCode) throw new Error('Room code is required.');
+    const playerName = cleanName(name);
+
+    this.closeGuestLink();
+
+    let guestConn: { channel: RTCDataChannel; pc: RTCPeerConnection; close(): void };
+    try {
+      guestConn = await connectBrokerGuest(roomCode);
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Could not connect to host.');
+    }
+
+    this.bridge.patchOffline({ role: 'guest', peers: [] });
+    disconnectOnline();
+
+    const transport = new ChannelTransport(guestConn.channel);
+    const link: GuestLink = {
+      answer: null,
+      transport,
+      stopWatching: watchLink(guestConn.pc, guestConn.channel, () => this.onHostLost(link)),
+      closeBroker: guestConn.close,
+    };
+    this.guest = link;
+    const joined = waitForReply(transport, 'room:joined');
+    setTransport(transport);
+    this.bridge.ensureHandlers();
+    this.bridge.patchOffline({ hostLost: false });
+
+    const saved = this.bridge.loadOfflineSession();
+    const token = saved?.roomCode === roomCode ? saved.reconnectToken : undefined;
+    emitJoinRoom(
+      token === undefined
+        ? { code: roomCode, name: playerName }
+        : { code: roomCode, name: playerName, token },
+    );
+    await joined;
+  }
+
   // --------------------------------------------------------------- common
 
   leaveOffline(): void {
@@ -296,10 +346,13 @@ export class OfflineController {
     const host = this.host;
     if (host !== null) {
       this.host = null;
+      host.broker?.close();
+      host.broker = null;
       if (host.persistTimer !== null) clearTimeout(host.persistTimer);
       for (const link of host.links.values()) {
         if (link.bridge !== null) link.bridge.close();
-        else link.offer.close();
+        else link.offer?.close();
+        link.close?.();
       }
       host.links.clear();
       stopRoomTimers(host.ctx);
@@ -321,7 +374,7 @@ export class OfflineController {
     transport.on('room:state', this.schedulePersist);
     transport.on('game:state', this.schedulePersist);
     transport.on('game:event', this.schedulePersist);
-    const host: HostRuntime = { hub, rooms, ctx, transport, links: new Map(), persistTimer: null };
+    const host: HostRuntime = { hub, rooms, ctx, transport, links: new Map(), persistTimer: null, broker: null };
     this.host = host;
     return host;
   }
@@ -417,12 +470,60 @@ export class OfflineController {
     this.bridge.patchOffline({ peers });
   }
 
+  private attachBrokerHost(roomCode: string, host: HostRuntime): void {
+    host.broker?.close();
+    host.broker = startBrokerHost(roomCode, (channel, pc) => {
+      if (this.host !== host) {
+        try {
+          channel.close();
+          pc.close();
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      this.handleBrokerGuest(host, channel, pc);
+    });
+  }
+
+  private handleBrokerGuest(host: HostRuntime, channel: RTCDataChannel, pc: RTCPeerConnection): void {
+    const id = `peer-${++this.peerSeq}`;
+    this.setPeers([...this.bridge.getOffline().peers, { id, name: null, state: 'open' }]);
+    const link: HostPeerLink = {
+      offer: null,
+      bridge: null,
+      accepted: true,
+      seatIndex: null,
+      close: () => {
+        try {
+          channel.close();
+          pc.close();
+        } catch {
+          // ignore
+        }
+      },
+    };
+    host.links.set(id, link);
+
+    link.bridge = bridgeChannelToHub(pc, channel, host.hub, {
+      onClientMessage: (event, payload) => {
+        if (event === 'room:join') this.notePeerName(id, joinName(payload));
+      },
+      onServerMessage: (event, payload) => this.observePeerTraffic(id, link, event, payload),
+      onClose: () => {
+        if (host.links.get(id) === link) host.links.delete(id);
+        this.dropPeer(id);
+      },
+    });
+  }
+
   private onHostLost(link: GuestLink): void {
     if (this.guest !== link) return;
     // Our own transport reports 'disconnect' to the store (connected=false);
     // session/room/game stay so the player can re-scan and reclaim the seat.
     link.transport?.disconnect();
-    link.answer.close();
+    link.answer?.close();
+    link.closeBroker?.();
     this.bridge.setConnected(false);
     this.bridge.patchOffline({ hostLost: true });
   }
@@ -433,7 +534,8 @@ export class OfflineController {
     this.guest = null;
     link.stopWatching?.();
     link.transport?.disconnect();
-    link.answer.close();
+    link.answer?.close();
+    link.closeBroker?.();
   }
 }
 

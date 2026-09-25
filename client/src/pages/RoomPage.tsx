@@ -10,6 +10,7 @@ import { useStore } from '../store';
 import type { PersonalSnapshot, RoomSettings } from '../types';
 import { Avatar, playerColor } from '../components/PlayerStrip';
 import { HostPairingSheet } from '../components/OfflinePairing';
+import { RoomQrModal } from '../components/RoomQrModal';
 import { OfflineHostBanner, ReconnectBanner } from '../components/Overlays';
 
 const TIMER_OPTIONS = [0, 60, 120, 180, 300];
@@ -64,6 +65,7 @@ export function RoomPage(): React.JSX.Element {
   const offline = useStore((s) => s.offline);
   const leaveOffline = useStore((s) => s.leaveOffline);
   const [pairing, setPairing] = useState(false);
+  const [showRoomQr, setShowRoomQr] = useState(false);
 
   const maxPlayers = room?.settings.maxPlayers;
   const seed = room?.seed;
@@ -157,6 +159,14 @@ export function RoomPage(): React.JSX.Element {
     <div className="min-h-[100dvh] bg-ocean px-3 pt-[max(1rem,var(--safe-top))] pb-[max(1rem,var(--safe-bottom))] text-ink sm:px-6">
       <ReconnectBanner />
       {pairing ? <HostPairingSheet onClose={() => setPairing(false)} /> : null}
+      {showRoomQr ? (
+        <RoomQrModal
+          roomCode={room.roomCode}
+          isOffline={isOffline}
+          onClose={() => setShowRoomQr(false)}
+          onOpenManualPairing={() => setPairing(true)}
+        />
+      ) : null}
       <div className="mx-auto flex max-w-6xl flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
         <div className="flex w-full flex-col gap-3 lg:w-[420px] lg:flex-none">
           <OfflineHostBanner />
@@ -168,25 +178,37 @@ export function RoomPage(): React.JSX.Element {
                 {room.roomCode}
               </h1>
             </div>
-            {isOffline ? (
-              <span
-                className="flex h-11 items-center gap-1.5 rounded-xl bg-[#eaf8ec] px-3 text-sm font-bold text-[#16692a]"
-                data-testid="offline-badge"
-              >
-                📡 Offline game
-              </span>
-            ) : (
+            <div className="flex items-center gap-2">
+              {isOffline ? (
+                <span
+                  className="flex h-11 items-center gap-1.5 rounded-xl bg-[#eaf8ec] px-3 text-sm font-bold text-[#16692a]"
+                  data-testid="offline-badge"
+                >
+                  📡 Offline
+                </span>
+              ) : null}
               <button
                 type="button"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(inviteLink);
-                }}
-                className="h-11 rounded-xl bg-ocean-deep px-3 text-sm font-bold text-white shadow-[0_3px_0_#1f6f99] active:translate-y-px"
-                data-testid="copy-invite"
+                onClick={() => setShowRoomQr(true)}
+                className="flex h-11 items-center gap-1.5 rounded-xl bg-cta px-3 text-sm font-bold text-ink shadow-[0_3px_0_#a86d08] active:translate-y-px"
+                data-testid="show-qr-btn"
+                title="Show Room QR Code for fast 1-scan joining"
               >
-                Copy invite link
+                <span>📷</span> QR
               </button>
-            )}
+              {!isOffline ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(inviteLink);
+                  }}
+                  className="h-11 rounded-xl bg-ocean-deep px-3 text-sm font-bold text-white shadow-[0_3px_0_#1f6f99] active:translate-y-px"
+                  data-testid="copy-invite"
+                >
+                  Copy invite link
+                </button>
+              ) : null}
+            </div>
           </div>
 
           {/* Seats */}
@@ -294,14 +316,24 @@ export function RoomPage(): React.JSX.Element {
             ))}
 
             {canAddPlayer ? (
-              <button
-                type="button"
-                onClick={() => setPairing(true)}
-                className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-cta font-display text-base font-bold text-ink shadow-[0_4px_0_#a86d08] active:translate-y-px"
-                data-testid="btn-add-player"
-              >
-                📷 Add player
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowRoomQr(true)}
+                  className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-cta font-display text-base font-bold text-ink shadow-[0_4px_0_#a86d08] active:translate-y-px"
+                  data-testid="btn-add-player-qr"
+                >
+                  ⚡ Add player (1-Scan or Code)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPairing(true)}
+                  className="flex h-10 items-center justify-center gap-1 rounded-xl border border-line bg-white/70 text-xs font-bold text-ink-soft active:translate-y-px"
+                  data-testid="btn-add-player"
+                >
+                  📷 2-way camera scan (no internet fallback)
+                </button>
+              </div>
             ) : null}
 
             {isHost && room.players.length < settings.maxPlayers ? (

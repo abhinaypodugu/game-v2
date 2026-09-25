@@ -4,7 +4,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
-import { GuestPairingSheet, HostPairingSheet } from '../components/OfflinePairing';
+import { GuestPairingSheet, HostPairingSheet, extractRoomCode } from '../components/OfflinePairing';
+import { RoomQrModal } from '../components/RoomQrModal';
 import { ReconnectBanner } from '../components/Overlays';
 import type { Invite } from '../net/offline';
 import { useStore } from '../store';
@@ -128,6 +129,66 @@ describe('GuestPairingSheet', () => {
     render(<GuestPairingSheet name="Bea" leaveOnCancel={false} onClose={() => {}} />);
     await user.click(screen.getByTestId('pairing-close'));
     expect(leaveOffline).toHaveBeenCalledTimes(1);
+  });
+
+  it('connects directly in 1 scan when a 4-letter room code is scanned (zero return scans)', async () => {
+    fakeCamera();
+    let finishJoin!: () => void;
+    const joinPromise = new Promise<void>((resolve) => {
+      finishJoin = resolve;
+    });
+    const joinOfflineByCode = vi.fn(async () => joinPromise);
+    const onConnected = vi.fn();
+    useStore.setState({ joinOfflineByCode });
+    const user = userEvent.setup();
+
+    render(<GuestPairingSheet name="Bea" leaveOnCancel onClose={() => {}} onConnected={onConnected} />);
+
+    await pasteCode(user, 'WXYZ');
+    expect(joinOfflineByCode).toHaveBeenCalledWith('WXYZ', 'Bea');
+    expect(screen.queryByAltText(/reply code/i)).not.toBeInTheDocument();
+
+    finishJoin();
+    expect(await screen.findByText(/joining the game/i)).toBeInTheDocument();
+    expect(onConnected).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('extractRoomCode', () => {
+  it('extracts room code from plain 4 letters, room URLs, or broker prefixes', () => {
+    expect(extractRoomCode('ABCD')).toBe('ABCD');
+    expect(extractRoomCode('wxyz')).toBe('WXYZ');
+    expect(extractRoomCode('https://domain.com/#/ABCD')).toBe('ABCD');
+    expect(extractRoomCode('https://domain.com/#WXYZ')).toBe('WXYZ');
+    expect(extractRoomCode('https://domain.com/?room=ABCD')).toBe('ABCD');
+    expect(extractRoomCode('catan-v2-EFGH')).toBe('EFGH');
+    expect(extractRoomCode('LC1.invite-code')).toBeNull();
+    expect(extractRoomCode('invalid-string')).toBeNull();
+  });
+});
+
+describe('RoomQrModal', () => {
+  it('displays the room code, QR code, and triggers manual pairing callback', async () => {
+    const onManual = vi.fn();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <RoomQrModal
+        roomCode="TEST"
+        isOffline
+        onClose={onClose}
+        onOpenManualPairing={onManual}
+      />,
+    );
+
+    expect(screen.getByTestId('modal-room-code')).toHaveTextContent('TEST');
+    await screen.findByAltText(/qr code for room test/i);
+
+    const switchBtn = screen.getByTestId('switch-to-manual-pairing');
+    await user.click(switchBtn);
+    expect(onClose).toHaveBeenCalled();
+    expect(onManual).toHaveBeenCalled();
   });
 });
 

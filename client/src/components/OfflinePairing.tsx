@@ -148,7 +148,7 @@ function PasteCode({
 }): React.JSX.Element {
   const [text, setText] = useState('');
   const trimmed = text.trim();
-  const looksValid = trimmed.startsWith(PAIRING_CODE_PREFIX);
+  const looksValid = trimmed.startsWith(PAIRING_CODE_PREFIX) || extractRoomCode(trimmed) !== null;
   return (
     <form
       className="flex w-full flex-col gap-2"
@@ -161,13 +161,13 @@ function PasteCode({
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
-        placeholder={`Paste the ${what} here (starts with ${PAIRING_CODE_PREFIX})`}
+        placeholder={`Paste the ${what} or 4-letter room code here`}
         className="w-full resize-none rounded-xl border-2 border-line bg-white p-2 font-mono text-xs break-all text-ink outline-none placeholder:font-sans placeholder:text-sm focus:border-cta"
         aria-label={`Paste ${what}`}
         data-testid="paste-code"
       />
       {trimmed.length > 0 && !looksValid ? (
-        <p className="text-sm font-bold text-[#8a1424]">That doesn't look like a Catan pairing code.</p>
+        <p className="text-sm font-bold text-[#8a1424]">That doesn't look like a Catan pairing code or room code.</p>
       ) : null}
       <button type="submit" disabled={!looksValid || disabled || busy} className={primaryBtn} data-testid="paste-submit">
         {busy ? 'Connecting…' : 'Connect'}
@@ -350,6 +350,21 @@ export function HostPairingSheet({ onClose }: { onClose: () => void }): React.JS
   );
 }
 
+export function extractRoomCode(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (/^[A-Za-z]{4}$/.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+  const urlMatch = trimmed.match(/[#/=]([A-Za-z]{4})(?:[/?#]|$)/);
+  if (urlMatch && urlMatch[1]) {
+    return urlMatch[1].toUpperCase();
+  }
+  if (trimmed.startsWith('catan-v2-') && trimmed.length === 13) {
+    return trimmed.slice(9).toUpperCase();
+  }
+  return null;
+}
+
 type GuestStep =
   | { kind: 'scan'; error: string | null }
   | { kind: 'answering' }
@@ -373,6 +388,7 @@ export function GuestPairingSheet({
   onConnected?: () => void;
 }): React.JSX.Element {
   const joinOffline = useStore((s) => s.joinOffline);
+  const joinOfflineByCode = useStore((s) => s.joinOfflineByCode);
   const leaveOffline = useStore((s) => s.leaveOffline);
   const [step, setStep] = useState<GuestStep>({ kind: 'scan', error: null });
   const [cameraRetry, setCameraRetry] = useState(0);
@@ -390,6 +406,22 @@ export function GuestPairingSheet({
     if (step.kind !== 'scan') return;
     const run = ++runRef.current;
     setStep({ kind: 'answering' });
+
+    const roomCode = extractRoomCode(code);
+    if (roomCode !== null) {
+      joinOfflineByCode(roomCode, name).then(
+        () => {
+          if (runRef.current !== run) return;
+          setStep({ kind: 'connected' });
+          onConnectedRef.current?.();
+        },
+        (err: unknown) => {
+          if (runRef.current === run) setStep({ kind: 'scan', error: errorText(err) });
+        },
+      );
+      return;
+    }
+
     joinOffline(code, name).then(
       ({ replyCode, connected }) => {
         if (runRef.current !== run) return;

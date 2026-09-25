@@ -18,7 +18,11 @@ export function HomePage(): React.JSX.Element {
   const resumeOfflineHost = useStore((s) => s.resumeOfflineHost);
   const [canResume] = useState(() => useStore.getState().canResumeOfflineHost());
   const [name, setName] = useState('');
-  const [code, setCode] = useState('');
+  const [code, setCode] = useState(() => {
+    const hash = window.location.hash;
+    const match = hash.match(/[#/=]([A-Za-z]{4})(?:[/?#]|$)/);
+    return match && match[1] ? match[1].toUpperCase() : '';
+  });
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [quickBusy, setQuickBusy] = useState(false);
@@ -152,10 +156,13 @@ export function HomePage(): React.JSX.Element {
           <button
             type="button"
             disabled={code.length !== 4 || trimmedName.length === 0 || joining}
-            onClick={() => {
+            onClick={async () => {
               setJoining(true);
-              joinRoom(code, trimmedName);
-              setTimeout(() => setJoining(false), 2000);
+              try {
+                await joinRoom(code, trimmedName);
+              } finally {
+                setJoining(false);
+              }
             }}
             className="h-12 flex-1 rounded-2xl bg-ocean-deep px-4 font-display text-lg font-bold text-white shadow-[0_4px_0_#1f6f99] active:translate-y-px disabled:opacity-50"
             data-testid="join-room"
@@ -172,12 +179,10 @@ export function HomePage(): React.JSX.Element {
       >
         <div>
           <h2 id="offline-heading" className="font-display text-xl font-bold">
-            📡 Play offline (same Wi-Fi / hotspot)
+            📡 Play offline / peer-to-peer
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
-            No internet needed. The host turns on their phone's hotspot (or everyone joins the same Wi-Fi), then
-            pairs each player by scanning QR codes. Everyone must have opened this app online once (install it to
-            your home screen).
+            One phone taps <b>Host a game</b>. Other players can join instantly by entering the 4-letter room code above or scanning the host's QR code once (0 return scans!). Pure offline 2-way scan is available if you have zero signal.
           </p>
         </div>
         {canResume ? (
