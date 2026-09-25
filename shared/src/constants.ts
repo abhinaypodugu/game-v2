@@ -103,6 +103,8 @@ export interface GameRules {
   victoryPointsToWin: number;
   /** On a 7, players holding MORE than this many cards discard half. */
   discardLimit: number;
+  /** Custom distribution of development cards in the deck. */
+  customDevDeck?: Partial<Record<DevCardType, number>>;
 }
 
 export const DEFAULT_RULES: Readonly<GameRules> = { victoryPointsToWin: 10, discardLimit: 7 };
@@ -237,6 +239,12 @@ export function boardConfigForPlayers(playerCount: number): BoardConfig {
   if (playerCount >= 7) return BOARD_CONFIGS.ext78;
   if (playerCount >= 5) return BOARD_CONFIGS.ext56;
   return BOARD_CONFIGS.base;
+}
+
+/** Default development card deck distribution for a given player count. */
+export function defaultDevDeckForPlayers(playerCount: number): Record<DevCardType, number> {
+  const config = boardConfigForPlayers(playerCount);
+  return { ...config.devDeck };
 }
 
 /** Terrain -> produced resource (desert maps to null). */

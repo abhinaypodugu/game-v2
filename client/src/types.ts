@@ -2,7 +2,7 @@
 // interfaces; sanitize.ts owns the shapes — duplicated here because the
 // server package must not be a client dependency).
 
-import type { BoardConfigKey, GameEvent, GameRules, GameState, PlayerColor, Resource } from '@catan/shared';
+import type { BoardConfigKey, DevCardType, GameEvent, GameRules, GameState, PlayerColor, Resource } from '@catan/shared';
 
 export interface PublicPlayer {
   seat: number;
@@ -66,6 +66,7 @@ export interface RoomSettings {
   diceMode: 'random' | 'balanced';
   victoryPointsToWin: number;
   discardLimit: number;
+  customDevDeck?: Partial<Record<DevCardType, number>>;
 }
 
 export type RoomSettingsPatch = Partial<RoomSettings>;

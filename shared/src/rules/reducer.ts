@@ -13,6 +13,7 @@ import {
   RESOURCES,
   subtractCost,
   TERRAIN_RESOURCE,
+  type DevCardType,
   type Resource,
   type ResourceBag,
 } from '../constants';
@@ -59,9 +60,16 @@ export function createGame(opts: EngineOptions): GameState {
   const config = boardConfigForPlayers(opts.playerCount);
   const board: Board = generateBoard(opts.playerCount, opts.seed);
   const rng = createRng(`${opts.seed}:devdeck`);
-  const deck: Array<{ id: string; type: keyof typeof config.devDeck }> = [];
-  for (const [type, count] of Object.entries(config.devDeck)) {
-    for (let i = 0; i < count; i++) deck.push({ id: `${type}-${i}`, type: type as never });
+
+  const devDeckCounts: Record<string, number> = {
+    ...config.devDeck,
+    ...(opts.rules?.customDevDeck ?? {}),
+  };
+
+  const deck: Array<{ id: string; type: DevCardType }> = [];
+  for (const [type, count] of Object.entries(devDeckCounts)) {
+    const n = Math.max(0, count);
+    for (let i = 0; i < n; i++) deck.push({ id: `${type}-${i}`, type: type as DevCardType });
   }
   const shuffled = rng.shuffle(deck).map((c) => ({
     id: c.id,
@@ -88,6 +96,7 @@ export function createGame(opts: EngineOptions): GameState {
     rules: {
       victoryPointsToWin: opts.rules?.victoryPointsToWin ?? DEFAULT_RULES.victoryPointsToWin,
       discardLimit: opts.rules?.discardLimit ?? DEFAULT_RULES.discardLimit,
+      ...(opts.rules?.customDevDeck !== undefined ? { customDevDeck: opts.rules.customDevDeck } : {}),
     },
     players,
     board,

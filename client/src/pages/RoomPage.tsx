@@ -3,9 +3,10 @@
 // Offline games swap the invite link for QR pairing ("Add player").
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DEFAULT_RULES, PLAYER_COLORS, boardConfigForPlayers, generateBoard } from '@catan/shared';
-import type { PlayerColor, PlayerCount } from '@catan/shared';
+import { DEFAULT_RULES, PLAYER_COLORS, boardConfigForPlayers, defaultDevDeckForPlayers, generateBoard } from '@catan/shared';
+import type { DevCardType, PlayerColor, PlayerCount } from '@catan/shared';
 import { BoardSvg } from '../board/BoardSvg';
+import { DEV_META } from '../components/resourceArt';
 import { sounds } from '../sound';
 import { useStore } from '../store';
 import type { PersonalSnapshot, RoomSettings } from '../types';
@@ -19,6 +20,23 @@ const TIMER_OPTIONS = [0, 60, 120, 180, 300];
 const PLAYER_OPTIONS = [3, 4, 5, 6, 7, 8];
 const VP_OPTIONS = Array.from({ length: 18 }, (_, i) => i + 3); // 3..20
 const DISCARD_OPTIONS = Array.from({ length: 16 }, (_, i) => i + 5); // 5..20
+
+const ALL_DEV_CARDS: DevCardType[] = [
+  'knight',
+  'victoryPoint',
+  'roadBuilding',
+  'yearOfPlenty',
+  'monopoly',
+  'merchant',
+  'taxCollector',
+  'bountifulHarvest',
+  'alchemist',
+  'surveyor',
+  'fortification',
+  'spy',
+  'oracle',
+  'portRenovation',
+];
 
 const MODE_LABEL = { base: 'Classic board', ext56: '5-6 expansion board', ext78: '7-8 expansion board' } as const;
 
@@ -68,6 +86,7 @@ export function RoomPage(): React.JSX.Element {
   const leaveOffline = useStore((s) => s.leaveOffline);
   const [pairing, setPairing] = useState(false);
   const [showRoomQr, setShowRoomQr] = useState(false);
+  const [showDevDeckConfig, setShowDevDeckConfig] = useState(false);
 
   const maxPlayers = room?.settings.maxPlayers;
   const seed = room?.seed;
@@ -148,6 +167,104 @@ export function RoomPage(): React.JSX.Element {
   const inviteLink = getRoomShareUrl(room.roomCode);
   const settings: RoomSettings = room.settings;
   const boardMode = boardConfigForPlayers(settings.maxPlayers).key;
+
+  const defaultDeck = useMemo(
+    () => defaultDevDeckForPlayers(settings.maxPlayers),
+    [settings.maxPlayers],
+  );
+
+  const currentDevDeck: Record<DevCardType, number> = useMemo(() => {
+    return {
+      ...defaultDeck,
+      ...(settings.customDevDeck ?? {}),
+    };
+  }, [defaultDeck, settings.customDevDeck]);
+
+  const totalDevCards = useMemo(() => {
+    return Object.values(currentDevDeck).reduce((sum, n) => sum + (n ?? 0), 0);
+  }, [currentDevDeck]);
+
+  const updateCardCount = (type: DevCardType, delta: number): void => {
+    const current = currentDevDeck[type] ?? 0;
+    const nextVal = Math.max(0, Math.min(99, current + delta));
+    const newDeck = { ...currentDevDeck, [type]: nextVal };
+    updateSettings({ customDevDeck: newDeck });
+  };
+
+  const toggleCardEnabled = (type: DevCardType): void => {
+    const current = currentDevDeck[type] ?? 0;
+    const standard = defaultDeck[type] ?? 1;
+    const nextVal = current > 0 ? 0 : standard;
+    const newDeck = { ...currentDevDeck, [type]: nextVal };
+    updateSettings({ customDevDeck: newDeck });
+  };
+
+  const applyPreset = (preset: 'standard' | 'classic' | 'expansion' | 'chaos'): void => {
+    if (preset === 'standard') {
+      updateSettings({ customDevDeck: defaultDeck });
+      return;
+    }
+    if (preset === 'classic') {
+      const classicDeck: Record<DevCardType, number> = {
+        knight: settings.maxPlayers >= 7 ? 26 : settings.maxPlayers >= 5 ? 20 : 14,
+        victoryPoint: settings.maxPlayers >= 7 ? 6 : 5,
+        roadBuilding: settings.maxPlayers >= 7 ? 4 : settings.maxPlayers >= 5 ? 3 : 2,
+        monopoly: settings.maxPlayers >= 7 ? 4 : settings.maxPlayers >= 5 ? 3 : 2,
+        yearOfPlenty: settings.maxPlayers >= 7 ? 4 : settings.maxPlayers >= 5 ? 3 : 2,
+        merchant: 0,
+        taxCollector: 0,
+        bountifulHarvest: 0,
+        alchemist: 0,
+        surveyor: 0,
+        fortification: 0,
+        spy: 0,
+        oracle: 0,
+        portRenovation: 0,
+      };
+      updateSettings({ customDevDeck: classicDeck });
+      return;
+    }
+    if (preset === 'expansion') {
+      const expDeck: Record<DevCardType, number> = {
+        knight: settings.maxPlayers >= 7 ? 16 : settings.maxPlayers >= 5 ? 12 : 8,
+        victoryPoint: settings.maxPlayers >= 7 ? 6 : 5,
+        roadBuilding: 2,
+        monopoly: 2,
+        yearOfPlenty: 2,
+        merchant: 3,
+        taxCollector: 3,
+        bountifulHarvest: 3,
+        alchemist: 2,
+        surveyor: 2,
+        fortification: 2,
+        spy: 2,
+        oracle: 2,
+        portRenovation: 2,
+      };
+      updateSettings({ customDevDeck: expDeck });
+      return;
+    }
+    if (preset === 'chaos') {
+      const chaosDeck: Record<DevCardType, number> = {
+        knight: 4,
+        victoryPoint: 4,
+        roadBuilding: 3,
+        monopoly: 3,
+        yearOfPlenty: 3,
+        merchant: 4,
+        taxCollector: 4,
+        bountifulHarvest: 4,
+        alchemist: 4,
+        surveyor: 4,
+        fortification: 4,
+        spy: 4,
+        oracle: 4,
+        portRenovation: 4,
+      };
+      updateSettings({ customDevDeck: chaosDeck });
+      return;
+    }
+  };
   const isOffline = offline.role !== null;
   const seatedNames = new Set(room.players.map((p) => p.name));
   // Guests still pairing, or connected but not yet seated.
@@ -459,6 +576,163 @@ export function RoomPage(): React.JSX.Element {
                 </ReadOnlyValue>
               )}
             </SettingRow>
+
+            {/* Development Deck Configuration */}
+            <div className="mt-2 border-t-2 border-line/60 pt-2.5" data-testid="dev-deck-settings">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">🎴</span>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-sm text-ink">Development Cards</span>
+                      <span className="rounded-full bg-parchment px-2 py-0.5 text-xs font-bold text-ink border border-line">
+                        {totalDevCards} in deck
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-ink-soft">
+                      {settings.customDevDeck !== undefined ? 'Custom card distribution' : 'Standard balanced deck'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowDevDeckConfig((v) => !v)}
+                  className="rounded-xl border border-line bg-white px-3 py-1.5 text-xs font-bold text-ink shadow-xs active:translate-y-px hover:border-cta"
+                  data-testid="btn-toggle-dev-deck"
+                >
+                  {showDevDeckConfig ? 'Hide ▲' : 'Customize ▼'}
+                </button>
+              </div>
+
+              {showDevDeckConfig ? (
+                <div className="flex flex-col gap-2 pt-1 animate-pop-in">
+                  {isHost ? (
+                    <div className="flex flex-wrap items-center gap-1.5 pb-1 border-b border-line/50">
+                      <span className="text-[10px] font-bold uppercase text-ink-soft mr-1">Presets:</span>
+                      <button
+                        type="button"
+                        onClick={() => applyPreset('standard')}
+                        className="rounded-lg border border-line bg-white px-2 py-0.8 text-[11px] font-bold text-ink hover:border-cta active:translate-y-px"
+                      >
+                        ↺ Standard
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPreset('classic')}
+                        className="rounded-lg border border-line bg-white px-2 py-0.8 text-[11px] font-bold text-ink hover:border-cta active:translate-y-px"
+                      >
+                        Classic 5 Only
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPreset('expansion')}
+                        className="rounded-lg border border-line bg-white px-2 py-0.8 text-[11px] font-bold text-ink hover:border-cta active:translate-y-px"
+                      >
+                        Expansion Mix
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyPreset('chaos')}
+                        className="rounded-lg border border-line bg-white px-2 py-0.8 text-[11px] font-bold text-ink hover:border-cta active:translate-y-px"
+                      >
+                        ⚡ Mayhem
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col gap-1.5 max-h-[42dvh] overflow-y-auto pr-1">
+                    {ALL_DEV_CARDS.map((type) => {
+                      const meta = DEV_META[type];
+                      const count = currentDevDeck[type] ?? 0;
+                      const standardCount = defaultDeck[type] ?? 0;
+                      const isCustom = count !== standardCount;
+
+                      return (
+                        <div
+                          key={type}
+                          className={`flex items-center justify-between rounded-xl border-2 p-2 transition-all ${
+                            count === 0
+                              ? 'border-line/40 bg-parchment/40 opacity-60'
+                              : isCustom
+                                ? 'border-cta/70 bg-[#fffdf5]'
+                                : 'border-line bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1 pr-2">
+                            <span className="text-xl flex-none">{meta.icon}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-xs text-ink truncate">{meta.label}</span>
+                                {count === 0 ? (
+                                  <span className="rounded bg-gray-200 px-1 py-0.2 text-[9px] font-bold text-ink-soft">
+                                    Off
+                                  </span>
+                                ) : isCustom ? (
+                                  <span className="rounded bg-amber-100 text-amber-800 px-1 py-0.2 text-[9px] font-bold">
+                                    {count > standardCount ? `+${count - standardCount}` : `${count - standardCount}`}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="text-[10px] text-ink-soft truncate">{meta.blurb}</div>
+                            </div>
+                          </div>
+
+                          {isHost ? (
+                            <div className="flex items-center gap-1 flex-none">
+                              <button
+                                type="button"
+                                disabled={count <= 0}
+                                onClick={() => updateCardCount(type, -1)}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-line bg-white text-base font-bold text-ink active:translate-y-px disabled:opacity-30"
+                                title="Decrease count"
+                              >
+                                −
+                              </button>
+                              <span className="w-7 text-center font-display text-sm font-bold text-ink tabular-nums">
+                                {count}
+                              </span>
+                              <button
+                                type="button"
+                                disabled={count >= 99}
+                                onClick={() => updateCardCount(type, 1)}
+                                className="flex h-8 w-8 items-center justify-center rounded-lg border-2 border-line bg-white text-base font-bold text-ink active:translate-y-px disabled:opacity-30"
+                                title="Increase count"
+                              >
+                                +
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => toggleCardEnabled(type)}
+                                className={`ml-1 flex h-8 px-2 items-center justify-center rounded-lg border text-[10px] font-bold active:translate-y-px ${
+                                  count > 0
+                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                                    : 'border-line bg-white text-ink-soft'
+                                }`}
+                                title={count > 0 ? 'Click to disable' : 'Click to enable'}
+                              >
+                                {count > 0 ? 'ON' : 'OFF'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 flex-none">
+                              <span className="rounded-lg bg-parchment px-2.5 py-1 text-xs font-bold text-ink tabular-nums border border-line">
+                                {count === 0 ? 'Disabled' : `${count} in deck`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {totalDevCards === 0 ? (
+                    <div className="rounded-xl border border-red-300 bg-red-50 p-2 text-center text-xs font-bold text-red-700">
+                      ⚠️ Development deck has 0 cards! No development cards will be available in this game.
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex flex-col gap-2">

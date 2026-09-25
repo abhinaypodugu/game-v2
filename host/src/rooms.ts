@@ -8,6 +8,7 @@ import {
   DEFAULT_RULES,
   PLAYER_COLORS,
   type BoardConfigKey,
+  type DevCardType,
   type PlayerColor,
   type PlayerCount,
 } from '@catan/shared';
@@ -28,6 +29,7 @@ export interface RoomSettings {
   victoryPointsToWin: number;
   /** On a 7, seats holding more than this many cards discard half (5..20). */
   discardLimit: number;
+  customDevDeck?: Partial<Record<DevCardType, number>>;
 }
 
 export const DEFAULT_SETTINGS: RoomSettings = {
@@ -101,6 +103,7 @@ const roomSnapshotSchema: z.ZodType<Room> = z.object({
     diceMode: z.enum(['random', 'balanced']),
     victoryPointsToWin: z.number().int(),
     discardLimit: z.number().int(),
+    customDevDeck: z.record(z.string(), z.number().int().min(0).max(99)).optional(),
   }),
   game: z
     .object({
@@ -289,6 +292,15 @@ export class RoomManager {
     if (patch.diceMode !== undefined) room.settings.diceMode = patch.diceMode;
     if (patch.victoryPointsToWin !== undefined) room.settings.victoryPointsToWin = patch.victoryPointsToWin;
     if (patch.discardLimit !== undefined) room.settings.discardLimit = patch.discardLimit;
+    if (patch.customDevDeck !== undefined) {
+      const validated: Partial<Record<DevCardType, number>> = {};
+      for (const [k, v] of Object.entries(patch.customDevDeck)) {
+        if (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 99) {
+          validated[k as DevCardType] = v;
+        }
+      }
+      room.settings.customDevDeck = validated;
+    }
     room.lastActivity = Date.now();
     return { ok: true };
   }
@@ -325,6 +337,7 @@ export class RoomManager {
       rules: {
         victoryPointsToWin: room.settings.victoryPointsToWin,
         discardLimit: room.settings.discardLimit,
+        customDevDeck: room.settings.customDevDeck,
       },
     });
     room.game = { state, seed: room.seed, events: [{ type: 'gameStarted', playerCount, seed: room.seed }] };

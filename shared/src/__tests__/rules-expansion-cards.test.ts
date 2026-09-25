@@ -197,4 +197,36 @@ describe('Expansion Development Cards', () => {
 
     expect(s.players[0]!.devHand.some((c) => c.id === topCard.id)).toBe(true);
   });
+
+  it('respects customDevDeck room settings override', () => {
+    const s = newGame(3, 'custom-deck-seed', {
+      customDevDeck: {
+        knight: 0,
+        victoryPoint: 0,
+        roadBuilding: 0,
+        monopoly: 0,
+        yearOfPlenty: 0,
+        taxCollector: 0,
+        bountifulHarvest: 0,
+        surveyor: 0,
+        fortification: 0,
+        spy: 0,
+        oracle: 0,
+        portRenovation: 0,
+        merchant: 5,
+        alchemist: 3,
+      },
+    });
+
+    expect(s.rules.customDevDeck).toBeDefined();
+    // Total deck size should be 5 + 3 = 8
+    expect(s.devDeck).toHaveLength(8);
+    const merchantCount = s.devDeck.filter((c) => c.type === 'merchant').length;
+    const alchemistCount = s.devDeck.filter((c) => c.type === 'alchemist').length;
+    const knightCount = s.devDeck.filter((c) => c.type === 'knight').length;
+    expect(merchantCount).toBe(5);
+    expect(alchemistCount).toBe(3);
+    expect(knightCount).toBe(0);
+  });
 });
+

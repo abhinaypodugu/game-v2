@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { DevCardType, GameAction, Resource, Terrain } from '@catan/shared';
-import { RESOURCES, TERRAIN_RESOURCE } from '@catan/shared';
+import { defaultDevDeckForPlayers, RESOURCES, TERRAIN_RESOURCE } from '@catan/shared';
 import { useStore } from '../store';
 import type { PersonalSnapshot, PublicPlayer } from '../types';
 import { Avatar } from './PlayerStrip';
@@ -310,6 +310,7 @@ export function DevCardConfirmModal({ card, onConfirm, onClose }: DevCardConfirm
 }
 
 export function DevCardsGuideModal({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const snap = useStore((s) => s.game);
   const types: DevCardType[] = [
     'knight',
     'victoryPoint',
@@ -326,6 +327,13 @@ export function DevCardsGuideModal({ onClose }: { onClose: () => void }): React.
     'oracle',
     'portRenovation',
   ];
+
+  const gameDeck = useMemo(() => {
+    if (!snap) return null;
+    const defaultDeck = defaultDevDeckForPlayers(snap.playerCount);
+    return { ...defaultDeck, ...(snap.rules.customDevDeck ?? {}) };
+  }, [snap]);
+
   return (
     <Sheet testId="dev-cards-guide-modal" title="Development Cards Guide" icon="🎴" onClose={onClose}>
       <p className="mb-3 text-xs text-ink-soft">
@@ -336,12 +344,32 @@ export function DevCardsGuideModal({ onClose }: { onClose: () => void }): React.
           const meta = DEV_META[type];
           const info = DEV_DESCRIPTIONS[type];
           const isVp = type === 'victoryPoint';
+          const countInDeck = gameDeck ? gameDeck[type] ?? 0 : undefined;
+
           return (
-            <div key={type} className={`rounded-2xl border-2 p-3 ${isVp ? 'border-[#a87a07] bg-[#fffbf0]' : 'border-line bg-white'}`}>
+            <div
+              key={type}
+              className={`rounded-2xl border-2 p-3 transition-opacity ${
+                countInDeck === 0 ? 'opacity-50 border-line bg-parchment/60' : isVp ? 'border-[#a87a07] bg-[#fffbf0]' : 'border-line bg-white'
+              }`}
+            >
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-2xl">{meta.icon}</span>
-                <div>
-                  <h4 className="font-bold text-sm text-ink">{meta.label}</h4>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-sm text-ink">{meta.label}</h4>
+                    {countInDeck !== undefined ? (
+                      countInDeck === 0 ? (
+                        <span className="rounded bg-red-100 text-red-700 px-1.5 py-0.5 text-[9px] font-bold">
+                          Not in this game
+                        </span>
+                      ) : (
+                        <span className="rounded bg-parchment text-ink-soft px-1.5 py-0.5 text-[9px] font-bold border border-line">
+                          {countInDeck} in deck
+                        </span>
+                      )
+                    ) : null}
+                  </div>
                   <span className="text-[10px] uppercase font-bold text-ink-soft">
                     {isVp ? '⭐ 1 Victory Point' : 'Action Card'}
                   </span>

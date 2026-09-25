@@ -52,6 +52,7 @@ const settingsSchema = z.object({
   diceMode: z.enum(['random', 'balanced']).optional(),
   victoryPointsToWin: z.number().int().min(3).max(20).optional(),
   discardLimit: z.number().int().min(5).max(20).optional(),
+  customDevDeck: z.record(z.string(), z.number().int().min(0).max(99)).optional(),
 });
 
 export function roomStatePayload(room: Room): unknown {
