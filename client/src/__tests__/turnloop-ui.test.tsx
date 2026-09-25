@@ -9,6 +9,7 @@ import { generateBoard } from '@catan/shared';
 import { TradeModal } from '../components/TradeModal';
 import { DiscardModal, VictimPicker } from '../components/RobberFlow';
 import { VictoryOverlay } from '../components/VictoryOverlay';
+import { TurnTimer } from '../components/Overlays';
 import { DevCardConfirmModal, DevCardsGuideModal, MonopolyModal, PlayerInspectModal, YearOfPlentyModal } from '../components/DevCardModals';
 import type { PersonalSnapshot } from '../types';
 import { useStore } from '../store';
@@ -287,5 +288,26 @@ describe('DevCardModals', () => {
     expect(screen.getByText(/Victory Point Breakdown/i)).toBeInTheDocument();
     expect(screen.getByText(/Pieces & Cards/i)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Development Cards/i })).toBeInTheDocument();
+  });
+
+  it('TurnTimer renders null when inactive, and renders countdown without React hook order error when active', async () => {
+    useStore.setState({
+      game: snapshotFor(),
+      timer: null,
+    });
+
+    const { rerender } = render(<TurnTimer />);
+    expect(screen.queryByTestId('turn-timer')).toBeNull();
+
+    // Turn timer becomes active (server sends timer update)
+    useStore.setState({
+      timer: {
+        phase: 'turnMain',
+        deadlineUnixMs: Date.now() + 60000,
+      },
+    });
+
+    rerender(<TurnTimer />);
+    expect(screen.getByTestId('turn-timer')).toBeInTheDocument();
   });
 });

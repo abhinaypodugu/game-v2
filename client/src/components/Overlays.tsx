@@ -162,6 +162,8 @@ export function ToastStack(): React.JSX.Element | null {
 export function TurnTimer({ className = '' }: { className?: string }): React.JSX.Element | null {
   const timer = useStore((s) => s.timer);
   const phase = useStore((s) => s.game?.phase ?? null);
+  const activeSeat = useStore((s) => s.game?.activeSeat ?? null);
+  const mySeat = useStore((s) => s.session?.seatIndex ?? s.game?.you.seat ?? null);
 
   const [now, setNow] = useState(0);
   useEffect(() => {
@@ -173,21 +175,21 @@ export function TurnTimer({ className = '' }: { className?: string }): React.JSX
     return () => clearInterval(interval);
   }, []);
 
-  const activeSeat = useStore((s) => s.game?.activeSeat ?? null);
-  const mySeat = useStore((s) => s.session?.seatIndex ?? s.game?.you.seat ?? null);
   const isMyTurn = activeSeat !== null && activeSeat === mySeat;
-
-  if (timer === null || phase === null || phase === 'finished' || now === 0) return null;
-  const remaining = Math.max(0, Math.round((timer.deadlineUnixMs - now) / 1000));
-  const minutes = Math.floor(remaining / 60);
-  const seconds = remaining % 60;
-  const urgent = remaining <= 10;
+  const isRunning = timer !== null && phase !== null && phase !== 'finished' && now !== 0;
+  const remaining = isRunning && timer !== null ? Math.max(0, Math.round((timer.deadlineUnixMs - now) / 1000)) : 0;
+  const urgent = remaining <= 10 && remaining > 0;
 
   useEffect(() => {
-    if (isMyTurn && urgent && remaining > 0) {
+    if (isRunning && isMyTurn && urgent) {
       sounds.timerTick();
     }
-  }, [isMyTurn, urgent, remaining]);
+  }, [isRunning, isMyTurn, urgent, remaining]);
+
+  if (!isRunning) return null;
+
+  const minutes = Math.floor(remaining / 60);
+  const seconds = remaining % 60;
 
   return (
     <span
