@@ -224,6 +224,18 @@ export function emitAddBot(): void {
   getTransport().emit('room:addBot');
 }
 
+export function emitToggleBot(seatIndex: number): void {
+  getTransport().emit('room:toggleBot', { seatIndex });
+}
+
+export function emitFillBots(includeHost = true): void {
+  getTransport().emit('room:fillBots', { includeHost });
+}
+
+export function emitSetBotDelay(delayMs: number): void {
+  getTransport().emit('room:setBotDelay', { delayMs });
+}
+
 export function emitRemoveBot(seatIndex: number): void {
   getTransport().emit('room:removeBot', { seatIndex });
 }
@@ -238,4 +250,8 @@ export function emitAction(action: GameAction): void {
 
 export function emitRequestState(): void {
   getTransport().emit('game:requestState');
+}
+
+export function emitResumeControl(): void {
+  getTransport().emit('room:resumeControl');
 }

@@ -11,6 +11,7 @@ import {
   emitAction,
   emitAddBot,
   emitCreateRoom,
+  emitFillBots,
   emitJoinRoom,
   emitKickPlayer,
   emitLeaveRoom,
@@ -18,8 +19,11 @@ import {
   emitRegenerateBoard,
   emitRemoveBot,
   emitRequestState,
+  emitResumeControl,
+  emitSetBotDelay,
   emitSetReady,
   emitStartGame,
+  emitToggleBot,
   emitUpdateSettings,
   hasSocketHandlers,
   onceEvent,
@@ -58,6 +62,7 @@ export interface Store {
   timer: TimerInfo | null;
   ui: UIState;
   offline: OfflineState;
+  isAdminUnlocked: boolean;
 
   connect(): void;
   createRoom(name: string): Promise<void> | void;
@@ -68,10 +73,17 @@ export interface Store {
   updateSettings(patch: RoomSettingsPatch): void;
   regenerateBoard(): void;
   addBot(): void;
+  toggleBot(seatIndex: number): void;
+  fillBots(includeHost?: boolean): void;
+  setBotDelay(delayMs: number): void;
   removeBot(seatIndex: number): void;
   kickPlayer(seatIndex: number): void;
   startGame(): void;
   startQuickPlay(name?: string): void;
+  startAllBotsSimulation(playerCount?: number): void;
+  unlockAdmin(password: string): boolean;
+  lockAdmin(): void;
+  resumeControl(): void;
   sendAction(action: GameAction): void;
   resync(): void;
   clearSession(): void;
@@ -101,6 +113,8 @@ export interface Store {
 // under their own key so an offline room never triggers an online rejoin.
 const SESSION_KEY = `catan.session${window.location.search}`;
 const OFFLINE_SESSION_KEY = `lc.offlineSession${window.location.search}`;
+const ADMIN_PASSWORD_KEY = 'catan_admin_unlocked';
+const VALID_ADMIN_PASSWORDS = new Set(['admin', 'catan-admin', 'admin123']);
 
 function readSession(key: string): Session | null {
   try {
@@ -247,6 +261,7 @@ export const useStore = create<Store>((set, get) => ({
   timer: null,
   ui: { selectedTrade: null, placement: null, showTradeModal: false, toasts: [] },
   offline: INITIAL_OFFLINE_STATE,
+  isAdminUnlocked: typeof window !== 'undefined' ? localStorage.getItem(ADMIN_PASSWORD_KEY) === 'true' : false,
 
   connect() {
     connectSocket(socketHandlers);
@@ -328,6 +343,18 @@ export const useStore = create<Store>((set, get) => ({
     emitAddBot();
   },
 
+  toggleBot(seatIndex) {
+    emitToggleBot(seatIndex);
+  },
+
+  fillBots(includeHost = true) {
+    emitFillBots(includeHost);
+  },
+
+  setBotDelay(delayMs) {
+    emitSetBotDelay(delayMs);
+  },
+
   removeBot(seatIndex) {
     emitRemoveBot(seatIndex);
   },
@@ -360,6 +387,58 @@ export const useStore = create<Store>((set, get) => ({
       setTimeout(tryStart, 50);
     } catch (err) {
       get().pushToast(err instanceof Error ? err.message : 'Could not start quick play.', 'error');
+    }
+  },
+
+  async startAllBotsSimulation(playerCount = 4) {
+    try {
+      await get().startOfflineHost('Spectator');
+      get().updateSettings({ maxPlayers: playerCount });
+      get().fillBots(true);
+      const tryStart = (): void => {
+        const room = get().room;
+        if (
+          room &&
+          room.players.length === playerCount &&
+          room.players.every((p) => p.ready && p.color !== null && p.isBot)
+        ) {
+          get().startGame();
+        } else {
+          setTimeout(tryStart, 50);
+        }
+      };
+      setTimeout(tryStart, 50);
+    } catch (err) {
+      get().pushToast(err instanceof Error ? err.message : 'Could not start all-bot simulation.', 'error');
+    }
+  },
+
+  unlockAdmin(password: string): boolean {
+    if (VALID_ADMIN_PASSWORDS.has(password.trim())) {
+      try {
+        localStorage.setItem(ADMIN_PASSWORD_KEY, 'true');
+      } catch {}
+      set({ isAdminUnlocked: true });
+      return true;
+    }
+    return false;
+  },
+
+  lockAdmin() {
+    try {
+      localStorage.removeItem(ADMIN_PASSWORD_KEY);
+    } catch {}
+    set({ isAdminUnlocked: false });
+  },
+
+  resumeControl() {
+    emitResumeControl();
+    const { room, session } = get();
+    if (room && session) {
+      const players = room.players.map((p) =>
+        p.seatIndex === session.seatIndex ? { ...p, aiTakeover: false } : p,
+      );
+      set({ room: { ...room, players } });
     }
   },
 

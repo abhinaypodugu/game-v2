@@ -6,15 +6,18 @@ import { useStore } from '../store';
 import { DEFAULT_PRODUCTION_SERVER_URL, getCustomServerUrl, switchServerUrl } from '../socket';
 import { GuestPairingSheet } from '../components/OfflinePairing';
 import { extractRoomCode } from '../components/QrScanner';
+import { AdminPasswordModal } from '../components/AdminPasswordModal';
 
 const inputClass =
   'h-12 rounded-2xl border-2 border-line bg-white px-4 text-lg font-bold text-ink outline-none placeholder:font-normal placeholder:text-ink-soft focus:border-cta';
 
 export function HomePage(): React.JSX.Element {
   const connected = useStore((s) => s.connected);
+  const isAdminUnlocked = useStore((s) => s.isAdminUnlocked);
   const createRoom = useStore((s) => s.createRoom);
   const joinRoom = useStore((s) => s.joinRoom);
   const startQuickPlay = useStore((s) => s.startQuickPlay);
+  const startAllBotsSimulation = useStore((s) => s.startAllBotsSimulation);
   const startOfflineHost = useStore((s) => s.startOfflineHost);
   const resumeOfflineHost = useStore((s) => s.resumeOfflineHost);
   const [canResume] = useState(() => useStore.getState().canResumeOfflineHost());
@@ -25,10 +28,12 @@ export function HomePage(): React.JSX.Element {
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [quickBusy, setQuickBusy] = useState(false);
+  const [simBusy, setSimBusy] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState<'host' | 'resume' | null>(null);
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const [guestPairing, setGuestPairing] = useState(false);
   const [showServerModal, setShowServerModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const trimmedName = name.trim();
 
   const runOffline = (kind: 'host' | 'resume', start: () => Promise<void>): void => {
@@ -77,6 +82,21 @@ export function HomePage(): React.JSX.Element {
                 Standalone / Offline
               </span>
             )}
+            {isAdminUnlocked ? (
+              <span className="flex items-center gap-1 rounded-full border border-purple-300 bg-purple-50 px-2 py-0.5 text-[11px] text-purple-700 font-bold" title="Admin Simulation Mode Unlocked">
+                👑 Admin
+              </span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setShowAdminModal(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-white text-xs hover:border-cta transition active:scale-95"
+              title={isAdminUnlocked ? 'Admin Mode (Active)' : 'Admin Password'}
+              aria-label="Admin Settings"
+              data-testid="admin-settings-btn"
+            >
+              {isAdminUnlocked ? '👑' : '🔒'}
+            </button>
             <button
               type="button"
               onClick={() => setShowServerModal(true)}
@@ -105,7 +125,7 @@ export function HomePage(): React.JSX.Element {
 
         <button
           type="button"
-          disabled={quickBusy || offlineBusy !== null || creating}
+          disabled={quickBusy || simBusy || offlineBusy !== null || creating}
           onClick={async () => {
             setQuickBusy(true);
             try {
@@ -119,6 +139,33 @@ export function HomePage(): React.JSX.Element {
         >
           {quickBusy ? 'Starting game…' : '🤖 Quick play vs bots'}
         </button>
+        {isAdminUnlocked ? (
+          <button
+            type="button"
+            disabled={quickBusy || simBusy || offlineBusy !== null || creating}
+            onClick={async () => {
+              setSimBusy(true);
+              try {
+                await startAllBotsSimulation(4);
+              } finally {
+                setSimBusy(false);
+              }
+            }}
+            className="h-14 rounded-2xl bg-ocean-deep px-4 font-display text-lg font-bold text-white shadow-[0_4px_0_#0f4c81] active:translate-y-px disabled:opacity-50"
+            data-testid="all-bots-sim-btn"
+          >
+            {simBusy ? 'Setting up simulation…' : '🍿 Watch 4-bot simulation'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowAdminModal(true)}
+            className="h-11 rounded-2xl border-2 border-dashed border-ocean-deep/40 bg-ocean-deep/5 px-4 font-display text-sm font-bold text-ocean-deep active:translate-y-px hover:bg-ocean-deep/10"
+            data-testid="locked-sim-btn"
+          >
+            🔒 Simulation Mode (Admin Only)
+          </button>
+        )}
         <button
           type="button"
           disabled={trimmedName.length === 0 || creating || quickBusy || offlineBusy !== null}
@@ -249,6 +296,7 @@ export function HomePage(): React.JSX.Element {
       ) : null}
 
       {showServerModal ? <ServerSettingsModal onClose={() => setShowServerModal(false)} /> : null}
+      {showAdminModal ? <AdminPasswordModal onClose={() => setShowAdminModal(false)} /> : null}
     </div>
   );
 }

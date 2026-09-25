@@ -41,6 +41,8 @@ import { useGameSounds } from '../hooks/useGameSounds';
 import { useLegalMoves } from '../hooks/useLegalMoves';
 import { useStore, type PlacementMode } from '../store';
 import type { GameEvent, PersonalSnapshot, PublicPlayer } from '../types';
+import { AiTakeoverReturnModal } from '../components/AiTakeoverReturnModal';
+import { AdminPasswordModal } from '../components/AdminPasswordModal';
 
 export function GamePage(): React.JSX.Element {
   const snap = useStore((s) => s.game);
@@ -119,14 +121,20 @@ function statusPrompt(
 function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
   const session = useStore((s) => s.session);
   const sendAction = useStore((s) => s.sendAction);
+  const setBotDelay = useStore((s) => s.setBotDelay);
+  const toggleBot = useStore((s) => s.toggleBot);
+  const resumeControl = useStore((s) => s.resumeControl);
+  const isAdminUnlocked = useStore((s) => s.isAdminUnlocked);
   const setPlacement = useStore((s) => s.setPlacement);
   const placement = useStore((s) => s.ui.placement);
   const showTradeModal = useStore((s) => s.ui.showTradeModal);
   const log = useStore((s) => s.log);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [currentSpeed, setCurrentSpeed] = useState(400);
   const [setupSel, setSetupSel] = useState<{ key: string; vertex: number } | null>(null);
   const [inspectPlayer, setInspectPlayer] = useState<PublicPlayer | null>(null);
   const [showDevGuide, setShowDevGuide] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [confirmDevCard, setConfirmDevCard] = useState<{
     id: string;
     type: DevCardType;
@@ -148,6 +156,13 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
   const [roadBuildingSel, setRoadBuildingSel] = useState<RoadBuildingState | null>(null);
   const mySeat = snap.you?.seat ?? session?.seatIndex ?? -1;
   const legal = useLegalMoves(snap, mySeat);
+
+  const room = useStore((s) => s.room);
+  const allBotsMatch = (room?.players.length ?? 0) >= 3 && (room?.players.every((p) => p.isBot) ?? false);
+  const myRoomPlayer = room?.players.find((p) => p.seatIndex === mySeat);
+  const isSpectatingBot = myRoomPlayer?.isBot === true;
+  const isAiTakeover = myRoomPlayer?.aiTakeover === true && !myRoomPlayer?.isBot;
+  const isSpectatorMode = allBotsMatch || isSpectatingBot;
 
   const myTurn = snap.activeSeat === mySeat;
   const sbpWindow = snap.specialBuildSeat === mySeat;
@@ -348,6 +363,96 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
         </main>
 
         <footer className="relative z-20 mx-auto w-full max-w-3xl px-2 pb-2 lg:px-0 lg:pb-0">
+          {isSpectatorMode ? (
+            <div className="mb-2 flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-ocean-deep bg-[#0f4c81]/95 px-3 py-2 text-white shadow-xl backdrop-blur">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-xl flex-none">🤖</span>
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-ocean-shallow">
+                    {allBotsMatch ? 'All-Bot Match Simulation' : 'Bot Takeover Mode'}
+                  </div>
+                  <div className="truncate text-xs font-bold text-white">
+                    {snap.phase === 'finished' ? (
+                      '🎉 Game Finished!'
+                    ) : (
+                      <span>
+                        {snap.players[snap.activeSeat]?.name} is {snap.phase === 'turnPreroll' ? 'rolling dice' : snap.phase === 'robberMove' ? 'moving robber' : snap.phase === 'robberSteal' ? 'stealing card' : snap.phase === 'discard' ? 'discarding' : snap.phase.startsWith('setup') ? 'placing initial pieces' : 'playing'}…
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Speed controls & Take control */}
+              <div className="flex items-center gap-1.5 flex-none">
+                {isSpectatingBot ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleBot(mySeat)}
+                    className="rounded-lg bg-white/20 hover:bg-white/30 px-2 py-1 text-xs font-bold text-white transition-all active:translate-y-px"
+                    title="Take back control of your seat"
+                    data-testid="btn-play-yourself"
+                  >
+                    🎮 Play Yourself
+                  </button>
+                ) : null}
+                {isAdminUnlocked ? (
+                  <div className="flex items-center gap-1 bg-black/30 p-1 rounded-xl">
+                    <span className="text-[10px] font-bold text-white/70 px-1 hidden sm:inline">Speed:</span>
+                    {[
+                      { label: '🐢 1s', delay: 1000 },
+                      { label: '⏱️ 400ms', delay: 400 },
+                      { label: '⚡ 150ms', delay: 150 },
+                      { label: '🚀 Turbo', delay: 30 },
+                    ].map((opt) => (
+                      <button
+                        key={opt.delay}
+                        type="button"
+                        onClick={() => {
+                          setCurrentSpeed(opt.delay);
+                          setBotDelay(opt.delay);
+                        }}
+                        className={`rounded-lg px-2 py-1 text-xs font-bold transition-all active:translate-y-px ${
+                          currentSpeed === opt.delay ? 'bg-cta text-ink shadow' : 'text-white/80 hover:bg-white/10'
+                        }`}
+                        data-testid={`speed-${opt.delay}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminModal(true)}
+                    className="rounded-lg bg-black/30 hover:bg-black/40 px-2 py-1 text-xs font-bold text-white/90 transition-all active:translate-y-px"
+                    data-testid="btn-unlock-speed"
+                  >
+                    🔒 Admin Speed
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {!isSpectatorMode && (room?.players.some((p) => p.isBot) ?? false) && isAdminUnlocked ? (
+            <div className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-xl border border-ocean-deep/40 bg-white/95 px-3 py-1.5 shadow-sm backdrop-blur">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-base flex-none">🤖</span>
+                <span className="text-xs font-bold text-ink truncate">
+                  Playing with bots • Want to spectate?
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => toggleBot(mySeat)}
+                className="flex-none rounded-lg bg-ocean-deep px-2.5 py-1 text-xs font-bold text-white shadow active:translate-y-px hover:bg-ocean-deep/90"
+                data-testid="btn-enable-ai-takeover"
+              >
+                ⚡ AI Auto-Play
+              </button>
+            </div>
+          ) : null}
           <ColonistBottomDock
             snap={snap}
             legal={legal}
@@ -441,6 +546,13 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
       {devModal?.type === 'oracle' ? (
         <OracleModal cardId={devModal.cardId} onClose={() => setDevModal(null)} />
       ) : null}
+      {isAiTakeover ? (
+        <AiTakeoverReturnModal
+          playerName={myRoomPlayer?.name}
+          onResume={resumeControl}
+        />
+      ) : null}
+      {showAdminModal ? <AdminPasswordModal onClose={() => setShowAdminModal(false)} /> : null}
     </div>
   );
 }

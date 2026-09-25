@@ -83,6 +83,7 @@ export interface RoomState {
     ready: boolean;
     connected: boolean;
     isBot?: boolean;
+    aiTakeover?: boolean;
   }>;
   settings: RoomSettings;
   seed: string;

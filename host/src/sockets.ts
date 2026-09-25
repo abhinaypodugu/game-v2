@@ -56,6 +56,14 @@ const settingsSchema = z.object({
   hideBankCardsCount: z.boolean().optional(),
 });
 
+export const ADMIN_PASSWORDS = new Set(
+  ['admin', 'catan-admin', 'admin123', process.env.ADMIN_PASSWORD].filter(Boolean) as string[],
+);
+
+export function verifyAdminPassword(password: string): boolean {
+  return ADMIN_PASSWORDS.has(password.trim());
+}
+
 export function roomStatePayload(room: Room): unknown {
   return {
     roomCode: room.code,
@@ -67,6 +75,7 @@ export function roomStatePayload(room: Room): unknown {
       ready: s.ready,
       connected: s.connected,
       isBot: s.isBot === true,
+      aiTakeover: s.aiTakeover === true,
     })),
     settings: room.settings,
     seed: room.seed,
@@ -120,39 +129,63 @@ async function runAutoAction(ctx: ServerContext, code: string): Promise<void> {
   if (room?.game === null || room === undefined || room.game === null) return;
   const state = room.game.state;
   const rng = ctx.rooms.gameRng(room);
-  const auto = autoActionFor(state.phase, state.activeSeat, state, rng);
-  if (auto === null) {
-    armTimer(ctx, room);
-    return;
+
+  // Identify who timed out and mark AI takeover if human
+  const targetSeat =
+    state.phase === 'discard'
+      ? state.pendingDiscards.find((d) => !d.received)?.seat ?? state.activeSeat
+      : state.phase === 'specialBuild' && state.specialBuild?.seat !== null && state.specialBuild?.seat !== undefined
+        ? state.specialBuild.seat
+        : state.activeSeat;
+
+  const seatObj = room.seats.find((s) => s.seatIndex === targetSeat);
+  if (seatObj && !seatObj.isBot && !seatObj.aiTakeover) {
+    seatObj.aiTakeover = true;
+    broadcastRoom(ctx, room);
   }
 
-  // Synthesize the placeholder actions that need legal queries.
-  let action: GameAction | null;
-  if (auto.action.type === '__autoSetupPlace') {
-    const seat = state.activeSeat;
-    const vertices = legalSettlementVertices(state, seat, true);
-    if (vertices.length === 0) {
-      action = null;
-    } else {
-      const vertex = rng.pick(vertices);
-      const edges = state.board.topology.vertexEdges[vertex] ?? [];
-      const edge = edges.find((e) => state.roads[e] === undefined) ?? edges[0];
-      action =
-        edge === undefined
-          ? null
-          : { type: 'setupPlace', settlementVertex: vertex, roadEdge: edge };
+  // First, attempt smart bot AI to play the turn
+  let action: GameAction | null = computeBotAction(state, targetSeat, rng);
+  if (action !== null) {
+    if (action.type === 'discard' || action.type === 'tradeRespond' || action.type === 'tradeCounter') {
+      action = { ...action, seat: targetSeat };
     }
-  } else if (auto.action.type === '__autoChooseSteal') {
-    const candidates = stealCandidates(state, state.robber);
-    const withCards = candidates.filter((s) => {
-      const p = state.players[s]!;
-      return RESOURCES_TOTAL(p.resources) > 0;
-    });
-    const pool = withCards.length > 0 ? withCards : candidates;
-    action = pool.length > 0 ? { type: 'chooseSteal', victimSeat: rng.pick(pool) } : null;
-  } else {
-    action = auto.action;
   }
+
+  // Fallback to autoActionFor if computeBotAction was null
+  if (action === null) {
+    const auto = autoActionFor(state.phase, targetSeat, state, rng);
+    if (auto === null) {
+      armTimer(ctx, room);
+      return;
+    }
+
+    if (auto.action.type === '__autoSetupPlace') {
+      const vertices = legalSettlementVertices(state, targetSeat, true);
+      if (vertices.length === 0) {
+        action = null;
+      } else {
+        const vertex = rng.pick(vertices);
+        const edges = state.board.topology.vertexEdges[vertex] ?? [];
+        const edge = edges.find((e) => state.roads[e] === undefined) ?? edges[0];
+        action =
+          edge === undefined
+            ? null
+            : { type: 'setupPlace', settlementVertex: vertex, roadEdge: edge };
+      }
+    } else if (auto.action.type === '__autoChooseSteal') {
+      const candidates = stealCandidates(state, state.robber);
+      const withCards = candidates.filter((s) => {
+        const p = state.players[s]!;
+        return RESOURCES_TOTAL(p.resources) > 0;
+      });
+      const pool = withCards.length > 0 ? withCards : candidates;
+      action = pool.length > 0 ? { type: 'chooseSteal', victimSeat: rng.pick(pool) } : null;
+    } else {
+      action = auto.action;
+    }
+  }
+
   if (action === null) {
     armTimer(ctx, room);
     return;
@@ -172,6 +205,19 @@ async function runAutoAction(ctx: ServerContext, code: string): Promise<void> {
         'game:timer',
         ctx.timerDeadlines.get(room.code) ?? { phase: result.state.phase, deadlineUnixMs: 0 },
       );
+    }
+  } else {
+    // If smart action was rejected, fallback to basic endTurn if in main turn
+    if (state.phase === 'turnMain') {
+      const fallbackRes = applyAction(state, { type: 'endTurn' }, rng);
+      if (fallbackRes.ok) {
+        room.game.state = fallbackRes.state;
+        for (const e of fallbackRes.events) {
+          room.game.events.push(e);
+          ctx.log.append(room.code, e);
+          ctx.io.to(room.code).emit('game:event', e);
+        }
+      }
     }
   }
   broadcastGame(ctx, room);
@@ -202,10 +248,24 @@ function handleGameAction(ctx: ServerContext, socket: HubSocket | null, room: Ro
   const state = room.game.state;
   const rng = ctx.rooms.gameRng(room);
 
+  // If action comes from a connected human client for a seat that had aiTakeover, resume human control
+  if (socket !== null) {
+    const seatObj = room.seats.find((s) => s.seatIndex === seat);
+    if (seatObj && seatObj.aiTakeover) {
+      seatObj.aiTakeover = false;
+      broadcastRoom(ctx, room);
+    }
+  }
+
   // Seat gate: only actions from the correct actor reach the engine.
   const actorOk = isActorAllowed(state, action, seat);
   if (!actorOk) {
-    socket?.emit('error', { message: 'NOT_YOUR_ACTION' });
+    if (socket === null) {
+      console.warn(`[Bot AI] Action ${action.type} by seat ${seat} rejected: NOT_YOUR_ACTION in phase ${state.phase}`);
+      void runAutoAction(ctx, room.code);
+    } else {
+      socket.emit('error', { message: 'NOT_YOUR_ACTION' });
+    }
     return;
   }
 
@@ -217,7 +277,16 @@ function handleGameAction(ctx: ServerContext, socket: HubSocket | null, room: Ro
 
   const result = applyAction(state, stampedAction, rng, makeRollSource(ctx, room));
   if (!result.ok) {
-    socket?.emit('error', { message: result.error });
+    if (socket === null) {
+      console.warn(`[Bot AI] Action ${action.type} by seat ${seat} rejected: ${result.error} in phase ${state.phase}`);
+      if (state.phase === 'turnMain' && seat === state.activeSeat) {
+        handleGameAction(ctx, null, room, seat, { type: 'endTurn' });
+      } else {
+        void runAutoAction(ctx, room.code);
+      }
+    } else {
+      socket.emit('error', { message: result.error });
+    }
     return;
   }
   room.game.state = result.state;
@@ -242,7 +311,11 @@ function triggerBotTurnIfNeeded(ctx: ServerContext, room: Room): void {
     botTimers.delete(room.code);
   }
 
-  const botSeats = new Set(room.seats.filter((s) => s.isBot).map((s) => s.seatIndex));
+  const botSeats = new Set(
+    room.seats
+      .filter((s) => s.isBot || s.aiTakeover || !s.connected)
+      .map((s) => s.seatIndex),
+  );
   if (botSeats.size === 0) return;
 
   const state = room.game.state;
@@ -258,7 +331,7 @@ function triggerBotTurnIfNeeded(ctx: ServerContext, room: Room): void {
     const openTrade = state.trades.find((t) => t.status === 'open');
     if (openTrade !== undefined) {
       const botToRespond = room.seats.find((s) => {
-        if (!s.isBot) return false;
+        if (!botSeats.has(s.seatIndex)) return false;
         if (openTrade.counterOf !== null) {
           // Counter-offer: responded to by the active player
           return s.seatIndex === state.activeSeat && !openTrade.declinedBy.includes(s.seatIndex);
@@ -281,15 +354,19 @@ function triggerBotTurnIfNeeded(ctx: ServerContext, room: Room): void {
   if (targetBotSeat === null) return;
 
   const botSeat = targetBotSeat;
-  let delay = 500;
+  const isTakeoverSeat = room.seats.find((s) => s.seatIndex === botSeat)?.aiTakeover === true;
+  let delay = room.botDelayMs ?? (isTakeoverSeat ? 800 : 500);
   if (state.phase === 'turnMain' && botSeat === state.activeSeat) {
     const myTrade = state.trades.find((t) => t.status === 'open' && t.proposer === botSeat);
     if (myTrade !== undefined) {
       const pendingHumans = room.seats.some(
-        (s) => !s.isBot && s.seatIndex !== botSeat && !myTrade.declinedBy.includes(s.seatIndex),
+        (s) => !botSeats.has(s.seatIndex) && s.seatIndex !== botSeat && !myTrade.declinedBy.includes(s.seatIndex),
       );
       if (pendingHumans) {
-        delay = 5000;
+        const humanTradeWait = (room.botDelayMs !== undefined && room.botDelayMs <= 400)
+          ? Math.max(room.botDelayMs * 2, 800)
+          : 5000;
+        delay = Math.max(delay, humanTradeWait);
       }
     }
   }
@@ -303,6 +380,11 @@ function triggerBotTurnIfNeeded(ctx: ServerContext, room: Room): void {
     const act = computeBotAction(currentRoom.game.state, botSeat, ctx.rooms.gameRng(currentRoom));
     if (act !== null) {
       handleGameAction(ctx, null, currentRoom, botSeat, act);
+    } else {
+      console.warn(`[Bot AI] computeBotAction returned null for botSeat ${botSeat} in phase ${currentRoom.game.state.phase}`);
+      if (botSeat === currentRoom.game.state.activeSeat) {
+        void runAutoAction(ctx, currentRoom.code);
+      }
     }
   }, delay);
 
@@ -576,6 +658,54 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       broadcastRoom(ctx, room);
     });
 
+    socket.on('room:toggleBot', (raw: unknown) => {
+      const parsed = z.object({ seatIndex: z.number().int().nonnegative() }).safeParse(raw);
+      if (!parsed.success || joinedRoom === null || joinedSeat === null) return;
+      const room = ctx.rooms.getRoom(joinedRoom);
+      if (room === undefined) return;
+      const mySeat = room.seats.find((s) => s.socketId === socket.id);
+      const actingSeat = mySeat?.seatIndex ?? joinedSeat;
+      const res = ctx.rooms.toggleBot(joinedRoom, actingSeat, parsed.data.seatIndex);
+      if ('error' in res) {
+        socket.emit('error', { message: res.error });
+        return;
+      }
+      broadcastRoom(ctx, room);
+      if (room.game !== null) {
+        broadcastGame(ctx, room);
+        triggerBotTurnIfNeeded(ctx, room);
+      }
+    });
+
+    socket.on('room:fillBots', (raw: unknown) => {
+      const parsed = z.object({ includeHost: z.boolean().optional() }).safeParse(raw ?? {});
+      if (joinedRoom === null || joinedSeat === null) return;
+      const room = ctx.rooms.getRoom(joinedRoom);
+      if (room === undefined) return;
+      const mySeat = room.seats.find((s) => s.socketId === socket.id);
+      const actingSeat = mySeat?.seatIndex ?? joinedSeat;
+      const res = ctx.rooms.fillBots(joinedRoom, actingSeat, parsed.success ? (parsed.data.includeHost ?? true) : true);
+      if ('error' in res) {
+        socket.emit('error', { message: res.error });
+        return;
+      }
+      broadcastRoom(ctx, room);
+    });
+
+    socket.on('room:setBotDelay', (raw: unknown) => {
+      const parsed = z.object({ delayMs: z.number().int().min(20).max(5000) }).safeParse(raw);
+      if (!parsed.success || joinedRoom === null || joinedSeat === null) return;
+      const room = ctx.rooms.getRoom(joinedRoom);
+      if (room === undefined) return;
+      const mySeat = room.seats.find((s) => s.socketId === socket.id);
+      const actingSeat = mySeat?.seatIndex ?? joinedSeat;
+      ctx.rooms.setBotDelay(joinedRoom, actingSeat, parsed.data.delayMs);
+      if (room.game !== null) {
+        triggerBotTurnIfNeeded(ctx, room);
+      }
+      ctx.io.to(room.code).emit('room:botDelay', { delayMs: room.botDelayMs ?? 500 });
+    });
+
     socket.on('room:kickPlayer', (raw: unknown) => {
       const parsed = z.object({ seatIndex: z.number().int().nonnegative() }).safeParse(raw);
       if (!parsed.success || joinedRoom === null || joinedSeat === null) return;
@@ -631,6 +761,29 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       socket.emit('game:state', sanitize(room.game.state, joinedSeat));
     });
 
+    socket.on('room:resumeControl', () => {
+      if (joinedRoom === null || joinedSeat === null) return;
+      const room = ctx.rooms.getRoom(joinedRoom);
+      if (room === undefined) return;
+      const mySeat = room.seats.find((s) => s.socketId === socket.id);
+      const actingSeat = mySeat?.seatIndex ?? joinedSeat;
+      ctx.rooms.resumeControl(joinedRoom, actingSeat);
+      broadcastRoom(ctx, room);
+      if (room.game !== null) {
+        broadcastGame(ctx, room);
+      }
+    });
+
+    socket.on('admin:verify', (raw: unknown) => {
+      const parsed = z.object({ password: z.string() }).safeParse(raw);
+      if (!parsed.success) {
+        socket.emit('admin:verifyResult', { ok: false });
+        return;
+      }
+      const ok = verifyAdminPassword(parsed.data.password);
+      socket.emit('admin:verifyResult', { ok });
+    });
+
     socket.on('disconnect', () => {
       if (joinedRoom === null || joinedSeat === null) return;
       const room = ctx.rooms.getRoom(joinedRoom);
@@ -640,9 +793,13 @@ export function registerSocketHandlers(ctx: ServerContext): void {
         seat.connected = false;
         seat.socketId = null;
         seat.disconnectedAt = Date.now();
+        if (room.game !== null && !seat.isBot) {
+          seat.aiTakeover = true;
+        }
         broadcastRoom(ctx, room);
         if (room.game !== null) {
           broadcastGame(ctx, room);
+          triggerBotTurnIfNeeded(ctx, room);
         }
       }
     });

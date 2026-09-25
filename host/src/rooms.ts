@@ -63,6 +63,7 @@ export interface Seat {
   connected: boolean;
   disconnectedAt: number | null;
   isBot?: boolean;
+  aiTakeover?: boolean;
 }
 
 export interface StoredGame {
@@ -80,6 +81,7 @@ export interface Room {
   seed: string;
   createdAt: number;
   lastActivity: number;
+  botDelayMs?: number;
 }
 
 // Shape check for RoomManager.importState. Game state and events are produced
@@ -98,6 +100,7 @@ const roomSnapshotSchema: z.ZodType<Room> = z.object({
       connected: z.boolean(),
       disconnectedAt: z.number().nullable(),
       isBot: z.boolean().optional(),
+      aiTakeover: z.boolean().optional(),
     }),
   ),
   settings: z.object({
@@ -119,6 +122,7 @@ const roomSnapshotSchema: z.ZodType<Room> = z.object({
   seed: z.string(),
   createdAt: z.number(),
   lastActivity: z.number(),
+  botDelayMs: z.number().optional(),
 });
 
 const exportedStateSchema = z.object({ v: z.literal(1), rooms: z.array(roomSnapshotSchema) });
@@ -247,6 +251,90 @@ export class RoomManager {
       }
       return { ok: true, kickedSeat: seat };
     }
+  }
+
+  toggleBot(code: string, hostSeatIndex: number, seatIndex: number): { ok: true } | { error: string } {
+    const room = this.getRoom(code);
+    if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
+    if (room.hostSeatIndex !== hostSeatIndex && hostSeatIndex !== seatIndex) return { error: 'NOT_HOST' };
+    const seat = room.seats[seatIndex];
+    if (seat === undefined) return { error: 'NO_SUCH_SEAT' };
+
+    seat.isBot = !seat.isBot;
+    if (seat.isBot) {
+      seat.ready = true;
+      if (seat.color === null) {
+        const available = RoomManager.availableColors(room);
+        if (available.length > 0) seat.color = available[0]!;
+      }
+      if (!seat.name.endsWith(' (Bot)')) {
+        seat.name = `${seat.name} (Bot)`;
+      }
+    } else {
+      if (seat.name.endsWith(' (Bot)')) {
+        seat.name = seat.name.slice(0, -6);
+      }
+    }
+    room.lastActivity = Date.now();
+    return { ok: true };
+  }
+
+  fillBots(code: string, hostSeatIndex: number, includeHost: boolean = true): { ok: true } | { error: string } {
+    const room = this.getRoom(code);
+    if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
+    if (room.game !== null) return { error: 'GAME_ALREADY_STARTED' };
+    if (room.hostSeatIndex !== hostSeatIndex) return { error: 'NOT_HOST' };
+
+    if (includeHost) {
+      const hostSeat = room.seats[hostSeatIndex];
+      if (hostSeat && !hostSeat.isBot) {
+        hostSeat.isBot = true;
+        hostSeat.ready = true;
+        if (hostSeat.color === null) {
+          const available = RoomManager.availableColors(room);
+          if (available.length > 0) hostSeat.color = available[0]!;
+        }
+        if (!hostSeat.name.endsWith(' (Bot)')) {
+          hostSeat.name = `${hostSeat.name} (Bot)`;
+        }
+      }
+    }
+
+    while (room.seats.length < room.settings.maxPlayers) {
+      const res = this.addBot(code, hostSeatIndex);
+      if ('error' in res) break;
+    }
+    room.lastActivity = Date.now();
+    return { ok: true };
+  }
+
+  setBotDelay(code: string, hostSeatIndex: number, delayMs: number): { ok: true } | { error: string } {
+    const room = this.getRoom(code);
+    if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
+    if (room.hostSeatIndex !== hostSeatIndex) return { error: 'NOT_HOST' };
+    room.botDelayMs = Math.max(20, Math.min(5000, delayMs));
+    room.lastActivity = Date.now();
+    return { ok: true };
+  }
+
+  resumeControl(code: string, seatIndex: number): { ok: true } | { error: string } {
+    const room = this.getRoom(code);
+    if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
+    const seat = room.seats[seatIndex];
+    if (seat === undefined) return { error: 'NO_SUCH_SEAT' };
+    seat.aiTakeover = false;
+    room.lastActivity = Date.now();
+    return { ok: true };
+  }
+
+  setAiTakeover(code: string, seatIndex: number, enabled: boolean): { ok: true } | { error: string } {
+    const room = this.getRoom(code);
+    if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
+    const seat = room.seats[seatIndex];
+    if (seat === undefined) return { error: 'NO_SUCH_SEAT' };
+    seat.aiTakeover = enabled;
+    room.lastActivity = Date.now();
+    return { ok: true };
   }
 
   /** Reattach a seat by token (or matching name) — works mid-game. */

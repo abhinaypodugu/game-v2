@@ -15,6 +15,7 @@ import { HostPairingSheet } from '../components/OfflinePairing';
 import { RoomQrModal } from '../components/RoomQrModal';
 import { getRoomShareUrl } from '../components/QrScanner';
 import { OfflineHostBanner, ReconnectBanner } from '../components/Overlays';
+import { AdminPasswordModal } from '../components/AdminPasswordModal';
 
 const TIMER_OPTIONS = [0, 60, 120, 180, 300];
 const PLAYER_OPTIONS = [3, 4, 5, 6, 7, 8];
@@ -81,13 +82,17 @@ export function RoomPage(): React.JSX.Element {
   const startGame = useStore((s) => s.startGame);
   const leaveRoom = useStore((s) => s.leaveRoom);
   const addBot = useStore((s) => s.addBot);
+  const toggleBot = useStore((s) => s.toggleBot);
+  const fillBots = useStore((s) => s.fillBots);
   const removeBot = useStore((s) => s.removeBot);
   const kickPlayer = useStore((s) => s.kickPlayer);
   const offline = useStore((s) => s.offline);
   const leaveOffline = useStore((s) => s.leaveOffline);
+  const isAdminUnlocked = useStore((s) => s.isAdminUnlocked);
   const [pairing, setPairing] = useState(false);
   const [showRoomQr, setShowRoomQr] = useState(false);
   const [showDevDeckConfig, setShowDevDeckConfig] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
 
   const maxPlayers = (room?.settings.maxPlayers ?? 4) as PlayerCount;
   const seed = room?.seed;
@@ -172,6 +177,7 @@ export function RoomPage(): React.JSX.Element {
   const allReady = room.players.every((p) => p.ready);
   const allColored = room.players.every((p) => p.color !== null);
   const canStart = isHost && allReady && room.players.length >= 3 && allColored;
+  const allBotsInRoom = room.players.length >= 3 && room.players.every((p) => p.isBot);
   const startHint =
     room.players.length < 3
       ? 'Need at least 3 players — add bots or invite friends.'
@@ -179,9 +185,11 @@ export function RoomPage(): React.JSX.Element {
         ? 'Everyone needs to pick a colour.'
         : !allReady
           ? 'Waiting for everyone to be ready.'
-          : isHost
-            ? 'Everyone is ready!'
-            : 'Waiting for the host to start.';
+          : allBotsInRoom
+            ? '🤖 All bots ready! Tap below to start all-bot simulation.'
+            : isHost
+              ? 'Everyone is ready!'
+              : 'Waiting for the host to start.';
 
   const inviteLink = getRoomShareUrl(room.roomCode);
   const settings: RoomSettings = room.settings;
@@ -405,21 +413,38 @@ export function RoomPage(): React.JSX.Element {
                       </button>
                     ) : null}
                     {isMe ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          sounds.click();
-                          setReady(!(me?.ready ?? false));
-                        }}
-                        className={`h-11 rounded-xl px-3 text-sm font-bold active:translate-y-px ${
-                          me?.ready === true
-                            ? 'bg-go text-white shadow-[0_3px_0_#1d7a2c]'
-                            : 'bg-cta text-ink shadow-[0_3px_0_#a86d08]'
-                        }`}
-                        data-testid="ready-toggle"
-                      >
-                        {me?.ready === true ? 'Ready ✓' : 'Ready?'}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {isHost ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleBot(p.seatIndex)}
+                            className={`h-11 rounded-xl px-2.5 text-xs font-bold active:translate-y-px transition-colors ${
+                              p.isBot
+                                ? 'border-2 border-ocean-deep bg-ocean-deep text-white shadow'
+                                : 'border-2 border-dashed border-line bg-white/80 text-ink-soft hover:text-ink'
+                            }`}
+                            title={p.isBot ? 'Switch back to human player' : 'Switch host seat to bot (Spectate match)'}
+                            data-testid="toggle-host-bot"
+                          >
+                            {p.isBot ? '🤖 Bot' : '👤 Human'}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            sounds.click();
+                            setReady(!(me?.ready ?? false));
+                          }}
+                          className={`h-11 rounded-xl px-3 text-sm font-bold active:translate-y-px ${
+                            me?.ready === true
+                              ? 'bg-go text-white shadow-[0_3px_0_#1d7a2c]'
+                              : 'bg-cta text-ink shadow-[0_3px_0_#a86d08]'
+                          }`}
+                          data-testid="ready-toggle"
+                        >
+                          {me?.ready === true ? 'Ready ✓' : 'Ready?'}
+                        </button>
+                      </div>
                     ) : (
                       <span className={`text-sm font-bold ${p.ready ? 'text-go' : 'text-ink-soft'}`}>
                         {p.ready ? 'Ready' : 'Waiting…'}
@@ -484,14 +509,46 @@ export function RoomPage(): React.JSX.Element {
             ) : null}
 
             {isHost && room.players.length < settings.maxPlayers ? (
-              <button
-                type="button"
-                onClick={addBot}
-                className="flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ocean-deep bg-white text-sm font-bold text-ocean-deep active:translate-y-px"
-                data-testid="btn-add-bot"
-              >
-                🤖 Add AI bot
-              </button>
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={addBot}
+                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-ocean-deep bg-white text-sm font-bold text-ocean-deep active:translate-y-px"
+                  data-testid="btn-add-bot"
+                >
+                  🤖 Add AI bot
+                </button>
+                {isAdminUnlocked ? (
+                  <button
+                    type="button"
+                    onClick={() => fillBots(true)}
+                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-ocean-deep bg-ocean-deep/10 text-sm font-bold text-ocean-deep shadow-[0_3px_0_#0f4c81] active:translate-y-px hover:bg-ocean-deep/20"
+                    data-testid="btn-fill-all-bots"
+                  >
+                    ⚡ Fill room with bots & spectate
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminModal(true)}
+                    className="flex h-10 items-center justify-center gap-2 rounded-xl border border-dashed border-ocean-deep/40 bg-white/60 text-xs font-bold text-ocean-deep hover:bg-white active:translate-y-px"
+                    data-testid="btn-unlock-sim-room"
+                  >
+                    🔒 Simulation Mode (Admin Only)
+                  </button>
+                )}
+              </div>
+            ) : isHost && !allBotsInRoom ? (
+              isAdminUnlocked ? (
+                <button
+                  type="button"
+                  onClick={() => fillBots(true)}
+                  className="flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-ocean-deep bg-ocean-deep/10 text-sm font-bold text-ocean-deep shadow-[0_3px_0_#0f4c81] active:translate-y-px hover:bg-ocean-deep/20"
+                  data-testid="btn-fill-all-bots"
+                >
+                  ⚡ Convert host to bot & spectate
+                </button>
+              ) : null
             ) : null}
           </div>
 
@@ -779,7 +836,7 @@ export function RoomPage(): React.JSX.Element {
               className="h-14 rounded-2xl bg-go px-4 font-display text-xl font-bold text-white shadow-[0_4px_0_#1d7a2c] active:translate-y-px disabled:opacity-40"
               data-testid="start-game"
             >
-              Start game
+              {allBotsInRoom ? '▶️ Start All-Bot Simulation' : 'Start game'}
             </button>
             <p className="text-center text-sm font-bold text-white drop-shadow-[0_1px_0_rgba(0,0,0,0.35)]">{startHint}</p>
             <button
@@ -819,6 +876,7 @@ export function RoomPage(): React.JSX.Element {
           </p>
         </div>
       </div>
+      {showAdminModal ? <AdminPasswordModal onClose={() => setShowAdminModal(false)} /> : null}
     </div>
   );
 }
