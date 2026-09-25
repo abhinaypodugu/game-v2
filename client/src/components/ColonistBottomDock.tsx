@@ -18,6 +18,7 @@ export interface ColonistBottomDockProps {
   /** My build window: my main/pre-roll turn or my special-build slot. */
   canAct: boolean;
   placement: PlacementMode | null;
+  setupVertex?: number | null;
   onArm: (kind: 'settlement' | 'city' | 'road') => void;
   onPlayDevCard: (card: { id: string; type: string }) => void;
 }
@@ -68,6 +69,7 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
   legal,
   canAct,
   placement,
+  setupVertex,
   onArm,
   onPlayDevCard,
 }: ColonistBottomDockProps): React.JSX.Element {
@@ -78,6 +80,7 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
   const mySeat = you.seat;
   const myTurn = activeSeat === mySeat;
   const sbpWindow = specialBuildSeat === mySeat;
+  const isSetupActor = (phase === 'setupForward' || phase === 'setupReverse') && myTurn;
   const player = players[mySeat]!;
   const handTotal = RESOURCES.reduce((n, r) => n + (you.resources[r] ?? 0), 0);
 
@@ -108,14 +111,26 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
   const build = (kind: PieceKind, enabled: boolean, left: number): React.JSX.Element => {
     const armed = placement?.kind === kind;
     const label = kind === 'road' ? 'Road' : kind === 'settlement' ? 'Settle' : 'City';
+    const isSetupHighlight = isSetupActor && ((kind === 'settlement' && setupVertex === null) || (kind === 'road' && setupVertex !== null));
     return (
       <button
         type="button"
-        disabled={!enabled && !armed}
-        onClick={() => onArm(kind)}
-        className={`${actionBase} ${armed ? actionArmed : actionIdle}`}
+        disabled={!enabled && !armed && !isSetupActor}
+        onClick={() => {
+          if (isSetupActor) {
+            useStore.getState().pushToast(
+              setupVertex === null
+                ? 'Tap any glowing spot on the board to place your settlement!'
+                : 'Now tap any glowing road edge connected to your settlement!',
+              'info',
+            );
+            return;
+          }
+          onArm(kind);
+        }}
+        className={`${actionBase} ${armed || isSetupHighlight ? actionArmed : actionIdle}`}
         title={`${label} (${costLabel(BUILD_COSTS[kind])}) — ${left} left`}
-        aria-pressed={armed}
+        aria-pressed={armed || isSetupHighlight}
         data-testid={`btn-build-${kind}`}
       >
         <CountBadge n={left} />
@@ -172,11 +187,26 @@ export const ColonistBottomDock = memo(function ColonistBottomDock({
         <span className="font-display text-sm">Done</span>
       </button>
     );
+  } else if (isSetupActor) {
+    primary = (
+      <div
+        className={`${actionBase} border-[#c98612] bg-[#fff6dc] text-ink shadow-[0_3px_0_#a86d08] animate-pulse px-0.5 text-center`}
+        data-testid="setup-place-prompt"
+      >
+        <span className="text-base leading-none">{setupVertex !== null ? '🛣️' : '🏠'}</span>
+        <span className="font-display text-[10px] leading-tight">
+          {setupVertex !== null ? 'Tap road' : 'Tap settlement'}
+        </span>
+      </div>
+    );
   } else {
+    const waitingFor = players[activeSeat]?.name;
     primary = (
       <button type="button" disabled className={`${actionBase} ${actionIdle}`} data-testid="waiting-turn">
         <span className="text-lg leading-none">⏳</span>
-        <span className="text-[10px]">Waiting</span>
+        <span className="text-[10px] truncate max-w-full px-0.5">
+          {waitingFor ? `${waitingFor}…` : 'Waiting'}
+        </span>
       </button>
     );
   }

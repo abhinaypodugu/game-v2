@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { useStore } from '../store';
+import { getCustomServerUrl, switchServerUrl } from '../socket';
 import { GuestPairingSheet } from '../components/OfflinePairing';
 
 const inputClass =
@@ -24,6 +25,7 @@ export function HomePage(): React.JSX.Element {
   const [offlineBusy, setOfflineBusy] = useState<'host' | 'resume' | null>(null);
   const [offlineError, setOfflineError] = useState<string | null>(null);
   const [guestPairing, setGuestPairing] = useState(false);
+  const [showServerModal, setShowServerModal] = useState(false);
   const trimmedName = name.trim();
 
   const runOffline = (kind: 'host' | 'resume', start: () => Promise<void>): void => {
@@ -57,20 +59,32 @@ export function HomePage(): React.JSX.Element {
       <div className="flex w-full max-w-md flex-col gap-3 rounded-3xl border-2 border-line bg-cream p-4 shadow-[0_4px_0_rgba(0,0,0,0.18)] sm:p-6">
         <div className="flex items-center justify-between text-xs font-bold text-ink-soft">
           <span>Mode:</span>
-          {connected ? (
-            <span className="flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-emerald-700">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Online server connected
-            </span>
-          ) : (
-            <span
-              className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-amber-800"
-              title="Running in browser without a central server"
+          <div className="flex items-center gap-2">
+            {connected ? (
+              <span className="flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Online server connected
+              </span>
+            ) : (
+              <span
+                className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-amber-800"
+                title="Running in browser without a central server"
+              >
+                <span className="h-2 w-2 rounded-full bg-amber-500" />
+                Standalone / Offline
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowServerModal(true)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-line bg-white text-xs hover:border-cta transition active:scale-95"
+              title="Online Server Settings"
+              aria-label="Online Server Settings"
+              data-testid="server-settings-btn"
             >
-              <span className="h-2 w-2 rounded-full bg-amber-500" />
-              Standalone / Offline
-            </span>
-          )}
+              ⚙️
+            </button>
+          </div>
         </div>
 
         <label className="flex flex-col gap-1.5">
@@ -218,6 +232,91 @@ export function HomePage(): React.JSX.Element {
           }}
         />
       ) : null}
+
+      {showServerModal ? <ServerSettingsModal onClose={() => setShowServerModal(false)} /> : null}
+    </div>
+  );
+}
+
+function ServerSettingsModal({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const current = getCustomServerUrl() ?? '';
+  const [url, setUrl] = useState(current);
+  const connected = useStore((s) => s.connected);
+
+  const save = (newUrl: string | null): void => {
+    const trimmed = newUrl ? newUrl.trim() : null;
+    switchServerUrl(trimmed || null);
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"
+      role="dialog"
+      aria-label="Online Server Settings"
+      data-testid="server-settings-modal"
+    >
+      <div className="flex w-full max-w-md flex-col gap-4 rounded-3xl border-2 border-line bg-cream p-5 shadow-2xl text-ink">
+        <div className="flex items-center justify-between border-b-2 border-line pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🌐</span>
+            <h3 className="font-display text-xl font-bold">Online Server Settings</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-parchment font-bold text-ink active:scale-95"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <p className="text-xs text-ink-soft font-bold leading-relaxed">
+          To play with friends anywhere across the internet using 4-letter room codes, connect to a hosted Catan Socket.IO server (e.g. deployed on Render, Railway, or Fly.io).
+        </p>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-bold text-ink-soft">Server URL</span>
+          <input
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="e.g. https://my-catan-server.onrender.com"
+            className="h-12 rounded-xl border-2 border-line bg-white px-3 font-mono text-sm text-ink outline-none focus:border-cta"
+            data-testid="server-url-input"
+          />
+        </label>
+
+        <div className="flex items-center justify-between text-xs font-bold">
+          <span className="text-ink-soft">Current connection:</span>
+          {connected ? (
+            <span className="text-emerald-700 font-bold">● Connected</span>
+          ) : (
+            <span className="text-amber-800 font-bold">● Disconnected / Standalone</span>
+          )}
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          {current ? (
+            <button
+              type="button"
+              onClick={() => save(null)}
+              className="h-12 flex-1 rounded-xl bg-parchment px-3 font-bold text-xs text-ink active:scale-95"
+              data-testid="reset-server-url"
+            >
+              Reset to Default
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => save(url)}
+            className="h-12 flex-1 rounded-xl bg-go px-4 font-display text-base font-bold text-white shadow-[0_3px_0_#1d7a2c] active:translate-y-px"
+            data-testid="save-server-url"
+          >
+            Save & Connect
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

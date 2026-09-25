@@ -178,6 +178,18 @@ const socketHandlers: SocketHandlers = {
   },
   onGameState: (snap) => {
     useStore.setState({ game: snap });
+    const currentSession = useStore.getState().session;
+    if (currentSession === null || currentSession.seatIndex !== snap.you.seat) {
+      const room = useStore.getState().room;
+      const roomCode = room?.roomCode ?? currentSession?.roomCode ?? '';
+      const updatedSession: Session = {
+        roomCode,
+        seatIndex: snap.you.seat,
+        reconnectToken: currentSession?.reconnectToken ?? '',
+      };
+      saveSession(updatedSession);
+      useStore.setState({ session: updatedSession });
+    }
     if (snap.phase === 'finished') {
       useStore.setState((s) => ({ ui: { ...s.ui, placement: null, showTradeModal: false } }));
     }

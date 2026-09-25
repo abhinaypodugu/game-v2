@@ -66,10 +66,10 @@ function statusPrompt(
     }
     case 'setupForward':
     case 'setupReverse':
-      if (!myTurn) return { text: `${active} is placing a settlement and road`, tone: 'wait' };
+      if (!myTurn) return { text: `Waiting for ${active} to place (Player ${snap.activeSeat + 1})`, tone: 'wait' };
       return setupVertex === null
-        ? { text: `Place your ${snap.phase === 'setupReverse' ? 'second ' : ''}settlement`, tone: 'action' }
-        : { text: 'Now place a road next to it (or tap another spot)', tone: 'action' };
+        ? { text: `Step 1/2: Tap a glowing spot on the board for your settlement`, tone: 'action' }
+        : { text: `Step 2/2: Now tap an adjacent glowing edge for your road`, tone: 'action' };
     case 'turnPreroll':
       return myTurn ? { text: 'Roll the dice', tone: 'action' } : { text: `${active} is rolling…`, tone: 'wait' };
     case 'discard': {
@@ -116,7 +116,7 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
   const [confirmDevCard, setConfirmDevCard] = useState<{ id: string; type: DevCardType } | null>(null);
   const [devModal, setDevModal] = useState<{ type: 'monopoly' | 'yearOfPlenty'; cardId: string } | null>(null);
   const [roadBuildingSel, setRoadBuildingSel] = useState<RoadBuildingState | null>(null);
-  const mySeat = session?.seatIndex ?? -1;
+  const mySeat = snap.you?.seat ?? session?.seatIndex ?? -1;
   const legal = useLegalMoves(snap, mySeat);
 
   const myTurn = snap.activeSeat === mySeat;
@@ -292,6 +292,7 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
             legal={legal}
             canAct={canAct && roadBuilding === null}
             placement={armed}
+            setupVertex={setupVertex}
             onArm={(kind) => setPlacement(armed?.kind === kind ? null : { kind })}
             onPlayDevCard={(card) => {
               setConfirmDevCard(card as { id: string; type: DevCardType });

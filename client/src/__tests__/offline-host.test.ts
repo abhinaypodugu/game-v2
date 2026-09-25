@@ -111,6 +111,34 @@ describe('offline host', () => {
 
     await until(savedGameStarted, 'host game saved');
     expect(useStore.getState().canResumeOfflineHost()).toBe(true);
+
+    // Host (seat 0) places initial settlement and road
+    const hostSnap = useStore.getState().game!;
+    expect(hostSnap.phase).toBe('setupForward');
+    expect(hostSnap.activeSeat).toBe(0);
+    const topo = hostSnap.board.topology;
+    const vAlice = topo.vertices[0]!;
+    const eAlice = topo.vertexEdges[vAlice]![0]!;
+    useStore.getState().sendAction({ type: 'setupPlace', settlementVertex: vAlice, roadEdge: eAlice });
+
+    // Wait until it is guest Bob's turn (seat 1)
+    await until(() => guest.inbox.game?.activeSeat === 1, 'turn passed to guest');
+    const guestSnap = guest.inbox.game!;
+    expect(guestSnap.activeSeat).toBe(1);
+    expect(guestSnap.buildings[vAlice]).toEqual({ seat: 0, type: 'settlement' });
+    expect(guestSnap.roads[eAlice]).toBe(0);
+
+    // Guest Bob (seat 1) places initial settlement and road (away from Alice)
+    const adjacentToAlice = new Set(topo.adjacentVertices[vAlice] ?? []);
+    const vBob = topo.vertices.find((v) => v !== vAlice && !adjacentToAlice.has(v))!;
+    const eBob = topo.vertexEdges[vBob]![0]!;
+    guest.transport.emit('game:action', { type: 'setupPlace', settlementVertex: vBob, roadEdge: eBob });
+
+    // Wait until turn passed to Bot (seat 2) or Bot auto-plays
+    await until(() => (guest.inbox.game?.activeSeat ?? 1) !== 1, 'turn passed after guest placed');
+    expect(guest.inbox.errors).toEqual([]);
+    expect(guest.inbox.game!.buildings[vBob]).toEqual({ seat: 1, type: 'settlement' });
+    expect(guest.inbox.game!.roads[eBob]).toBe(1);
   });
 
   it('marks a seat disconnected when its client goes away', async () => {

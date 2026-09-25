@@ -15,7 +15,7 @@ export interface Board2DProps extends BoardSvgProps {
 }
 
 /** Pointer travel (CSS px) beyond which a press is a pan, not a tap. */
-const TAP_SLOP = 10;
+const TAP_SLOP = 24;
 const ZOOM_STEP = 0.5;
 
 const BUTTON =

@@ -44,12 +44,42 @@ let bound: ClientTransport | null = null;
 /** The app connected online (App mount); resetToOnline() then reconnects socket.io. */
 let onlineWanted = false;
 
+const SERVER_URL_KEY = 'catan.serverUrl';
+
+export function getCustomServerUrl(): string | null {
+  try {
+    return localStorage.getItem(SERVER_URL_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setCustomServerUrl(url: string | null): void {
+  try {
+    if (url === null) localStorage.removeItem(SERVER_URL_KEY);
+    else localStorage.setItem(SERVER_URL_KEY, url);
+  } catch {
+    // ignore
+  }
+}
+
+export function switchServerUrl(newUrl: string | null): void {
+  setCustomServerUrl(newUrl);
+  if (socket !== null) {
+    detachHandlers();
+    socket.disconnect();
+    socket = null;
+  }
+  resetToOnline();
+}
+
 /** The socket.io socket (online transport), created lazily without connecting. */
 export function getSocket(): Socket {
   if (socket === null) {
     // Same-origin by default (Vite proxy in dev, server-served build in prod).
-    // VITE_SERVER_URL points a separately hosted client (e.g. Vercel) at the game server.
-    const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
+    // VITE_SERVER_URL or custom serverUrl points a separately hosted client (e.g. GitHub Pages) at the game server.
+    const customUrl = getCustomServerUrl();
+    const serverUrl = customUrl || (import.meta.env.VITE_SERVER_URL as string | undefined);
     socket = serverUrl ? io(serverUrl, { autoConnect: false }) : io({ autoConnect: false });
   }
   return socket;
