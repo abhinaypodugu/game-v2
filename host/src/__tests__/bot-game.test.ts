@@ -395,4 +395,141 @@ describe('bot tactical decision making', () => {
       expect(edges).toContain(action.edge);
     }
   });
+
+  it('tactically plays Surveyor dev card to swap a high-pip token onto its own building', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    // Find a non-desert hex with token 2 or 12
+    const hexes = state.board.topology.hexes;
+    const hLow = hexes.find((h) => state.board.hexes[h]?.token === 2 || state.board.hexes[h]?.token === 12)!;
+    const hHigh = hexes.find((h) => state.board.hexes[h]?.token === 6 || state.board.hexes[h]?.token === 8)!;
+
+    const vLow = state.board.topology.hexVertices[hLow]![0]!;
+
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 0,
+      turn: 3,
+      buildings: {
+        [vLow]: { seat: 0, type: 'settlement' },
+      },
+      players: state.players.map((p, idx) =>
+        idx === 0
+          ? {
+              ...p,
+              devHand: [
+                {
+                  id: 'surveyor_1',
+                  type: 'surveyor' as const,
+                  boughtOnTurn: 1,
+                  played: false,
+                },
+              ],
+            }
+          : p,
+      ),
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action).not.toBeNull();
+    expect(action?.type).toBe('playDevCard');
+    if (action?.type === 'playDevCard') {
+      expect(action.cardId).toBe('surveyor_1');
+      const payload = action.payload as { hex1: string; hex2: string };
+      expect(payload).toBeDefined();
+      expect([payload.hex1, payload.hex2]).toContain(hLow);
+      // The other hex swapped should have high pips (6 or 8)
+      const otherHex = payload.hex1 === hLow ? payload.hex2 : payload.hex1;
+      expect([6, 8, 5, 9]).toContain(state.board.hexes[otherHex]?.token);
+
+      const initialLowToken = state.board.hexes[hLow]!.token;
+      const initialHighToken = state.board.hexes[otherHex]!.token;
+
+      // Verify applying the action succeeds in the rules engine
+      const res = applyAction(state, action, rng);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.state.board.hexes[hLow]?.token).toBe(initialHighToken);
+        expect(res.state.board.hexes[otherHex]?.token).toBe(initialLowToken);
+      }
+    }
+  });
+
+  it('tactically plays Port Renovation dev card to acquire a 2:1 port matching heavy resource production', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    const harborEdges = Object.keys(state.board.harbors);
+    expect(harborEdges.length).toBeGreaterThanOrEqual(2);
+
+    // Find a specialty harbor (e.g. ore or wheat) and a generic or different harbor
+    const specialtyEdge = harborEdges.find((e) => state.board.harbors[e]?.type === 'specialty')!;
+    const specialtyRes = state.board.harbors[specialtyEdge]!.resource!;
+    const otherEdge = harborEdges.find((e) => e !== specialtyEdge)!;
+
+    // Place a bot settlement at otherEdge
+    const vBot = state.board.topology.edgeEndpoints[otherEdge]![0]!;
+
+    // Find a hex producing specialtyRes with high pips and give bot a city there
+    const hexMatch = state.board.topology.hexes.find((h) => {
+      const hex = state.board.hexes[h];
+      return hex && hex.terrain !== 'desert' && (hex.token === 6 || hex.token === 8);
+    })!;
+    const vProd = state.board.topology.hexVertices[hexMatch]![0]!;
+
+    // Ensure the terrain produces specialtyRes
+    state.board.hexes[hexMatch]!.terrain =
+      specialtyRes === 'ore'
+        ? 'mountains'
+        : specialtyRes === 'wheat'
+          ? 'fields'
+          : specialtyRes === 'wood'
+            ? 'forest'
+            : specialtyRes === 'brick'
+              ? 'hills'
+              : 'pasture';
+
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 0,
+      turn: 3,
+      buildings: {
+        [vBot]: { seat: 0, type: 'settlement' },
+        [vProd]: { seat: 0, type: 'city' },
+      },
+      players: state.players.map((p, idx) =>
+        idx === 0
+          ? {
+              ...p,
+              devHand: [
+                {
+                  id: 'port_1',
+                  type: 'portRenovation' as const,
+                  boughtOnTurn: 1,
+                  played: false,
+                },
+              ],
+            }
+          : p,
+      ),
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action).not.toBeNull();
+    expect(action?.type).toBe('playDevCard');
+    if (action?.type === 'playDevCard') {
+      expect(action.cardId).toBe('port_1');
+      const payload = action.payload as { edge1: string; edge2: string };
+      expect(payload).toBeDefined();
+      expect([payload.edge1, payload.edge2]).toContain(otherEdge);
+      expect([payload.edge1, payload.edge2]).toContain(specialtyEdge);
+
+      // Verify applying the action succeeds in the rules engine
+      const res = applyAction(state, action, rng);
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.state.board.harbors[otherEdge]?.resource).toBe(specialtyRes);
+      }
+    }
+  });
 });
+

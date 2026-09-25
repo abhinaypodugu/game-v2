@@ -3,9 +3,11 @@
 // Architecture: Goal-Oriented Action Planning (GOAP) + BFS Road Routing + Proactive & Kingmaker-safe Trading.
 
 import type {
+  DevCardType,
   EdgeId,
   GameAction,
   GameState,
+  Harbor,
   HexId,
   Resource,
   Rng,
@@ -788,7 +790,10 @@ export function computeBotAction(
           const t = state.board.hexes[hex]!.terrain;
           if (t === 'desert') continue;
           for (const v of state.board.topology.hexVertices[hex] ?? []) {
-            if (state.buildings[v]?.seat === botSeat) counts[t] = (counts[t] ?? 0) + 1;
+            const b = state.buildings[v];
+            if (b?.seat === botSeat) {
+              counts[t] = (counts[t] ?? 0) + (b.type === 'settlement' ? 1 : 2);
+            }
           }
         }
         const bestTerrain = (Object.keys(counts) as Array<keyof typeof counts>).reduce((best, t) =>
@@ -805,10 +810,16 @@ export function computeBotAction(
       // 9. Spy
       const spy = p.devHand.find((c) => c.type === 'spy' && !c.played && c.boughtOnTurn < state.turn);
       if (spy !== undefined) {
-        const others = state.players.filter((o) => o.seat !== botSeat && totalResources(o.resources) > 0);
+        const others = state.players.filter(
+          (o) =>
+            o.seat !== botSeat &&
+            totalResources(o.resources) > 0 &&
+            (state.fortifiedUntilTurn?.[o.seat] === undefined || state.turn >= state.fortifiedUntilTurn[o.seat]!),
+        );
         if (others.length > 0) {
           const victim = others.sort((a, b) => totalResources(b.resources) - totalResources(a.resources))[0]!;
-          const res = RESOURCES.find((r) => victim.resources[r] > 0) ?? 'wood';
+          const neededRes = missing.find((r) => victim.resources[r] > 0);
+          const res = neededRes ?? RESOURCES.find((r) => victim.resources[r] > 0) ?? 'wood';
           return { type: 'playDevCard', cardId: spy.id, payload: { victim: victim.seat, resource: res } };
         }
       }
@@ -816,7 +827,167 @@ export function computeBotAction(
       // 10. Oracle
       const oracle = p.devHand.find((c) => c.type === 'oracle' && !c.played && c.boughtOnTurn < state.turn);
       if (oracle !== undefined) {
-        return { type: 'playDevCard', cardId: oracle.id };
+        const top3 = state.devDeck.slice(state.devDeckIndex, state.devDeckIndex + 3);
+        let chosenCardId: string | undefined = undefined;
+        if (top3.length > 0) {
+          const myTotalVp = totalVp(state, botSeat);
+          const targetVp = state.rules.victoryPointsToWin;
+          const vpCard = top3.find((c) => c.type === 'victoryPoint');
+          if (vpCard && myTotalVp + 1 >= targetVp) {
+            chosenCardId = vpCard.id;
+          } else {
+            const priority: DevCardType[] = [
+              'monopoly',
+              'yearOfPlenty',
+              'knight',
+              'alchemist',
+              'roadBuilding',
+              'bountifulHarvest',
+              'surveyor',
+              'portRenovation',
+              'victoryPoint',
+            ];
+            for (const pref of priority) {
+              const match = top3.find((c) => c.type === pref);
+              if (match) {
+                chosenCardId = match.id;
+                break;
+              }
+            }
+          }
+        }
+        return { type: 'playDevCard', cardId: oracle.id, payload: chosenCardId ? { chosenCardId } : undefined };
+      }
+
+      // 11. Surveyor: swap number tokens to maximize bot yield / minimize opponent yield
+      const surveyor = p.devHand.find((c) => c.type === 'surveyor' && !c.played && c.boughtOnTurn < state.turn);
+      if (surveyor !== undefined) {
+        const eligibleHexes = state.board.topology.hexes.filter((h) => {
+          const hex = state.board.hexes[h];
+          return hex && hex.terrain !== 'desert' && hex.token !== null && hex.token !== undefined;
+        });
+
+        const evalHexToken = (h: HexId, token: number) => {
+          const pips = PIPS[token] ?? 0;
+          let hexScore = 0;
+          for (const v of state.board.topology.hexVertices[h] ?? []) {
+            const b = state.buildings[v];
+            if (!b) continue;
+            const weight = b.type === 'settlement' ? 1 : 2;
+            const res = TERRAIN_RESOURCE[state.board.hexes[h]!.terrain];
+            const resMult = res === 'ore' || res === 'wheat' ? 1.2 : 1.0;
+            if (b.seat === botSeat) {
+              hexScore += pips * weight * resMult;
+            } else {
+              const oppMult = publicVp(state, b.seat) >= state.rules.victoryPointsToWin - 2 ? 0.9 : 0.5;
+              hexScore -= pips * weight * resMult * oppMult;
+            }
+          }
+          return hexScore;
+        };
+
+        let bestDelta = 0;
+        let bestSwap: { hex1: HexId; hex2: HexId } | null = null;
+
+        for (let i = 0; i < eligibleHexes.length; i++) {
+          for (let j = i + 1; j < eligibleHexes.length; j++) {
+            const h1 = eligibleHexes[i]!;
+            const h2 = eligibleHexes[j]!;
+            const t1 = state.board.hexes[h1]!.token!;
+            const t2 = state.board.hexes[h2]!.token!;
+            if (t1 === t2) continue;
+
+            const currentScore = evalHexToken(h1, t1) + evalHexToken(h2, t2);
+            const swappedScore = evalHexToken(h1, t2) + evalHexToken(h2, t1);
+            const delta = swappedScore - currentScore;
+
+            if (delta > bestDelta) {
+              bestDelta = delta;
+              bestSwap = { hex1: h1, hex2: h2 };
+            }
+          }
+        }
+
+        if (bestSwap !== null && bestDelta >= 1.5) {
+          return { type: 'playDevCard', cardId: surveyor.id, payload: bestSwap };
+        }
+      }
+
+      // 12. Port Renovation: swap harbors to acquire a 2:1 port matching highest production or 3:1
+      const portRenov = p.devHand.find((c) => c.type === 'portRenovation' && !c.played && c.boughtOnTurn < state.turn);
+      if (portRenov !== undefined) {
+        const harborEdges = Object.keys(state.board.harbors);
+        if (harborEdges.length >= 2) {
+          const prodBySeat: Record<number, Record<Resource, number>> = {};
+          for (const pl of state.players) {
+            prodBySeat[pl.seat] = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+          }
+          for (const hex of state.board.topology.hexes) {
+            const h = state.board.hexes[hex];
+            if (!h || h.terrain === 'desert' || h.token === null) continue;
+            const res = TERRAIN_RESOURCE[h.terrain];
+            if (!res) continue;
+            const pips = PIPS[h.token] ?? 0;
+            for (const v of state.board.topology.hexVertices[hex] ?? []) {
+              const b = state.buildings[v];
+              if (b) {
+                prodBySeat[b.seat]![res] += pips * (b.type === 'settlement' ? 1 : 2);
+              }
+            }
+          }
+
+          const evalHarborForSeat = (harbor: Harbor, seat: number) => {
+            if (harbor.type === 'generic') return 4;
+            if (harbor.resource !== undefined) {
+              const prod = prodBySeat[seat]?.[harbor.resource] ?? 0;
+              return 4 + prod * 2;
+            }
+            return 0;
+          };
+
+          const evalHarborEdge = (edgeId: EdgeId, harbor: Harbor) => {
+            const endpoints = state.board.topology.edgeEndpoints[edgeId];
+            if (!endpoints) return 0;
+            let score = 0;
+            for (const v of endpoints) {
+              const b = state.buildings[v];
+              if (!b) continue;
+              const val = evalHarborForSeat(harbor, b.seat);
+              if (b.seat === botSeat) {
+                score += val;
+              } else {
+                const oppMult = publicVp(state, b.seat) >= state.rules.victoryPointsToWin - 2 ? 0.9 : 0.5;
+                score -= val * oppMult;
+              }
+            }
+            return score;
+          };
+
+          let bestDelta = 0;
+          let bestHarborSwap: { edge1: EdgeId; edge2: EdgeId } | null = null;
+
+          for (let i = 0; i < harborEdges.length; i++) {
+            for (let j = i + 1; j < harborEdges.length; j++) {
+              const e1 = harborEdges[i]!;
+              const e2 = harborEdges[j]!;
+              const h1 = state.board.harbors[e1]!;
+              const h2 = state.board.harbors[e2]!;
+
+              const currentScore = evalHarborEdge(e1, h1) + evalHarborEdge(e2, h2);
+              const swappedScore = evalHarborEdge(e1, h2) + evalHarborEdge(e2, h1);
+              const delta = swappedScore - currentScore;
+
+              if (delta > bestDelta) {
+                bestDelta = delta;
+                bestHarborSwap = { edge1: e1, edge2: e2 };
+              }
+            }
+          }
+
+          if (bestHarborSwap !== null && bestDelta >= 2.0) {
+            return { type: 'playDevCard', cardId: portRenov.id, payload: bestHarborSwap };
+          }
+        }
       }
     }
 
