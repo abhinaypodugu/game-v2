@@ -10,12 +10,12 @@ COPY client/package.json client/
 COPY host/package.json host/
 COPY server/package.json server/
 COPY shared/package.json shared/
-RUN corepack pnpm install --frozen-lockfile
+RUN corepack enable && pnpm install --frozen-lockfile
 
 COPY . .
-RUN corepack pnpm build
+RUN pnpm build
 
 ENV NODE_ENV=production
 ENV PORT=3001
 EXPOSE 3001
-CMD ["corepack", "pnpm", "start"]
+CMD ["pnpm", "start"]

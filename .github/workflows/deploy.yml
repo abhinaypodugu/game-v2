@@ -38,6 +38,7 @@ jobs:
       - name: Build client
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
         run: pnpm --filter catan-client build
 
       - name: Upload artifact

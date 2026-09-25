@@ -5,8 +5,8 @@ services:
     name: catan
     runtime: node
     plan: free
-    buildCommand: corepack pnpm install --frozen-lockfile && corepack pnpm build
-    startCommand: corepack pnpm start
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: corepack enable && pnpm start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
