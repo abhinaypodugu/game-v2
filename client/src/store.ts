@@ -130,7 +130,7 @@ function saveSession(s: Session | null): void {
 let toastId = 0;
 
 // Transport handlers: installed on whichever transport is active.
-const socketHandlers: SocketHandlers = {
+export const socketHandlers: SocketHandlers = {
   onConnect: () => {
     useStore.setState({ connected: true });
     // Offline transports join explicitly (net/offline.ts); only socket.io
@@ -146,10 +146,25 @@ const socketHandlers: SocketHandlers = {
     useStore.setState({ connected: false });
   },
   onRoomState: (room) => {
-    const { session, route } = useStore.getState();
+    const { session, route, room: prevRoom } = useStore.getState();
     const sameRoom = session !== null && session.roomCode === room.roomCode;
+    const customDevDeck =
+      room.settings.customDevDeck !== undefined
+        ? room.settings.customDevDeck
+        : prevRoom?.roomCode === room.roomCode
+          ? prevRoom.settings.customDevDeck
+          : undefined;
+
+    const mergedRoom: RoomState = {
+      ...room,
+      settings: {
+        ...room.settings,
+        ...(customDevDeck !== undefined ? { customDevDeck } : {}),
+      },
+    };
+
     useStore.setState({
-      room,
+      room: mergedRoom,
       route: room.started && sameRoom ? 'game' : room.started && session === null ? 'home' : sameRoom ? 'room' : route,
     });
   },
@@ -276,6 +291,18 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   updateSettings(patch) {
+    const current = get().room;
+    if (current) {
+      set({
+        room: {
+          ...current,
+          settings: {
+            ...current.settings,
+            ...patch,
+          },
+        },
+      });
+    }
     emitUpdateSettings(patch);
   },
 

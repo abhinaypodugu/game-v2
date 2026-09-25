@@ -194,7 +194,7 @@ export function RoomPage(): React.JSX.Element {
 
   const toggleCardEnabled = (type: DevCardType): void => {
     const current = currentDevDeck[type] ?? 0;
-    const standard = defaultDeck[type] ?? 1;
+    const standard = (defaultDeck[type] && defaultDeck[type] > 0) ? defaultDeck[type] : 1;
     const nextVal = current > 0 ? 0 : standard;
     const newDeck = { ...currentDevDeck, [type]: nextVal };
     updateSettings({ customDevDeck: newDeck });
