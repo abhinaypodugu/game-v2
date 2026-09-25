@@ -88,11 +88,28 @@ export function RoomPage(): React.JSX.Element {
   const [showRoomQr, setShowRoomQr] = useState(false);
   const [showDevDeckConfig, setShowDevDeckConfig] = useState(false);
 
-  const maxPlayers = room?.settings.maxPlayers;
+  const maxPlayers = (room?.settings.maxPlayers ?? 4) as PlayerCount;
   const seed = room?.seed;
   const started = room?.started ?? true;
   const vpToWin = room?.settings.victoryPointsToWin ?? DEFAULT_RULES.victoryPointsToWin;
   const discardLimit = room?.settings.discardLimit ?? DEFAULT_RULES.discardLimit;
+  const customDevDeck = room?.settings.customDevDeck;
+
+  const defaultDeck = useMemo(
+    () => defaultDevDeckForPlayers(maxPlayers),
+    [maxPlayers],
+  );
+
+  const currentDevDeck: Record<DevCardType, number> = useMemo(() => {
+    return {
+      ...defaultDeck,
+      ...(customDevDeck ?? {}),
+    };
+  }, [defaultDeck, customDevDeck]);
+
+  const totalDevCards = useMemo(() => {
+    return Object.values(currentDevDeck).reduce((sum, n) => sum + (n ?? 0), 0);
+  }, [currentDevDeck]);
 
   const playerCount = room?.players.length ?? 0;
   const prevCount = useRef(playerCount);
@@ -105,8 +122,8 @@ export function RoomPage(): React.JSX.Element {
 
   // Derived board preview — a pure function of seat count + seed.
   const preview: PersonalSnapshot | null = useMemo(() => {
-    if (maxPlayers === undefined || seed === undefined || started) return null;
-    const board = generateBoard(maxPlayers as PlayerCount, seed);
+    if (room === null || seed === undefined || started) return null;
+    const board = generateBoard(maxPlayers, seed);
     return {
       version: 0,
       config: boardConfigForPlayers(maxPlayers).key,
@@ -132,7 +149,7 @@ export function RoomPage(): React.JSX.Element {
       players: [],
       you: { seat: 0, resources: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 }, devHand: [], totalVp: 0 },
     };
-  }, [maxPlayers, seed, started, vpToWin, discardLimit]);
+  }, [room, maxPlayers, seed, started, vpToWin, discardLimit]);
 
   if (room === null || session === null) {
     return (
@@ -167,22 +184,6 @@ export function RoomPage(): React.JSX.Element {
   const inviteLink = getRoomShareUrl(room.roomCode);
   const settings: RoomSettings = room.settings;
   const boardMode = boardConfigForPlayers(settings.maxPlayers).key;
-
-  const defaultDeck = useMemo(
-    () => defaultDevDeckForPlayers(settings.maxPlayers),
-    [settings.maxPlayers],
-  );
-
-  const currentDevDeck: Record<DevCardType, number> = useMemo(() => {
-    return {
-      ...defaultDeck,
-      ...(settings.customDevDeck ?? {}),
-    };
-  }, [defaultDeck, settings.customDevDeck]);
-
-  const totalDevCards = useMemo(() => {
-    return Object.values(currentDevDeck).reduce((sum, n) => sum + (n ?? 0), 0);
-  }, [currentDevDeck]);
 
   const updateCardCount = (type: DevCardType, delta: number): void => {
     const current = currentDevDeck[type] ?? 0;
