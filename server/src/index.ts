@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
+import { RoomManager, registerSocketHandlers, type ServerContext } from '@catan/host';
 import { GameLog } from './jsonl';
 
 // Load .env if present (supported natively in Node.js 20+)
