@@ -206,6 +206,45 @@ export class RoomManager {
     room.lastActivity = Date.now();
     return { ok: true };
   }
+
+  kickPlayer(
+    code: string,
+    hostSeatIndex: number,
+    seatIndex: number,
+  ): { ok: true; kickedSeat: Seat } | { error: string } {
+    const room = this.getRoom(code);
+    if (room === undefined) return { error: 'ROOM_NOT_FOUND' };
+    if (room.hostSeatIndex !== hostSeatIndex) return { error: 'NOT_HOST' };
+    if (seatIndex === hostSeatIndex) return { error: 'CANNOT_KICK_HOST' };
+    const seat = room.seats[seatIndex];
+    if (seat === undefined) return { error: 'NO_SUCH_SEAT' };
+
+    room.lastActivity = Date.now();
+
+    if (room.game === null) {
+      // In lobby: remove seat, freeing up the reconnecting/occupied slot
+      const kicked = { ...seat };
+      room.seats = room.seats.filter((s) => s.seatIndex !== seatIndex);
+      room.seats.forEach((s, i) => {
+        s.seatIndex = i;
+      });
+      if (room.hostSeatIndex > seatIndex) {
+        room.hostSeatIndex -= 1;
+      }
+      return { ok: true, kickedSeat: kicked };
+    } else {
+      // In-game: convert seat into a bot so turns proceed without stalling
+      seat.isBot = true;
+      seat.connected = true;
+      seat.socketId = null;
+      seat.disconnectedAt = null;
+      if (!seat.name.endsWith(' (Bot)')) {
+        seat.name = `${seat.name} (Bot)`;
+      }
+      return { ok: true, kickedSeat: seat };
+    }
+  }
+
   /** Reattach a seat by token (or matching name) — works mid-game. */
   reattachSeat(
     code: string,

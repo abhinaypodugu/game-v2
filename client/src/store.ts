@@ -12,6 +12,7 @@ import {
   emitAddBot,
   emitCreateRoom,
   emitJoinRoom,
+  emitKickPlayer,
   emitLeaveRoom,
   emitPickColor,
   emitRegenerateBoard,
@@ -68,6 +69,7 @@ export interface Store {
   regenerateBoard(): void;
   addBot(): void;
   removeBot(seatIndex: number): void;
+  kickPlayer(seatIndex: number): void;
   startGame(): void;
   startQuickPlay(name?: string): void;
   sendAction(action: GameAction): void;
@@ -193,6 +195,19 @@ export const socketHandlers: SocketHandlers = {
   onRoomStarted: () => {
     useStore.setState({ route: 'game' });
   },
+  onRoomKicked: (payload) => {
+    const reason = payload?.reason ?? 'You were removed from the room by the host.';
+    useStore.getState().clearSession();
+    useStore.getState().pushToast(reason, 'error');
+  },
+  onRoomSeatSync: (payload) => {
+    const session = useStore.getState().session;
+    if (session !== null && session.seatIndex !== payload.seatIndex) {
+      const updated: Session = { ...session, seatIndex: payload.seatIndex };
+      saveSession(updated);
+      useStore.setState({ session: updated });
+    }
+  },
   onGameState: (snap) => {
     useStore.setState({ game: snap });
     const currentSession = useStore.getState().session;
@@ -315,6 +330,10 @@ export const useStore = create<Store>((set, get) => ({
 
   removeBot(seatIndex) {
     emitRemoveBot(seatIndex);
+  },
+
+  kickPlayer(seatIndex) {
+    emitKickPlayer(seatIndex);
   },
 
   startGame() {

@@ -74,6 +74,11 @@ export function roomStatePayload(room: Room): unknown {
 }
 
 function broadcastRoom(ctx: ServerContext, room: Room): void {
+  for (const seat of room.seats) {
+    if (seat.socketId !== null) {
+      ctx.io.to(seat.socketId).emit('room:seatSync', { seatIndex: seat.seatIndex });
+    }
+  }
   ctx.io.to(room.code).emit('room:state', roomStatePayload(room));
 }
 
@@ -395,6 +400,10 @@ export function registerSocketHandlers(ctx: ServerContext): void {
         res.seat.connected = true;
         res.seat.socketId = socket.id;
         res.seat.disconnectedAt = null;
+        if (res.seat.isBot && res.seat.name.endsWith(' (Bot)')) {
+          res.seat.isBot = false;
+          res.seat.name = res.seat.name.slice(0, -6);
+        }
       } else {
         const res = ctx.rooms.joinRoom(code, name!);
         if ('error' in res) {
@@ -425,7 +434,9 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       if (joinedRoom === null || joinedSeat === null) return;
       const room = ctx.rooms.getRoom(joinedRoom);
       if (room === undefined) return;
-      ctx.rooms.leaveRoom(joinedRoom, joinedSeat);
+      const mySeat = room.seats.find((s) => s.socketId === socket.id);
+      const actingSeat = mySeat?.seatIndex ?? joinedSeat;
+      ctx.rooms.leaveRoom(joinedRoom, actingSeat);
       socket.leave(room.code);
       joinedRoom = null;
       joinedSeat = null;
@@ -437,7 +448,7 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       if (!parsed.success || joinedRoom === null || joinedSeat === null) return;
       const room = ctx.rooms.getRoom(joinedRoom);
       if (room === undefined) return;
-      const seat = room.seats[joinedSeat];
+      const seat = room.seats.find((s) => s.socketId === socket.id) ?? room.seats[joinedSeat];
       if (seat === undefined) return;
       seat.ready = parsed.data.ready;
       broadcastRoom(ctx, room);
@@ -448,7 +459,9 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       if (!parsed.success || joinedRoom === null || joinedSeat === null) return;
       const room = ctx.rooms.getRoom(joinedRoom);
       if (room === undefined) return;
-      const res = ctx.rooms.pickColor(joinedRoom, joinedSeat, parsed.data.color as PlayerColor);
+      const seat = room.seats.find((s) => s.socketId === socket.id) ?? room.seats[joinedSeat];
+      if (seat === undefined) return;
+      const res = ctx.rooms.pickColor(joinedRoom, seat.seatIndex, parsed.data.color as PlayerColor);
       if ('error' in res) {
         socket.emit('error', { message: res.error });
         return;
@@ -524,12 +537,44 @@ export function registerSocketHandlers(ctx: ServerContext): void {
       if (!parsed.success || joinedRoom === null || joinedSeat === null) return;
       const room = ctx.rooms.getRoom(joinedRoom);
       if (room === undefined) return;
-      const res = ctx.rooms.removeBot(joinedRoom, joinedSeat, parsed.data.seatIndex);
+      const mySeat = room.seats.find((s) => s.socketId === socket.id);
+      const actingSeat = mySeat?.seatIndex ?? joinedSeat;
+      const res = ctx.rooms.removeBot(joinedRoom, actingSeat, parsed.data.seatIndex);
       if ('error' in res) {
         socket.emit('error', { message: res.error });
         return;
       }
       broadcastRoom(ctx, room);
+    });
+
+    socket.on('room:kickPlayer', (raw: unknown) => {
+      const parsed = z.object({ seatIndex: z.number().int().nonnegative() }).safeParse(raw);
+      if (!parsed.success || joinedRoom === null || joinedSeat === null) return;
+      const room = ctx.rooms.getRoom(joinedRoom);
+      if (room === undefined) return;
+
+      const mySeat = room.seats.find((s) => s.socketId === socket.id);
+      const actingSeat = mySeat?.seatIndex ?? joinedSeat;
+
+      const targetSeatIndex = parsed.data.seatIndex;
+      const targetSeat = room.seats[targetSeatIndex];
+      const targetSocketId = targetSeat?.socketId;
+
+      const res = ctx.rooms.kickPlayer(joinedRoom, actingSeat, targetSeatIndex);
+      if ('error' in res) {
+        socket.emit('error', { message: res.error });
+        return;
+      }
+
+      if (targetSocketId) {
+        ctx.io.to(targetSocketId).emit('room:kicked', { reason: 'You were removed from the room by the host.' });
+      }
+
+      broadcastRoom(ctx, room);
+      if (room.game !== null) {
+        broadcastGame(ctx, room);
+        triggerBotTurnIfNeeded(ctx, room);
+      }
     });
 
     socket.on('game:action', (raw: unknown) => {

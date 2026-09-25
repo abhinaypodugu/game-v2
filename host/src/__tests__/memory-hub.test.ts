@@ -239,3 +239,120 @@ describe('RoomManager export/import', () => {
     expect(client.errors).toEqual([]);
   });
 });
+
+describe('RoomManager kickPlayer', () => {
+  it('kicks a connected player in lobby, emits room:kicked, and frees the slot', async () => {
+    const { hub } = startHost();
+    const host = await createRoom(hub, 'Ann');
+    const code = host.joined.roomCode;
+    const ben = await joinRoom(hub, code, 'Ben');
+
+    const kickedEvent = ben.client.next<{ reason?: string }>('room:kicked');
+    const roomStateAfterKick = host.client.next<RoomStatePayload>('room:state', (s) => s.players.length === 1);
+
+    host.client.send('room:kickPlayer', { seatIndex: 1 });
+
+    const kicked = await kickedEvent;
+    expect(kicked.reason).toContain('removed');
+
+    const state = await roomStateAfterKick;
+    expect(state.players).toHaveLength(1);
+    expect(state.players[0]!.name).toBe('Ann');
+
+    // Slot is freed up: a new player can join
+    const cy = await joinRoom(hub, code, 'Cy');
+    expect(cy.joined.seatIndex).toBe(1);
+  });
+
+  it('kicks a disconnected player in lobby to free up a reconnecting slot in a full room', async () => {
+    const { hub } = startHost();
+    const host = await createRoom(hub, 'Ann');
+    const code = host.joined.roomCode;
+
+    // Set max players to 3
+    const settingsUpdated = host.client.next<RoomStatePayload>('room:state', (s) => s.settings.maxPlayers === 3);
+    host.client.send('room:updateSettings', { maxPlayers: 3 });
+    await settingsUpdated;
+
+    const ben = await joinRoom(hub, code, 'Ben');
+    await joinRoom(hub, code, 'Cy');
+
+    // Room is full (3/3). Another player cannot join.
+    const dave = connectClient(hub);
+    const daveFullError = dave.next<{ message: string }>('error');
+    dave.send('room:join', { code, name: 'Dave' });
+    expect((await daveFullError).message).toBe('ROOM_FULL');
+
+    // Ben disconnects
+    const benDropped = host.client.next<RoomStatePayload>('room:state', (s) => s.players[1]?.connected === false);
+    ben.client.endpoint.close();
+    await benDropped;
+
+    // Host kicks disconnected Ben to free the reconnecting slot
+    const slotFreed = host.client.next<RoomStatePayload>('room:state', (s) => s.players.length === 2);
+    host.client.send('room:kickPlayer', { seatIndex: 1 });
+    await slotFreed;
+
+    // Dave can now join into the freed slot!
+    const daveJoined = dave.next<JoinedPayload>('room:joined');
+    dave.send('room:join', { code, name: 'Dave' });
+    expect((await daveJoined).seatIndex).toBe(2);
+  });
+
+  it('kicks an in-game player, replacing them with a bot so the game proceeds without stalling', async () => {
+    const { hub, ctx } = startHost();
+    const host = await createRoom(hub, 'Ann');
+    const code = host.joined.roomCode;
+    const ben = await joinRoom(hub, code, 'Ben');
+    const cy = await joinRoom(hub, code, 'Cy');
+
+    const clients = [host.client, ben.client, cy.client];
+    const colored = host.client.next<RoomStatePayload>('room:state', (s) => s.players.every((p) => p.color !== null && p.ready));
+    clients.forEach((c, i) => {
+      c.send('room:pickColor', { color: ['red', 'blue', 'orange'][i] });
+      c.send('room:setReady', { ready: true });
+    });
+    await colored;
+
+    const started = host.client.next<PersonalSnapshot>('game:state');
+    host.client.send('room:start');
+    await started;
+
+    // Ann plays first turn
+    const handedToBen = host.client.next<PersonalSnapshot>('game:state', (s) => s.activeSeat === 1);
+    host.client.send('game:action', setupPlaceFor(ctx, code));
+    await handedToBen;
+
+    // Ben disconnects during his turn
+    const benDropped = host.client.next<RoomStatePayload>('room:state', (s) => s.players[1]?.connected === false);
+    ben.client.endpoint.close();
+    await benDropped;
+
+    // Host kicks Ben mid-game -> Ben converted to bot -> bot takes Ben's turn automatically!
+    const botPlayed = host.client.next<PersonalSnapshot>('game:state', (s) => s.activeSeat === 2);
+    host.client.send('room:kickPlayer', { seatIndex: 1 });
+
+    const afterBot = await botPlayed;
+    expect(afterBot.activeSeat).toBe(2);
+    const room = ctx.rooms.getRoom(code)!;
+    expect(room.seats[1]!.isBot).toBe(true);
+  });
+
+  it('rejects kickPlayer if caller is not host or tries to kick self', async () => {
+    const { hub } = startHost();
+    const host = await createRoom(hub, 'Ann');
+    const code = host.joined.roomCode;
+    const ben = await joinRoom(hub, code, 'Ben');
+
+    // Ben tries to kick Ann
+    const benError = ben.client.next<{ message: string }>('error');
+    ben.client.send('room:kickPlayer', { seatIndex: 0 });
+    expect((await benError).message).toBe('NOT_HOST');
+
+    // Ann tries to kick self
+    const hostError = host.client.next<{ message: string }>('error');
+    host.client.send('room:kickPlayer', { seatIndex: 0 });
+    expect((await hostError).message).toBe('CANNOT_KICK_HOST');
+  });
+});
+

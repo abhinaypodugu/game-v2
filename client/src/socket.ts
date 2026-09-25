@@ -16,6 +16,8 @@ export interface SocketHandlers {
   onRoomCreated?: (payload: { roomCode: string; seatIndex: number; reconnectToken: string }) => void;
   onRoomJoined?: (payload: { roomCode: string; seatIndex: number; reconnectToken: string }) => void;
   onRoomStarted?: (payload: { roomCode: string }) => void;
+  onRoomKicked?: (payload?: { reason?: string }) => void;
+  onRoomSeatSync?: (payload: { seatIndex: number }) => void;
   onGameState?: (snap: PersonalSnapshot) => void;
   onGameEvent?: (event: GameEvent) => void;
   onTimer?: (info: TimerInfo) => void;
@@ -29,6 +31,8 @@ const HANDLER_EVENTS: ReadonlyArray<readonly [keyof SocketHandlers, string]> = [
   ['onRoomCreated', 'room:created'],
   ['onRoomJoined', 'room:joined'],
   ['onRoomStarted', 'room:started'],
+  ['onRoomKicked', 'room:kicked'],
+  ['onRoomSeatSync', 'room:seatSync'],
   ['onGameState', 'game:state'],
   ['onGameEvent', 'game:event'],
   ['onTimer', 'game:timer'],
@@ -222,6 +226,10 @@ export function emitAddBot(): void {
 
 export function emitRemoveBot(seatIndex: number): void {
   getTransport().emit('room:removeBot', { seatIndex });
+}
+
+export function emitKickPlayer(seatIndex: number): void {
+  getTransport().emit('room:kickPlayer', { seatIndex });
 }
 
 export function emitAction(action: GameAction): void {

@@ -425,6 +425,47 @@ describe('DevCardModals', () => {
     expect(screen.getByRole('heading', { name: /Development Cards/i })).toBeInTheDocument();
   });
 
+  it('PlayerInspectModal shows host kick/replace control for other players when host', async () => {
+    const user = userEvent.setup();
+    const snap = snapshotFor();
+    const otherPlayer = { ...snap.players[1]!, connected: false }; // Bob (seat 1, disconnected)
+    const onClose = vi.fn();
+    const kickSpy = vi.spyOn(useStore.getState(), 'kickPlayer').mockImplementation(() => {});
+
+    useStore.setState({
+      game: snap,
+      session: { roomCode: 'TEST', seatIndex: 0, reconnectToken: 'tok-0' },
+      room: {
+        roomCode: 'TEST',
+        host: 0,
+        players: [
+          { seatIndex: 0, name: 'Alice', color: 'red', ready: true, connected: true, isBot: false },
+          { seatIndex: 1, name: 'Bob', color: 'blue', ready: true, connected: false, isBot: false },
+        ],
+        settings: { maxPlayers: 4, turnTimerSec: 60, diceMode: 'random', victoryPointsToWin: 10, discardLimit: 7 },
+        seed: 'seed',
+        started: true,
+      },
+    });
+
+    render(
+      <PlayerInspectModal
+        player={otherPlayer}
+        snap={snap}
+        onClose={onClose}
+        onOpenGuide={vi.fn()}
+      />,
+    );
+
+    const kickBtn = screen.getByTestId('kick-ingame-1');
+    expect(kickBtn).toBeInTheDocument();
+    expect(kickBtn).toHaveTextContent(/Replace Disconnected Bob with Bot/i);
+
+    await user.click(kickBtn);
+    expect(kickSpy).toHaveBeenCalledWith(1);
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('TurnTimer renders null when inactive, and renders countdown without React hook order error when active', async () => {
     useStore.setState({
       game: snapshotFor(),

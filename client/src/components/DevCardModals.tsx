@@ -406,8 +406,14 @@ export function PlayerInspectModal({
   onOpenGuide,
   onInspectCard,
 }: PlayerInspectModalProps): React.JSX.Element {
+  const room = useStore((s) => s.room);
+  const session = useStore((s) => s.session);
+  const kickPlayer = useStore((s) => s.kickPlayer);
+  const isHost = room !== null && session !== null && room.host === session.seatIndex;
   const isYou = player.seat === snap.you.seat;
   const isFinished = snap.winner !== null || snap.phase === 'finished';
+  const roomPlayer = room?.players.find((p) => p.seatIndex === player.seat);
+  const isAlreadyBot = roomPlayer?.isBot === true;
   const vp = isYou ? snap.you.totalVp : (player.totalVp ?? player.publicVp);
 
   const buildings = Object.values(snap.buildings).filter((b) => b.seat === player.seat);
@@ -590,6 +596,28 @@ export function PlayerInspectModal({
             </div>
           )}
         </div>
+
+        {isHost && !isYou && !isFinished && !isAlreadyBot ? (
+          <div className="flex flex-col gap-1.5 rounded-2xl border-2 border-line bg-white p-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink-soft">Host Controls</h4>
+            <p className="text-xs text-ink-soft">
+              {player.connected
+                ? 'Kick this player and replace them with an AI bot so the game can continue.'
+                : 'Player is disconnected. Free this reconnecting slot by replacing them with an AI bot.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                kickPlayer(player.seat);
+                onClose();
+              }}
+              className="mt-1 flex h-11 items-center justify-center rounded-xl bg-[#fcd5d5] px-4 font-bold text-xs text-[#8a1424] hover:bg-[#fbb4b4] active:translate-y-px"
+              data-testid={`kick-ingame-${player.seat}`}
+            >
+              {player.connected ? `Kick ${player.name} (Replace with Bot)` : `Replace Disconnected ${player.name} with Bot`}
+            </button>
+          </div>
+        ) : null}
 
         <button
           type="button"

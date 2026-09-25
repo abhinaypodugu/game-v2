@@ -82,6 +82,7 @@ export function RoomPage(): React.JSX.Element {
   const leaveRoom = useStore((s) => s.leaveRoom);
   const addBot = useStore((s) => s.addBot);
   const removeBot = useStore((s) => s.removeBot);
+  const kickPlayer = useStore((s) => s.kickPlayer);
   const offline = useStore((s) => s.offline);
   const leaveOffline = useStore((s) => s.leaveOffline);
   const [pairing, setPairing] = useState(false);
@@ -378,15 +379,28 @@ export function RoomPage(): React.JSX.Element {
                       {p.seatIndex === room.host ? ' 👑' : ''}
                       {p.connected ? '' : isOffline ? ' (reconnecting…)' : ' (offline)'}
                     </span>
-                    {p.isBot && isHost ? (
+                    {isHost && !isMe ? (
                       <button
                         type="button"
-                        onClick={() => removeBot(p.seatIndex)}
-                        className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#fcd5d5] text-base font-bold text-[#8a1424]"
-                        title="Remove bot"
-                        aria-label={`Remove ${p.name}`}
+                        onClick={() => kickPlayer(p.seatIndex)}
+                        className="flex h-11 items-center justify-center gap-1 rounded-xl bg-[#fcd5d5] px-2.5 text-xs font-bold text-[#8a1424] hover:bg-[#fbb4b4] active:translate-y-px"
+                        title={
+                          p.isBot
+                            ? `Remove ${p.name}`
+                            : p.connected
+                              ? `Kick ${p.name}`
+                              : `Remove disconnected ${p.name} to free slot`
+                        }
+                        aria-label={
+                          p.isBot
+                            ? `Remove ${p.name}`
+                            : p.connected
+                              ? `Kick ${p.name}`
+                              : `Remove ${p.name}`
+                        }
+                        data-testid={`kick-player-${p.seatIndex}`}
                       >
-                        ✕
+                        ✕ {p.isBot ? 'Remove' : p.connected ? 'Kick' : 'Free slot'}
                       </button>
                     ) : null}
                     {isMe ? (
