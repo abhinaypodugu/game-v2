@@ -38,7 +38,7 @@ jobs:
       - name: Build client
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
-          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL || 'https://catan-fh8w.onrender.com' }}
         run: pnpm --filter catan-client build
 
       - name: Upload artifact

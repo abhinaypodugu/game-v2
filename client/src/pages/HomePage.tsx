@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useStore } from '../store';
-import { getCustomServerUrl, switchServerUrl } from '../socket';
+import { DEFAULT_PRODUCTION_SERVER_URL, getCustomServerUrl, switchServerUrl } from '../socket';
 import { GuestPairingSheet } from '../components/OfflinePairing';
 import { extractRoomCode } from '../components/QrScanner';
 
@@ -142,31 +142,42 @@ export function HomePage(): React.JSX.Element {
           <span className="h-0.5 flex-1 rounded bg-line" />
         </div>
 
-        <div className="flex gap-2">
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            maxLength={4}
-            placeholder="CODE"
-            autoCapitalize="characters"
-            className={`${inputClass} w-28 text-center tracking-widest`}
-            data-testid="join-code-input"
-          />
+        <div className="flex flex-col gap-2">
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              maxLength={4}
+              placeholder="CODE"
+              autoCapitalize="characters"
+              className={`${inputClass} w-28 text-center tracking-widest`}
+              data-testid="join-code-input"
+            />
+            <button
+              type="button"
+              disabled={code.length !== 4 || trimmedName.length === 0 || joining}
+              onClick={async () => {
+                setJoining(true);
+                try {
+                  await joinRoom(code, trimmedName);
+                } finally {
+                  setJoining(false);
+                }
+              }}
+              className="h-12 flex-1 rounded-2xl bg-ocean-deep px-4 font-display text-lg font-bold text-white shadow-[0_4px_0_#1f6f99] active:translate-y-px disabled:opacity-50"
+              data-testid="join-room"
+            >
+              {joining ? 'Joining…' : 'Join room'}
+            </button>
+          </div>
           <button
             type="button"
-            disabled={code.length !== 4 || trimmedName.length === 0 || joining}
-            onClick={async () => {
-              setJoining(true);
-              try {
-                await joinRoom(code, trimmedName);
-              } finally {
-                setJoining(false);
-              }
-            }}
-            className="h-12 flex-1 rounded-2xl bg-ocean-deep px-4 font-display text-lg font-bold text-white shadow-[0_4px_0_#1f6f99] active:translate-y-px disabled:opacity-50"
-            data-testid="join-room"
+            disabled={trimmedName.length === 0 || joining}
+            onClick={() => setGuestPairing(true)}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-line bg-white font-display text-base font-bold text-ink shadow-[0_2px_0_rgba(0,0,0,0.1)] active:translate-y-px disabled:opacity-50"
+            data-testid="scan-to-join"
           >
-            {joining ? 'Joining…' : 'Join room'}
+            <span className="text-lg">📷</span> Scan QR code to join
           </button>
         </div>
       </div>
@@ -285,10 +296,13 @@ function ServerSettingsModal({ onClose }: { onClose: () => void }): React.JSX.El
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="e.g. https://my-catan-server.onrender.com"
+            placeholder={DEFAULT_PRODUCTION_SERVER_URL}
             className="h-12 rounded-xl border-2 border-line bg-white px-3 font-mono text-sm text-ink outline-none focus:border-cta"
             data-testid="server-url-input"
           />
+          <span className="text-[11px] text-ink-soft font-bold">
+            Default: <span className="font-mono text-ink">{DEFAULT_PRODUCTION_SERVER_URL}</span>
+          </span>
         </label>
 
         <div className="flex items-center justify-between text-xs font-bold">

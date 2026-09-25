@@ -406,7 +406,14 @@ export function GuestPairingSheet({
           onConnectedRef.current?.();
         },
         (err: unknown) => {
-          if (runRef.current === run) setStep({ kind: 'scan', error: errorText(err) });
+          if (runRef.current === run) {
+            const raw = errorText(err);
+            const msg =
+              raw.includes('broker') || raw.includes('find room') || raw.includes('timed out')
+                ? `${raw} If you are on an offline hotspot with zero internet, ask the host to tap "2-way camera scan" to pair directly.`
+                : raw;
+            setStep({ kind: 'scan', error: msg });
+          }
         },
       );
       return;

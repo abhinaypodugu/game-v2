@@ -73,14 +73,19 @@ export function switchServerUrl(newUrl: string | null): void {
   resetToOnline();
 }
 
+export const DEFAULT_PRODUCTION_SERVER_URL = 'https://catan-fh8w.onrender.com';
+
 /** The socket.io socket (online transport), created lazily without connecting. */
 export function getSocket(): Socket {
   if (socket === null) {
-    // Same-origin by default (Vite proxy in dev, server-served build in prod).
-    // VITE_SERVER_URL or custom serverUrl points a separately hosted client (e.g. GitHub Pages) at the game server.
+    // Same-origin by default in dev (Vite proxy), but default to production Render server in deployed builds.
     const customUrl = getCustomServerUrl();
-    const serverUrl = customUrl || (import.meta.env.VITE_SERVER_URL as string | undefined);
-    socket = serverUrl ? io(serverUrl, { autoConnect: false }) : io({ autoConnect: false });
+    const envUrl = (import.meta.env.VITE_SERVER_URL as string | undefined)?.trim();
+    const defaultUrl = import.meta.env.DEV ? '' : DEFAULT_PRODUCTION_SERVER_URL;
+    const serverUrl = customUrl || envUrl || defaultUrl;
+    socket = serverUrl
+      ? io(serverUrl, { autoConnect: false, transports: ['websocket', 'polling'] })
+      : io({ autoConnect: false });
   }
   return socket;
 }
