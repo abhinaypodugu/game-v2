@@ -2,8 +2,8 @@
 // accept/decline. Bottom sheet on phones, centred dialog on larger screens.
 
 import { useMemo, useState } from 'react';
-import type { GameAction, Resource } from '@catan/shared';
-import { RESOURCES } from '@catan/shared';
+import type { GameAction, GameState, Resource } from '@catan/shared';
+import { bestTradeRate, RESOURCES } from '@catan/shared';
 import { useStore } from '../store';
 import { RESOURCE_META, ResourceCard } from './resourceArt';
 import { Avatar } from './PlayerStrip';
@@ -43,35 +43,94 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
     ore: b.ore ?? 0,
   });
 
-  // Best applicable harbour rate, mirroring the engine (specialty 2, generic 3).
+  // Best applicable harbour rate, mirroring the engine (specialty 2, generic 3, merchant 2, default 4).
   const bankRate = (giveResource: Resource): number => {
-    let rate = 4;
-    for (const [eid, harbor] of Object.entries(snap.board.harbors)) {
-      const [v1, v2] = snap.board.topology.edgeEndpoints[eid] as [number, number];
-      const owns = [v1, v2].some((v) => snap.buildings[v]?.seat === mySeat);
-      if (!owns) continue;
-      if (harbor.type === 'generic') rate = Math.min(rate, 3);
-      else if (harbor.resource === giveResource) rate = 2;
-    }
-    return rate;
+    return bestTradeRate(snap as unknown as GameState, mySeat, giveResource);
   };
 
-  const bankGive = RESOURCES.find((r) => (give[r] ?? 0) > 0);
-  const bankReceive = RESOURCES.find((r) => (receive[r] ?? 0) > 0);
-  const rate = bankGive !== undefined ? bankRate(bankGive) : 4;
-  const bankValid =
-    bankGive !== undefined &&
-    bankReceive !== undefined &&
-    bankGive !== bankReceive &&
-    (snap.you.resources[bankGive] ?? 0) >= rate &&
-    (snap.bank[bankReceive] ?? 0) > 0;
+  const totalGiveCards = RESOURCES.reduce((n, r) => n + (give[r] ?? 0), 0);
+  const totalReceiveCards = RESOURCES.reduce((n, r) => n + (receive[r] ?? 0), 0);
+
+  // Each resource given provides credits: floor(count / bankRate(r))
+  const creditsByResource = useMemo(() => {
+    const res: Record<Resource, number> = { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 };
+    for (const r of RESOURCES) {
+      const count = give[r] ?? 0;
+      const rate = bankRate(r);
+      res[r] = Math.floor(count / rate);
+    }
+    return res;
+  }, [give, snap, mySeat]);
+
+  const totalCredits = RESOURCES.reduce((n, r) => n + creditsByResource[r], 0);
+
+  // Check that all given resources are exact multiples of their bank rate and player has enough
+  const giveValid =
+    totalCredits > 0 &&
+    RESOURCES.every((r) => {
+      const count = give[r] ?? 0;
+      if (count === 0) return true;
+      const rate = bankRate(r);
+      return count % rate === 0 && count <= (snap.you.resources[r] ?? 0);
+    });
+
+  // Check that receive cards match total credits, bank has enough stock, and no give/receive overlap
+  const receiveValid =
+    totalReceiveCards === totalCredits &&
+    RESOURCES.every((r) => {
+      const count = receive[r] ?? 0;
+      if (count === 0) return true;
+      return (give[r] ?? 0) === 0 && count <= (snap.bank[r] ?? 0);
+    });
+
+  const bankValid = giveValid && receiveValid;
 
   const submitBank = (): void => {
-    if (bankGive === undefined || bankReceive === undefined) return;
-    const action: GameAction = { type: 'bankTrade', give: bankGive, receive: bankReceive };
-    sendAction(action);
+    if (!bankValid || !canTradeNow) return;
+
+    // Decompose multi-trades into atomic bankTrade actions
+    const giveBundles: Resource[] = [];
+    for (const r of RESOURCES) {
+      const bundles = creditsByResource[r];
+      for (let i = 0; i < bundles; i++) {
+        giveBundles.push(r);
+      }
+    }
+
+    const receiveCards: Resource[] = [];
+    for (const r of RESOURCES) {
+      const count = receive[r] ?? 0;
+      for (let i = 0; i < count; i++) {
+        receiveCards.push(r);
+      }
+    }
+
+    for (let i = 0; i < giveBundles.length; i++) {
+      const action: GameAction = {
+        type: 'bankTrade',
+        give: giveBundles[i]!,
+        receive: receiveCards[i]!,
+      };
+      sendAction(action);
+    }
+
     setGive({});
     setReceive({});
+  };
+
+  const bankButtonText = (): string => {
+    if (!canTradeNow) return 'Wait for your turn to trade';
+    if (totalCredits === 0 && totalReceiveCards === 0) return 'Select resources to trade';
+    if (totalCredits === 0) return 'Offer more resources to trade';
+    if (totalReceiveCards < totalCredits) {
+      const needed = totalCredits - totalReceiveCards;
+      return `Pick ${needed} more card${needed > 1 ? 's' : ''}`;
+    }
+    if (totalReceiveCards > totalCredits) {
+      const extra = totalReceiveCards - totalCredits;
+      return `Reduce requested by ${extra}`;
+    }
+    return `Trade ${totalGiveCards}:${totalReceiveCards} with bank`;
   };
 
   const playerValid =
@@ -100,37 +159,44 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
     resource: Resource,
     max: number,
     side: 'give' | 'receive',
+    step: number = 1,
+    subLabel?: string,
   ): React.JSX.Element => (
-    <div className="flex items-center gap-0.5" key={`${side}-${resource}`}>
-      <button
-        type="button"
-        aria-label={`Less ${resource}`}
-        className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 border-line bg-white text-xl font-bold leading-none text-ink active:translate-y-px ${
-          (bag[resource] ?? 0) === 0 ? 'opacity-30' : ''
-        }`}
-        onClick={() => {
-          const next = Math.max(0, (bag[resource] ?? 0) - 1);
-          setBag({ ...bag, [resource]: next });
-        }}
-      >
-        −
-      </button>
-      <span className="w-5 text-center font-display text-lg font-bold tabular-nums text-ink" data-testid={`count-${side}-${resource}`}>
-        {bag[resource] ?? 0}
-      </span>
-      <button
-        type="button"
-        aria-label={`More ${resource}`}
-        className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 border-line bg-white text-xl font-bold leading-none text-ink active:translate-y-px ${
-          (bag[resource] ?? 0) >= max ? 'opacity-30' : ''
-        }`}
-        onClick={() => {
-          const next = Math.min(max, (bag[resource] ?? 0) + 1);
-          setBag({ ...bag, [resource]: next });
-        }}
-      >
-        +
-      </button>
+    <div className="flex flex-col items-center" key={`${side}-${resource}`}>
+      <div className="flex items-center gap-0.5">
+        <button
+          type="button"
+          aria-label={`Less ${resource}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 border-line bg-white text-xl font-bold leading-none text-ink active:translate-y-px ${
+            (bag[resource] ?? 0) === 0 ? 'opacity-30' : ''
+          }`}
+          onClick={() => {
+            const current = bag[resource] ?? 0;
+            const next = Math.max(0, current - step);
+            setBag({ ...bag, [resource]: next });
+          }}
+        >
+          −
+        </button>
+        <span className="w-5 text-center font-display text-lg font-bold tabular-nums text-ink" data-testid={`count-${side}-${resource}`}>
+          {bag[resource] ?? 0}
+        </span>
+        <button
+          type="button"
+          aria-label={`More ${resource}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 border-line bg-white text-xl font-bold leading-none text-ink active:translate-y-px ${
+            (bag[resource] ?? 0) >= max ? 'opacity-30' : ''
+          }`}
+          onClick={() => {
+            const current = bag[resource] ?? 0;
+            const next = Math.min(max, current + step);
+            setBag({ ...bag, [resource]: next });
+          }}
+        >
+          +
+        </button>
+      </div>
+      {subLabel ? <span className="mt-0.5 text-[10px] font-semibold text-ink-soft">{subLabel}</span> : null}
     </div>
   );
 
@@ -140,6 +206,9 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
     receiveLabel: string,
     giveMax: (r: Resource) => number,
     receiveMax: (r: Resource) => number,
+    giveStep: (r: Resource) => number = () => 1,
+    giveSubLabel?: (r: Resource) => string | undefined,
+    receiveSubLabel?: (r: Resource) => string | undefined,
   ): React.JSX.Element => (
     <div className="rounded-2xl border-2 border-line bg-white p-2">
       <div className="mb-1 grid grid-cols-[28px_1fr_1fr] items-center gap-1 text-center text-xs font-bold uppercase text-ink-soft">
@@ -151,8 +220,8 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
         {RESOURCES.map((r) => (
           <div key={r} className="grid grid-cols-[28px_1fr_1fr] items-center justify-items-center gap-1">
             <ResourceCard resource={r} size="sm" count={snap.you.resources[r] ?? 0} title={RESOURCE_META[r].label} />
-            {stepper(give, setGive, r, giveMax(r), 'give')}
-            {stepper(receive, setReceive, r, receiveMax(r), 'receive')}
+            {stepper(give, setGive, r, giveMax(r), 'give', giveStep(r), giveSubLabel?.(r))}
+            {stepper(receive, setReceive, r, receiveMax(r), 'receive', 1, receiveSubLabel?.(r))}
           </div>
         ))}
       </div>
@@ -162,7 +231,14 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
   const tabBtn = (id: 'bank' | 'player', label: string): React.JSX.Element => (
     <button
       type="button"
-      onClick={() => setTab(id)}
+      onClick={() => {
+        if (tab !== id) {
+          setTab(id);
+          setGive({});
+          setReceive({});
+          setCounterOf(null);
+        }
+      }}
       className={`h-11 flex-1 rounded-xl text-sm font-bold ${tab === id ? 'bg-ink text-white' : 'bg-parchment text-ink'}`}
       aria-pressed={tab === id}
     >
@@ -203,16 +279,40 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
 
         {tab === 'bank' ? (
           <div className="flex flex-col gap-3" data-testid="bank-tab">
-            <p className="text-sm text-ink-soft">
-              {bankGive !== undefined
-                ? `Your rate for ${RESOURCE_META[bankGive].label.toLowerCase()}: ${rate}:1`
-                : 'Pick one resource to give and one to receive. Harbours improve your rate.'}
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-ink-soft">
+                {totalGiveCards > 0
+                  ? totalCredits > 0
+                    ? totalReceiveCards === totalCredits
+                      ? `Ready: ${totalGiveCards}:${totalReceiveCards} trade (${totalCredits} bundle${totalCredits > 1 ? 's' : ''})`
+                      : `You have ${totalCredits} credit${totalCredits > 1 ? 's' : ''}. Choose ${totalCredits} card${totalCredits > 1 ? 's' : ''}.`
+                    : 'Add more cards to complete a bundle.'
+                  : 'Trade resource bundles at your harbor rates (2:1, 3:1, or 4:1).'}
+              </p>
+              {totalGiveCards > 0 || totalReceiveCards > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGive({});
+                    setReceive({});
+                  }}
+                  className="text-xs font-bold text-ink-soft underline hover:text-ink"
+                >
+                  Reset
+                </button>
+              ) : null}
+            </div>
             {tradeTable(
               'Give',
               'Receive',
-              (r) => (r === bankReceive ? 0 : (snap.you.resources[r] ?? 0)),
-              (r) => (r === bankGive ? 0 : 9),
+              (r) =>
+                (receive[r] ?? 0) > 0
+                  ? 0
+                  : Math.floor((snap.you.resources[r] ?? 0) / bankRate(r)) * bankRate(r),
+              (r) => ((give[r] ?? 0) > 0 ? 0 : Math.max(0, snap.bank[r] ?? 0)),
+              (r) => bankRate(r),
+              (r) => `${bankRate(r)}:1 rate`,
+              (r) => `${snap.bank[r] ?? 0} in bank`,
             )}
             <button
               type="button"
@@ -221,7 +321,7 @@ export function TradeModal({ mySeat }: { mySeat: number }): React.JSX.Element {
               className="h-12 rounded-2xl bg-cta px-4 font-display text-base font-bold text-ink shadow-[0_3px_0_#a86d08] active:translate-y-px disabled:opacity-40"
               data-testid="bank-submit"
             >
-              Trade {rate}:1 with bank
+              {bankButtonText()}
             </button>
           </div>
         ) : (

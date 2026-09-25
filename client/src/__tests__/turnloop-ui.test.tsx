@@ -75,6 +75,141 @@ describe('TradeModal', () => {
     expect(sent).toContainEqual({ type: 'bankTrade', give: 'wood', receive: 'sheep' });
   });
 
+  it('bank tab: 4:2 trade with 2:1 harbor emits two bankTrade actions and displays 4:2 ratio', async () => {
+    const user = userEvent.setup();
+    const baseSnap = snapshotFor();
+    const [brickEid] = Object.entries(baseSnap.board.harbors).find(([_, h]) => h.resource === 'brick')!;
+    const brickVertex = baseSnap.board.topology.edgeEndpoints[brickEid]![0]!;
+
+    const snap = snapshotFor({
+      buildings: { [brickVertex]: { seat: 0, type: 'settlement' } },
+      you: { seat: 0, resources: { wood: 0, brick: 6, sheep: 0, wheat: 0, ore: 0 }, devHand: [], totalVp: 2 },
+    });
+    const sent = mountWithStore(snap);
+    render(<TradeModal mySeat={0} />);
+
+    // Rate is 2:1. Stepping brick twice gives 4 brick.
+    const plusBrick = screen.getByTestId('count-give-brick').parentElement!.querySelectorAll('button')[1]!;
+    await user.click(plusBrick);
+    await user.click(plusBrick);
+    expect(screen.getByTestId('count-give-brick')).toHaveTextContent('4');
+
+    // Stepping wheat twice requests 2 wheat.
+    const plusWheat = screen.getByTestId('count-receive-wheat').parentElement!.querySelectorAll('button')[1]!;
+    await user.click(plusWheat);
+    await user.click(plusWheat);
+    expect(screen.getByTestId('count-receive-wheat')).toHaveTextContent('2');
+
+    const submitBtn = screen.getByTestId('bank-submit');
+    expect(submitBtn).toHaveTextContent('Trade 4:2 with bank');
+    expect(submitBtn).toBeEnabled();
+
+    await user.click(submitBtn);
+    expect(sent).toEqual([
+      { type: 'bankTrade', give: 'brick', receive: 'wheat' },
+      { type: 'bankTrade', give: 'brick', receive: 'wheat' },
+    ]);
+  });
+
+  it('bank tab: 8:2 trade with 4:1 rate emits two bankTrade actions and displays 8:2 ratio', async () => {
+    const user = userEvent.setup();
+    const snap = snapshotFor({
+      you: { seat: 0, resources: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 8 }, devHand: [], totalVp: 2 },
+    });
+    const sent = mountWithStore(snap);
+    render(<TradeModal mySeat={0} />);
+
+    // Rate is 4:1. Stepping ore twice gives 8 ore.
+    const plusOre = screen.getByTestId('count-give-ore').parentElement!.querySelectorAll('button')[1]!;
+    await user.click(plusOre);
+    await user.click(plusOre);
+    expect(screen.getByTestId('count-give-ore')).toHaveTextContent('8');
+
+    // Stepping wood twice requests 2 wood.
+    const plusWood = screen.getByTestId('count-receive-wood').parentElement!.querySelectorAll('button')[1]!;
+    await user.click(plusWood);
+    await user.click(plusWood);
+    expect(screen.getByTestId('count-receive-wood')).toHaveTextContent('2');
+
+    const submitBtn = screen.getByTestId('bank-submit');
+    expect(submitBtn).toHaveTextContent('Trade 8:2 with bank');
+    await user.click(submitBtn);
+
+    expect(sent).toEqual([
+      { type: 'bankTrade', give: 'ore', receive: 'wood' },
+      { type: 'bankTrade', give: 'ore', receive: 'wood' },
+    ]);
+  });
+
+  it('bank tab: 6:2 trade with 3:1 generic harbor emits two bankTrade actions and displays 6:2 ratio', async () => {
+    const user = userEvent.setup();
+    const baseSnap = snapshotFor();
+    const [genEid] = Object.entries(baseSnap.board.harbors).find(([_, h]) => h.type === 'generic')!;
+    const genVertex = baseSnap.board.topology.edgeEndpoints[genEid]![0]!;
+
+    const snap = snapshotFor({
+      buildings: { [genVertex]: { seat: 0, type: 'settlement' } },
+      you: { seat: 0, resources: { wood: 0, brick: 0, sheep: 0, wheat: 6, ore: 0 }, devHand: [], totalVp: 2 },
+    });
+    const sent = mountWithStore(snap);
+    render(<TradeModal mySeat={0} />);
+
+    // Rate is 3:1. Stepping wheat twice gives 6 wheat.
+    const plusWheat = screen.getByTestId('count-give-wheat').parentElement!.querySelectorAll('button')[1]!;
+    await user.click(plusWheat);
+    await user.click(plusWheat);
+    expect(screen.getByTestId('count-give-wheat')).toHaveTextContent('6');
+
+    // Stepping sheep twice requests 2 sheep.
+    const plusSheep = screen.getByTestId('count-receive-sheep').parentElement!.querySelectorAll('button')[1]!;
+    await user.click(plusSheep);
+    await user.click(plusSheep);
+    expect(screen.getByTestId('count-receive-sheep')).toHaveTextContent('2');
+
+    const submitBtn = screen.getByTestId('bank-submit');
+    expect(submitBtn).toHaveTextContent('Trade 6:2 with bank');
+    await user.click(submitBtn);
+
+    expect(sent).toEqual([
+      { type: 'bankTrade', give: 'wheat', receive: 'sheep' },
+      { type: 'bankTrade', give: 'wheat', receive: 'sheep' },
+    ]);
+  });
+
+  it('bank tab: 4:2 split trade emits bankTrade actions with multiple receive types', async () => {
+    const user = userEvent.setup();
+    const baseSnap = snapshotFor();
+    const [brickEid] = Object.entries(baseSnap.board.harbors).find(([_, h]) => h.resource === 'brick')!;
+    const brickVertex = baseSnap.board.topology.edgeEndpoints[brickEid]![0]!;
+
+    const snap = snapshotFor({
+      buildings: { [brickVertex]: { seat: 0, type: 'settlement' } },
+      you: { seat: 0, resources: { wood: 0, brick: 4, sheep: 0, wheat: 0, ore: 0 }, devHand: [], totalVp: 2 },
+    });
+    const sent = mountWithStore(snap);
+    render(<TradeModal mySeat={0} />);
+
+    // Stepping brick twice gives 4 brick (2:1).
+    const plusBrick = screen.getByTestId('count-give-brick').parentElement!.querySelectorAll('button')[1]!;
+    await user.click(plusBrick);
+    await user.click(plusBrick);
+
+    // Receive 1 wheat and 1 ore.
+    const plusWheat = screen.getByTestId('count-receive-wheat').parentElement!.querySelectorAll('button')[1]!;
+    const plusOre = screen.getByTestId('count-receive-ore').parentElement!.querySelectorAll('button')[1]!;
+    await user.click(plusWheat);
+    await user.click(plusOre);
+
+    const submitBtn = screen.getByTestId('bank-submit');
+    expect(submitBtn).toHaveTextContent('Trade 4:2 with bank');
+    await user.click(submitBtn);
+
+    expect(sent).toEqual([
+      { type: 'bankTrade', give: 'brick', receive: 'wheat' },
+      { type: 'bankTrade', give: 'brick', receive: 'ore' },
+    ]);
+  });
+
   it('player tab: offer emits tradeOffer with full bags', async () => {
     const user = userEvent.setup();
     const sent = mountWithStore(snapshotFor());
