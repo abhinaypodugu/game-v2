@@ -7,6 +7,7 @@ import { createDemoSnapshot } from './demoState';
 import { HomePage } from './pages/HomePage';
 import { RoomPage } from './pages/RoomPage';
 import { GamePage } from './pages/GamePage';
+import { ToastStack } from './components/Overlays';
 
 export function App(): React.JSX.Element {
   const connect = useStore((s) => s.connect);
@@ -36,6 +37,7 @@ export function App(): React.JSX.Element {
   }, [connect, isDemo]);
   return (
     <div className="min-h-[100dvh] bg-ocean text-ink">
+      <ToastStack />
       {demoBanner ? (
         <div className="fixed top-[calc(var(--safe-top)+7.5rem)] left-1/2 z-[55] flex -translate-x-1/2 items-center gap-2 rounded-full border-2 border-line bg-cream py-1 pr-1 pl-3 text-xs font-bold text-ink shadow-lg">
           <span>Design demo</span>

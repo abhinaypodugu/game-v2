@@ -9,6 +9,7 @@ const inputClass =
   'h-12 rounded-2xl border-2 border-line bg-white px-4 text-lg font-bold text-ink outline-none placeholder:font-normal placeholder:text-ink-soft focus:border-cta';
 
 export function HomePage(): React.JSX.Element {
+  const connected = useStore((s) => s.connected);
   const createRoom = useStore((s) => s.createRoom);
   const joinRoom = useStore((s) => s.joinRoom);
   const startQuickPlay = useStore((s) => s.startQuickPlay);
@@ -17,6 +18,7 @@ export function HomePage(): React.JSX.Element {
   const [canResume] = useState(() => useStore.getState().canResumeOfflineHost());
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [quickBusy, setQuickBusy] = useState(false);
   const [offlineBusy, setOfflineBusy] = useState<'host' | 'resume' | null>(null);
@@ -53,6 +55,24 @@ export function HomePage(): React.JSX.Element {
       </div>
 
       <div className="flex w-full max-w-md flex-col gap-3 rounded-3xl border-2 border-line bg-cream p-4 shadow-[0_4px_0_rgba(0,0,0,0.18)] sm:p-6">
+        <div className="flex items-center justify-between text-xs font-bold text-ink-soft">
+          <span>Mode:</span>
+          {connected ? (
+            <span className="flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              Online server connected
+            </span>
+          ) : (
+            <span
+              className="flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-amber-800"
+              title="Running in browser without a central server"
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              Standalone / Offline
+            </span>
+          )}
+        </div>
+
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-bold text-ink-soft">Your name</span>
           <input
@@ -68,7 +88,7 @@ export function HomePage(): React.JSX.Element {
 
         <button
           type="button"
-          disabled={quickBusy || offlineBusy !== null}
+          disabled={quickBusy || offlineBusy !== null || creating}
           onClick={async () => {
             setQuickBusy(true);
             try {
@@ -84,12 +104,19 @@ export function HomePage(): React.JSX.Element {
         </button>
         <button
           type="button"
-          disabled={name.trim().length === 0}
-          onClick={() => createRoom(name.trim())}
+          disabled={trimmedName.length === 0 || creating || quickBusy || offlineBusy !== null}
+          onClick={async () => {
+            setCreating(true);
+            try {
+              await createRoom(trimmedName);
+            } finally {
+              setCreating(false);
+            }
+          }}
           className="h-14 rounded-2xl bg-cta px-4 font-display text-lg font-bold text-ink shadow-[0_4px_0_#a86d08] active:translate-y-px disabled:opacity-50"
           data-testid="create-room"
         >
-          Create room
+          {creating ? 'Creating room…' : 'Create room'}
         </button>
 
         <div className="flex items-center gap-3 text-sm font-bold text-ink-soft">
@@ -110,10 +137,11 @@ export function HomePage(): React.JSX.Element {
           />
           <button
             type="button"
-            disabled={code.length !== 4 || name.trim().length === 0 || joining}
+            disabled={code.length !== 4 || trimmedName.length === 0 || joining}
             onClick={() => {
               setJoining(true);
-              joinRoom(code, name.trim());
+              joinRoom(code, trimmedName);
+              setTimeout(() => setJoining(false), 2000);
             }}
             className="h-12 flex-1 rounded-2xl bg-ocean-deep px-4 font-display text-lg font-bold text-white shadow-[0_4px_0_#1f6f99] active:translate-y-px disabled:opacity-50"
             data-testid="join-room"

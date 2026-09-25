@@ -59,7 +59,7 @@ export interface Store {
   offline: OfflineState;
 
   connect(): void;
-  createRoom(name: string): void;
+  createRoom(name: string): Promise<void> | void;
   joinRoom(code: string, name?: string, token?: string): void;
   leaveRoom(): void;
   setReady(ready: boolean): void;
@@ -208,11 +208,28 @@ export const useStore = create<Store>((set, get) => ({
     connectSocket(socketHandlers);
   },
 
-  createRoom(name) {
-    emitCreateRoom(name);
+  async createRoom(name) {
+    const finalName = name.trim();
+    if (!finalName) return;
+    if (!get().connected) {
+      try {
+        await get().startOfflineHost(finalName);
+      } catch (err) {
+        get().pushToast(err instanceof Error ? err.message : 'Could not create room.', 'error');
+      }
+      return;
+    }
+    emitCreateRoom(finalName);
   },
 
   joinRoom(code, name, token) {
+    if (!get().connected) {
+      get().pushToast(
+        'Online server is not reachable. To join an offline game, tap "Join a game" below to scan the host\'s QR code.',
+        'error',
+      );
+      return;
+    }
     emitJoinRoom({ code, name, token });
   },
 
