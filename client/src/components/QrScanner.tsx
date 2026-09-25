@@ -10,6 +10,44 @@ import jsQR from 'jsqr';
 /** Only codes produced by this app are accepted by the viewfinder. */
 export const PAIRING_CODE_PREFIX = 'LC1.';
 
+/** Extracts a 4-letter room code from raw text, room URLs, or broker prefixes. */
+export function extractRoomCode(raw: string): string | null {
+  const trimmed = raw.trim();
+  // Pure 4 letters: ABCD
+  if (/^[A-Za-z]{4}$/.test(trimmed)) {
+    return trimmed.toUpperCase();
+  }
+  // Broker peer ID: catan-v2-ABCD
+  if (trimmed.startsWith('catan-v2-') && trimmed.length === 13) {
+    return trimmed.slice(9).toUpperCase();
+  }
+  // URL containing hash: e.g. /#/ABCD or #/ABCD or #ABCD
+  if (trimmed.includes('#')) {
+    const hash = trimmed.slice(trimmed.indexOf('#') + 1);
+    const m = hash.match(/(?:^|\/)([A-Za-z]{4})(?:[/?#]|$)/);
+    if (m && m[1]) return m[1].toUpperCase();
+  }
+  // Query parameter: ?room=ABCD
+  const queryMatch = trimmed.match(/[?&]room=([A-Za-z]{4})/i);
+  if (queryMatch && queryMatch[1]) return queryMatch[1].toUpperCase();
+  // Trailing path segment: /ABCD or /ABCD/
+  const pathMatch = trimmed.match(/\/([A-Za-z]{4})\/?$/);
+  if (pathMatch && pathMatch[1]) return pathMatch[1].toUpperCase();
+  return null;
+}
+
+/** Check if the scanned string is a valid Catan QR code (offline invite or room code/link). */
+export function isAcceptableQrCode(raw: string): boolean {
+  const text = raw.trim();
+  return text.startsWith(PAIRING_CODE_PREFIX) || extractRoomCode(text) !== null;
+}
+
+/** Generate a clean room share URL preserving current base path (e.g. GitHub Pages or subpath). */
+export function getRoomShareUrl(roomCode: string): string {
+  const base = window.location.href.split('#')[0]?.split('?')[0]?.replace(/\/+$/, '') ?? window.location.origin;
+  return `${base}/#/${roomCode}`;
+}
+
 export type CameraStatus = 'idle' | 'starting' | 'live' | 'denied' | 'unavailable' | 'insecure' | 'error';
 
 export interface CameraState {
@@ -153,7 +191,7 @@ export function QrViewfinder({
       const result = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' });
       if (result === null) return;
       const text = result.data.trim();
-      if (!text.startsWith(PAIRING_CODE_PREFIX)) {
+      if (!isAcceptableQrCode(text)) {
         setForeign(true);
         return;
       }
@@ -198,7 +236,7 @@ export function QrViewfinder({
         ) : null}
       </div>
       {foreign && !paused ? (
-        <p className="text-center text-sm font-bold text-[#8a1424]">That QR code isn't a Catan pairing code.</p>
+        <p className="text-center text-sm font-bold text-[#8a1424]">That QR code isn't a Catan room or pairing code.</p>
       ) : null}
       {message !== null ? (
         <div className="flex w-full flex-col gap-2 rounded-2xl border-2 border-[#e0b44c] bg-[#fff6dc] p-3 text-sm font-bold text-ink" role="alert" data-testid="camera-error">

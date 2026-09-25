@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { QrCode } from './QrCode';
+import { getRoomShareUrl } from './QrScanner';
 
 export function RoomQrModal({
   roomCode,
@@ -16,7 +17,7 @@ export function RoomQrModal({
   isOffline: boolean;
 }): React.JSX.Element {
   const [copied, setCopied] = useState(false);
-  const shareUrl = `${window.location.origin}${window.location.pathname}#/${roomCode}`;
+  const shareUrl = getRoomShareUrl(roomCode);
 
   const copyLink = async (): Promise<void> => {
     try {

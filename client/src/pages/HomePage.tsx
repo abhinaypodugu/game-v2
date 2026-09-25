@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useStore } from '../store';
 import { getCustomServerUrl, switchServerUrl } from '../socket';
 import { GuestPairingSheet } from '../components/OfflinePairing';
+import { extractRoomCode } from '../components/QrScanner';
 
 const inputClass =
   'h-12 rounded-2xl border-2 border-line bg-white px-4 text-lg font-bold text-ink outline-none placeholder:font-normal placeholder:text-ink-soft focus:border-cta';
@@ -19,9 +20,7 @@ export function HomePage(): React.JSX.Element {
   const [canResume] = useState(() => useStore.getState().canResumeOfflineHost());
   const [name, setName] = useState('');
   const [code, setCode] = useState(() => {
-    const hash = window.location.hash;
-    const match = hash.match(/[#/=]([A-Za-z]{4})(?:[/?#]|$)/);
-    return match && match[1] ? match[1].toUpperCase() : '';
+    return extractRoomCode(window.location.hash) ?? '';
   });
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);

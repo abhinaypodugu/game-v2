@@ -11,6 +11,7 @@ import type { PersonalSnapshot, RoomSettings } from '../types';
 import { Avatar, playerColor } from '../components/PlayerStrip';
 import { HostPairingSheet } from '../components/OfflinePairing';
 import { RoomQrModal } from '../components/RoomQrModal';
+import { getRoomShareUrl } from '../components/QrScanner';
 import { OfflineHostBanner, ReconnectBanner } from '../components/Overlays';
 
 const TIMER_OPTIONS = [0, 60, 120, 180, 300];
@@ -134,7 +135,7 @@ export function RoomPage(): React.JSX.Element {
             ? 'Everyone is ready!'
             : 'Waiting for the host to start.';
 
-  const inviteLink = `${window.location.origin}/#/${room.roomCode}`;
+  const inviteLink = getRoomShareUrl(room.roomCode);
   const settings: RoomSettings = room.settings;
   const boardMode = boardConfigForPlayers(settings.maxPlayers).key;
   const isOffline = offline.role !== null;

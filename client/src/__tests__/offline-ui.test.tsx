@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent, { type UserEvent } from '@testing-library/user-event';
 import { GuestPairingSheet, HostPairingSheet, extractRoomCode } from '../components/OfflinePairing';
+import { isAcceptableQrCode, getRoomShareUrl } from '../components/QrScanner';
 import { RoomQrModal } from '../components/RoomQrModal';
 import { ReconnectBanner } from '../components/Overlays';
 import type { Invite } from '../net/offline';
@@ -154,7 +155,7 @@ describe('GuestPairingSheet', () => {
   });
 });
 
-describe('extractRoomCode', () => {
+describe('extractRoomCode and isAcceptableQrCode', () => {
   it('extracts room code from plain 4 letters, room URLs, or broker prefixes', () => {
     expect(extractRoomCode('ABCD')).toBe('ABCD');
     expect(extractRoomCode('wxyz')).toBe('WXYZ');
@@ -164,6 +165,20 @@ describe('extractRoomCode', () => {
     expect(extractRoomCode('catan-v2-EFGH')).toBe('EFGH');
     expect(extractRoomCode('LC1.invite-code')).toBeNull();
     expect(extractRoomCode('invalid-string')).toBeNull();
+  });
+
+  it('accepts valid Catan QR codes (pairing codes or room links/codes) and rejects foreign ones', () => {
+    expect(isAcceptableQrCode('LC1.sample-pairing-code')).toBe(true);
+    expect(isAcceptableQrCode('https://abhinaypodugu.github.io/game-v2/#/ABCD')).toBe(true);
+    expect(isAcceptableQrCode('ABCD')).toBe(true);
+    expect(isAcceptableQrCode('catan-v2-ABCD')).toBe(true);
+    expect(isAcceptableQrCode('WIFI:S:MyNetwork;T:WPA;P:secret;;')).toBe(false);
+    expect(isAcceptableQrCode('https://google.com')).toBe(false);
+    expect(isAcceptableQrCode('random-text')).toBe(false);
+  });
+
+  it('generates proper room share URLs preserving base path', () => {
+    expect(getRoomShareUrl('ABCD')).toContain('/#/ABCD');
   });
 });
 

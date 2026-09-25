@@ -8,7 +8,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { Invite } from '../net/offline';
 import { useStore } from '../store';
 import { QrCode } from './QrCode';
-import { PAIRING_CODE_PREFIX, QrViewfinder, cameraSettled, useCamera } from './QrScanner';
+import { PAIRING_CODE_PREFIX, QrViewfinder, cameraSettled, useCamera, extractRoomCode } from './QrScanner';
+
+export { extractRoomCode } from './QrScanner';
 
 function errorText(err: unknown): string {
   return err instanceof Error && err.message.length > 0 ? err.message : 'Something went wrong — please try again.';
@@ -348,21 +350,6 @@ export function HostPairingSheet({ onClose }: { onClose: () => void }): React.JS
       ) : null}
     </PairingSheet>
   );
-}
-
-export function extractRoomCode(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (/^[A-Za-z]{4}$/.test(trimmed)) {
-    return trimmed.toUpperCase();
-  }
-  const urlMatch = trimmed.match(/[#/=]([A-Za-z]{4})(?:[/?#]|$)/);
-  if (urlMatch && urlMatch[1]) {
-    return urlMatch[1].toUpperCase();
-  }
-  if (trimmed.startsWith('catan-v2-') && trimmed.length === 13) {
-    return trimmed.slice(9).toUpperCase();
-  }
-  return null;
 }
 
 type GuestStep =
