@@ -959,6 +959,7 @@ function tradeOffer(prev: GameState, action: Extract<GameAction, { type: 'tradeO
     status: 'open',
     counterOf: null,
     declinedBy: [],
+    turn: prev.turn,
   });
   const events: GameEvent[] = [
     { type: 'tradeOffered', offerId: id, proposer: seat, give: fillBag(action.give), receive: fillBag(action.receive) },
@@ -989,6 +990,7 @@ function tradeCounter(prev: GameState, action: Extract<GameAction, { type: 'trad
     status: 'open',
     counterOf: action.offerId,
     declinedBy: [],
+    turn: prev.turn,
   });
   const events: GameEvent[] = [
     { type: 'tradeCountered', offerId: id, counterOf: action.offerId, proposer: seat, give: fillBag(action.give), receive: fillBag(action.receive) },

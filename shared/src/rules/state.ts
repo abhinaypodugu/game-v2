@@ -55,6 +55,8 @@ export interface TradeOffer {
   counterOf: string | null;
   /** Seats that declined (offer stays open). */
   declinedBy: number[];
+  /** Turn number when the offer was created. */
+  turn?: number;
 }
 
 export interface PendingDiscard {

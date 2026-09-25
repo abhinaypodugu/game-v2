@@ -115,3 +115,284 @@ describe('end-to-end bot gameplay simulation', () => {
     expect(totalVp(state, state.winner!)).toBeGreaterThanOrEqual(5);
   });
 });
+
+describe('bot tactical decision making', () => {
+  const seed = 'tactical-seed-2026';
+  const rng = createRng(seed);
+  const players = [
+    { seat: 0, name: 'Bot Alice', color: 'red' as const },
+    { seat: 1, name: 'Bot Bob', color: 'blue' as const },
+    { seat: 2, name: 'Bot Charlie', color: 'orange' as const },
+    { seat: 3, name: 'Bot Diana', color: 'white' as const },
+  ];
+
+  it('proactively proposes trade when 1 card away from city and has surplus', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    // Advance state to turnMain
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 0,
+      turn: 3,
+      buildings: {
+        0: { seat: 0, type: 'settlement' },
+      },
+      players: state.players.map((p, idx) =>
+        idx === 0
+          ? {
+              ...p,
+              resources: { wood: 1, brick: 0, sheep: 0, wheat: 2, ore: 2 },
+              citiesLeft: 4,
+            }
+          : p,
+      ),
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action).toEqual({
+      type: 'tradeOffer',
+      give: { wood: 1 },
+      receive: { ore: 1 },
+    });
+  });
+
+  it('cancels own open trade offer if called again without accept', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 0,
+      turn: 3,
+      trades: [
+        {
+          id: 't1',
+          proposer: 0,
+          give: { wood: 1 },
+          receive: { ore: 1 },
+          status: 'open',
+          counterOf: null,
+          declinedBy: [],
+        },
+      ],
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action).toEqual({
+      type: 'tradeCancel',
+      offerId: 't1',
+    });
+  });
+
+  it('kingmaker protection: declines trade from leader near winning VP', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 1,
+      turn: 10,
+      buildings: {
+        // Player 1 has 9 VP (4 cities + 1 settlement)
+        0: { seat: 1, type: 'city' },
+        1: { seat: 1, type: 'city' },
+        2: { seat: 1, type: 'city' },
+        3: { seat: 1, type: 'city' },
+        4: { seat: 1, type: 'settlement' },
+        10: { seat: 0, type: 'settlement' },
+      },
+      players: state.players.map((p, idx) =>
+        idx === 0
+          ? { ...p, resources: { wood: 3, brick: 0, sheep: 0, wheat: 0, ore: 0 } }
+          : idx === 1
+            ? { ...p, resources: { wood: 0, brick: 0, sheep: 2, wheat: 0, ore: 0 } }
+            : p,
+      ),
+      trades: [
+        {
+          id: 't_lead',
+          proposer: 1,
+          give: { sheep: 1 },
+          receive: { wood: 1 },
+          status: 'open',
+          counterOf: null,
+          declinedBy: [],
+        },
+      ],
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action).toEqual({
+      type: 'tradeRespond',
+      offerId: 't_lead',
+      response: 'decline',
+      seat: 0,
+    });
+  });
+
+  it('accepts trade supplying missing goal resource in exchange for surplus', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 1,
+      turn: 5,
+      buildings: {
+        0: { seat: 1, type: 'settlement' },
+        10: { seat: 0, type: 'settlement' },
+      },
+      players: state.players.map((p, idx) =>
+        idx === 0
+          ? {
+              ...p,
+              // Bot 0 needs 1 ore for city, has surplus wood
+              resources: { wood: 2, brick: 0, sheep: 0, wheat: 2, ore: 2 },
+              citiesLeft: 4,
+            }
+          : idx === 1
+            ? {
+                ...p,
+                resources: { wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 2 },
+              }
+            : p,
+      ),
+      trades: [
+        {
+          id: 't_good',
+          proposer: 1,
+          give: { ore: 1 },
+          receive: { wood: 1 },
+          status: 'open',
+          counterOf: null,
+          declinedBy: [],
+        },
+      ],
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action).toEqual({
+      type: 'tradeRespond',
+      offerId: 't_good',
+      response: 'accept',
+      seat: 0,
+    });
+  });
+
+  it('executes bank trade with exact bundle rate to complete goal', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 0,
+      turn: 4,
+      buildings: {
+        0: { seat: 0, type: 'settlement' },
+      },
+      trades: [
+        // Already proposed a trade this turn
+        {
+          id: 't_done',
+          proposer: 0,
+          give: { wood: 1 },
+          receive: { ore: 1 },
+          status: 'cancelled',
+          counterOf: null,
+          declinedBy: [1, 2, 3],
+          turn: 4,
+        },
+      ],
+      players: state.players.map((p, idx) =>
+        idx === 0
+          ? {
+              ...p,
+              // Needs 1 ore for city, has 4 wood (4:1 rate)
+              resources: { wood: 4, brick: 0, sheep: 0, wheat: 2, ore: 2 },
+              citiesLeft: 4,
+            }
+          : p,
+      ),
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action).toEqual({
+      type: 'bankTrade',
+      give: 'wood',
+      receive: 'ore',
+    });
+  });
+
+  it('plays Year of Plenty dev card to fulfill exact missing goal resources', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 0,
+      turn: 3,
+      buildings: {
+        0: { seat: 0, type: 'settlement' },
+      },
+      players: state.players.map((p, idx) =>
+        idx === 0
+          ? {
+              ...p,
+              // Goal is settlement or city; if settlement, needs sheep + wheat
+              resources: { wood: 1, brick: 1, sheep: 0, wheat: 0, ore: 0 },
+              settlementsLeft: 4,
+              citiesLeft: 0, // ensure goal is settlement
+              devHand: [
+                {
+                  id: 'yop_card',
+                  type: 'yearOfPlenty' as const,
+                  boughtOnTurn: 1,
+                  played: false,
+                },
+              ],
+            }
+          : p,
+      ),
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action).toEqual({
+      type: 'playDevCard',
+      cardId: 'yop_card',
+      payload: { resources: ['sheep', 'wheat'] },
+    });
+  });
+
+  it('builds road along BFS path towards candidate settlement', () => {
+    let state = createGame({ playerCount: 4, players, seed });
+    // In standard board: vertex 10 has adjacent edges
+    const v = 10;
+    const edges = state.board.topology.vertexEdges[v] ?? [];
+    const firstEdge = edges[0]!;
+
+    state = {
+      ...state,
+      phase: 'turnMain',
+      activeSeat: 0,
+      turn: 3,
+      buildings: {
+        [v]: { seat: 0, type: 'settlement' },
+      },
+      roads: {},
+      players: state.players.map((p, idx) =>
+        idx === 0
+          ? {
+              ...p,
+              // Enough for road, but not city or settlement
+              resources: { wood: 1, brick: 1, sheep: 0, wheat: 0, ore: 0 },
+              roadsLeft: 14,
+              settlementsLeft: 4,
+              citiesLeft: 0,
+            }
+          : p,
+      ),
+    };
+
+    const action = computeBotAction(state, 0, rng);
+    expect(action?.type).toBe('buildRoad');
+    if (action?.type === 'buildRoad') {
+      // Must be a valid legal road connected to the settlement
+      expect(edges).toContain(action.edge);
+    }
+  });
+});

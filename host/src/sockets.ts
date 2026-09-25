@@ -250,21 +250,49 @@ function triggerBotTurnIfNeeded(ctx: ServerContext, room: Room): void {
   if (state.phase === 'discard') {
     const pendingBot = state.pendingDiscards.find((d) => !d.received && botSeats.has(d.seat));
     if (pendingBot !== undefined) targetBotSeat = pendingBot.seat;
-  } else if (botSeats.has(state.activeSeat)) {
-    targetBotSeat = state.activeSeat;
   } else if (state.phase === 'specialBuild' && state.specialBuild !== null && state.specialBuild.seat !== null && botSeats.has(state.specialBuild.seat)) {
     targetBotSeat = state.specialBuild.seat;
   } else if (state.phase === 'turnMain') {
-    const openTrade = state.trades.find((t) => t.status === 'open' && t.proposer !== state.activeSeat);
+    // Check if there is an open trade that a bot needs to respond to
+    const openTrade = state.trades.find((t) => t.status === 'open');
     if (openTrade !== undefined) {
-      const botToRespond = room.seats.find((s) => s.isBot && s.seatIndex !== openTrade.proposer && !openTrade.declinedBy.includes(s.seatIndex));
-      if (botToRespond !== undefined) targetBotSeat = botToRespond.seatIndex;
+      const botToRespond = room.seats.find((s) => {
+        if (!s.isBot) return false;
+        if (openTrade.counterOf !== null) {
+          // Counter-offer: responded to by the active player
+          return s.seatIndex === state.activeSeat && !openTrade.declinedBy.includes(s.seatIndex);
+        }
+        // Root offer: responded to by non-proposer
+        return s.seatIndex !== openTrade.proposer && !openTrade.declinedBy.includes(s.seatIndex);
+      });
+      if (botToRespond !== undefined) {
+        targetBotSeat = botToRespond.seatIndex;
+      }
     }
+
+    if (targetBotSeat === null && botSeats.has(state.activeSeat)) {
+      targetBotSeat = state.activeSeat;
+    }
+  } else if (botSeats.has(state.activeSeat)) {
+    targetBotSeat = state.activeSeat;
   }
 
   if (targetBotSeat === null) return;
 
   const botSeat = targetBotSeat;
+  let delay = 500;
+  if (state.phase === 'turnMain' && botSeat === state.activeSeat) {
+    const myTrade = state.trades.find((t) => t.status === 'open' && t.proposer === botSeat);
+    if (myTrade !== undefined) {
+      const pendingHumans = room.seats.some(
+        (s) => !s.isBot && s.seatIndex !== botSeat && !myTrade.declinedBy.includes(s.seatIndex),
+      );
+      if (pendingHumans) {
+        delay = 5000;
+      }
+    }
+  }
+
   const timer = setTimeout(() => {
     botTimers.delete(room.code);
     const currentRoom = ctx.rooms.getRoom(room.code);
@@ -275,7 +303,7 @@ function triggerBotTurnIfNeeded(ctx: ServerContext, room: Room): void {
     if (act !== null) {
       handleGameAction(ctx, null, currentRoom, botSeat, act);
     }
-  }, 500);
+  }, delay);
 
   botTimers.set(room.code, timer);
 }
