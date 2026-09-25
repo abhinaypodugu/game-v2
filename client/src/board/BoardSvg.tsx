@@ -5,7 +5,7 @@
 // cached board layout; only legal targets receive pointer events.
 
 import { memo } from 'react';
-import { PIPS } from '@catan/shared';
+import { PIPS, type BoardHex, type Harbor } from '@catan/shared';
 import type { PersonalSnapshot } from '../types';
 import { BOARD_COLORS as C, PIECE_COLORS, PIECE_OUTLINE, RESOURCE_TERRAIN, TERRAIN_FILL } from '../theme';
 import { BoardDefs, hexPoints } from './art';
@@ -24,6 +24,10 @@ export interface BoardSvgProps {
   onHexClick?: (hex: string) => void;
   /** Hexes that just produced (token pop + tile glow). */
   pulseHexes?: Set<string>;
+  /** Hexes that were swapped (Surveyor swap animation & highlight). */
+  swappedHexes?: Set<string>;
+  /** Coastal harbor edges that were swapped (Port Renovation swap animation & highlight). */
+  swappedHarbors?: Set<string>;
   /** Ghost piece at a vertex; `color` is a PlayerColor name (or any CSS colour). */
   previewBuilding?: { vertex: number; color: string };
   /** Static preview (lobby): no hit targets, no wave marks. */
@@ -71,33 +75,65 @@ const SeaLayer = memo(function SeaLayer({ layout, compact }: { layout: BoardLayo
   );
 });
 
-const HarborLayer = memo(function HarborLayer({ layout }: { layout: BoardLayout }): React.JSX.Element {
+interface HarborLayerProps {
+  layout: BoardLayout;
+  harbors: Record<string, Harbor>;
+  swappedHarbors?: Set<string>;
+  swapKey?: string;
+}
+
+const HarborLayer = memo(function HarborLayer({
+  layout,
+  harbors,
+  swappedHarbors,
+  swapKey,
+}: HarborLayerProps): React.JSX.Element {
   return (
     <g pointerEvents="none">
       {layout.harbors.map((h) => {
+        const harbor = harbors[h.edge] ?? h;
+        const resource = harbor.type === 'specialty' ? (harbor.resource ?? null) : null;
+        const ratio = harbor.type === 'specialty' ? 2 : 3;
         const { ship } = h;
         const piers = [h.a, h.b].map((p) => `M${p.x},${p.y}L${ship.x},${ship.y}`).join('');
-        const badgeFill = h.resource === null ? C.tokenCream : TERRAIN_FILL[RESOURCE_TERRAIN[h.resource] ?? ''];
+        const badgeFill = resource === null ? C.tokenCream : TERRAIN_FILL[RESOURCE_TERRAIN[resource] ?? ''];
+        const isSwapped = swappedHarbors?.has(h.edge) ?? false;
+
         return (
-          <g key={h.edge} data-harbor={h.edge} data-harbor-type={h.resource ?? 'generic'}>
+          <g key={h.edge} data-harbor={h.edge} data-harbor-type={resource ?? 'generic'}>
             <path d={piers} stroke={C.woodDark} strokeWidth={10} fill="none" />
             <path d={piers} stroke={C.woodLight} strokeWidth={7} strokeDasharray="5 2.4" fill="none" />
-            <g transform={`translate(${ship.x} ${ship.y}) scale(${HARBOR_SCALE})`}>
+            {isSwapped ? (
+              <circle
+                cx={ship.x}
+                cy={ship.y}
+                r={28 * HARBOR_SCALE}
+                fill="rgba(245,158,11,0.25)"
+                stroke="#f59e0b"
+                strokeWidth={3}
+                className="bs-swap-glow"
+              />
+            ) : null}
+            <g
+              key={isSwapped ? `harbor-swap-${swapKey}-${resource ?? 'generic'}` : 'still'}
+              transform={`translate(${ship.x} ${ship.y}) scale(${HARBOR_SCALE})`}
+              className={isSwapped ? 'bs-swap' : undefined}
+            >
               <use href="#bs-ship-back" />
-              <circle r={18} fill={C.tokenCream} stroke={C.woodDark} strokeWidth={2.5} />
-              {h.resource === null ? (
+              <circle r={18} fill={C.tokenCream} stroke={isSwapped ? '#d97706' : C.woodDark} strokeWidth={2.5} />
+              {resource === null ? (
                 <text y={6} textAnchor="middle" fontSize={21} fontWeight={700} fontFamily={FONT} fill={C.tokenText}>
                   ?
                 </text>
               ) : (
                 <>
                   <circle cy={-1} r={13.5} fill={badgeFill} />
-                  <use href={`#bs-icon-${h.resource}`} y={-1.5} />
+                  <use href={`#bs-icon-${resource}`} y={-1.5} />
                 </>
               )}
               <use href="#bs-ship-hull" />
               <text y={21.5} textAnchor="middle" fontSize={11} fontWeight={700} fontFamily={FONT} fill="#fff">
-                {h.ratio}:1
+                {ratio}:1
               </text>
             </g>
           </g>
@@ -107,35 +143,55 @@ const HarborLayer = memo(function HarborLayer({ layout }: { layout: BoardLayout 
   );
 });
 
-const TileLayer = memo(function TileLayer({ layout }: { layout: BoardLayout }): React.JSX.Element {
+interface TileLayerProps {
+  layout: BoardLayout;
+  hexes: Record<string, BoardHex>;
+}
+
+const TileLayer = memo(function TileLayer({ layout, hexes }: TileLayerProps): React.JSX.Element {
   return (
     <g pointerEvents="none">
-      {layout.hexes.map((h) => (
-        <g
-          key={h.id}
-          data-hex-id={h.id}
-          data-testid={`hex-${h.id}`}
-          data-terrain={h.terrain}
-          data-token={h.token ?? undefined}
-          transform={`translate(${h.center.x} ${h.center.y})${h.mirror ? ' scale(-1 1)' : ''}`}
-        >
-          <use href={`#bs-tile-${h.terrain}`} />
-        </g>
-      ))}
+      {layout.hexes.map((h) => {
+        const token = hexes[h.id]?.token ?? h.token;
+        return (
+          <g
+            key={h.id}
+            data-hex-id={h.id}
+            data-testid={`hex-${h.id}`}
+            data-terrain={h.terrain}
+            data-token={token ?? undefined}
+            transform={`translate(${h.center.x} ${h.center.y})${h.mirror ? ' scale(-1 1)' : ''}`}
+          >
+            <use href={`#bs-tile-${h.terrain}`} />
+          </g>
+        );
+      })}
     </g>
   );
 });
 
 interface TokenLayerProps {
   layout: BoardLayout;
+  hexes: Record<string, BoardHex>;
   robber: string;
   /** Pulsing hex ids joined by '|' (string for cheap memo equality). */
   pulse: string;
   /** Changes per roll so the pop animation restarts. */
   pulseKey: string;
+  /** Hexes that were swapped (Surveyor swap animation & highlight). */
+  swappedHexes?: Set<string>;
+  swapKey?: string;
 }
 
-const TokenLayer = memo(function TokenLayer({ layout, robber, pulse, pulseKey }: TokenLayerProps): React.JSX.Element {
+const TokenLayer = memo(function TokenLayer({
+  layout,
+  hexes,
+  robber,
+  pulse,
+  pulseKey,
+  swappedHexes,
+  swapKey,
+}: TokenLayerProps): React.JSX.Element {
   const pulsing = new Set(pulse === '' ? [] : pulse.split('|'));
   return (
     <g pointerEvents="none">
@@ -154,22 +210,36 @@ const TokenLayer = memo(function TokenLayer({ layout, robber, pulse, pulseKey }:
         ) : null,
       )}
       {layout.hexes.map((h) => {
-        if (h.token === null) return null;
-        const hot = h.token === 6 || h.token === 8;
+        const token = hexes[h.id]?.token ?? h.token;
+        if (token === null) return null;
+        const hot = token === 6 || token === 8;
         const ink = hot ? C.tokenRed : C.tokenText;
-        const pips = PIPS[h.token] ?? 0;
+        const pips = PIPS[token] ?? 0;
         const isPulsing = pulsing.has(h.id);
+        const isSwapped = swappedHexes?.has(h.id) ?? false;
         return (
           <g
             key={h.id}
             transform={`translate(${h.center.x} ${h.center.y})`}
             opacity={robber === h.id ? 0.55 : undefined}
           >
-            <g key={isPulsing ? pulseKey : 'still'} className={isPulsing ? 'bs-pop' : undefined}>
+            {isSwapped ? (
+              <circle
+                r={36}
+                fill="rgba(245,158,11,0.25)"
+                stroke="#f59e0b"
+                strokeWidth={3}
+                className="bs-swap-glow"
+              />
+            ) : null}
+            <g
+              key={isPulsing ? pulseKey : isSwapped ? `token-swap-${swapKey}-${token}` : 'still'}
+              className={isPulsing ? 'bs-pop' : isSwapped ? 'bs-swap' : undefined}
+            >
               <circle cy={2.5} r={30} fill="rgba(0,0,0,0.25)" />
-              <circle r={30} fill={C.tokenCream} stroke={C.tokenEdge} strokeWidth={2} />
+              <circle r={30} fill={C.tokenCream} stroke={isSwapped ? '#d97706' : C.tokenEdge} strokeWidth={isSwapped ? 3 : 2} />
               <text y={hot ? 7.5 : 7} textAnchor="middle" fontSize={hot ? 29 : 27} fontWeight={700} fontFamily={FONT} fill={ink}>
-                {h.token}
+                {token}
               </text>
               {Array.from({ length: pips }, (_, i) => (
                 <circle key={i} cx={(i - (pips - 1) / 2) * 6.6} cy={17} r={2.7} fill={ink} />
@@ -422,6 +492,8 @@ export const BoardSvg = memo(function BoardSvg({
   legalEdges,
   legalHexes,
   pulseHexes,
+  swappedHexes,
+  swappedHarbors,
   previewBuilding,
   onVertexClick,
   onEdgeClick,
@@ -432,6 +504,7 @@ export const BoardSvg = memo(function BoardSvg({
   const { viewBox: vb } = layout;
   const pulse = pulseHexes === undefined ? '' : [...pulseHexes].sort().join('|');
   const pulseKey = `${snap.turn}:${snap.dice?.die1 ?? 0}${snap.dice?.die2 ?? 0}`;
+  const swapKey = `${snap.turn}:${snap.version}`;
   const legal: LegalSets = compact
     ? { vertices: undefined, edges: undefined, hexes: undefined }
     : {
@@ -450,9 +523,22 @@ export const BoardSvg = memo(function BoardSvg({
     >
       <BoardDefs />
       <SeaLayer layout={layout} compact={compact} />
-      <HarborLayer layout={layout} />
-      <TileLayer layout={layout} />
-      <TokenLayer layout={layout} robber={snap.robber} pulse={pulse} pulseKey={pulseKey} />
+      <HarborLayer
+        layout={layout}
+        harbors={snap.board.harbors}
+        swappedHarbors={swappedHarbors}
+        swapKey={swapKey}
+      />
+      <TileLayer layout={layout} hexes={snap.board.hexes} />
+      <TokenLayer
+        layout={layout}
+        hexes={snap.board.hexes}
+        robber={snap.robber}
+        pulse={pulse}
+        pulseKey={pulseKey}
+        swappedHexes={swappedHexes}
+        swapKey={swapKey}
+      />
       <RobberTargets layout={layout} hexes={legal.hexes} />
       <Roads layout={layout} snap={snap} />
       <EdgeMarks layout={layout} edges={legal.edges} />

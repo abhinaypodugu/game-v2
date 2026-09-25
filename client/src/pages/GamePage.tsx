@@ -184,6 +184,35 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
     return hexes;
   }, [log, snap.board.hexes, snap.robber]);
 
+  // Track the most recent token swap (Surveyor) or harbor swap (Port Renovation)
+  const lastTokensSwap = useMemo(() => {
+    for (let i = log.length - 1; i >= 0; i--) {
+      const e = log[i]!;
+      if (e.type === 'tokensSwapped') return e;
+      if (e.type === 'turnStarted') break;
+    }
+    return undefined;
+  }, [log]);
+
+  const swappedHexes = useMemo(() => {
+    if (!lastTokensSwap) return undefined;
+    return new Set<string>([lastTokensSwap.hex1, lastTokensSwap.hex2]);
+  }, [lastTokensSwap]);
+
+  const lastHarborsSwap = useMemo(() => {
+    for (let i = log.length - 1; i >= 0; i--) {
+      const e = log[i]!;
+      if (e.type === 'harborsSwapped') return e;
+      if (e.type === 'turnStarted') break;
+    }
+    return undefined;
+  }, [log]);
+
+  const swappedHarbors = useMemo(() => {
+    if (!lastHarborsSwap) return undefined;
+    return new Set<string>([lastHarborsSwap.edge1, lastHarborsSwap.edge2]);
+  }, [lastHarborsSwap]);
+
   const legalVertices =
     roadBuilding !== null
       ? undefined
@@ -303,6 +332,8 @@ function GameScreen({ snap }: { snap: PersonalSnapshot }): React.JSX.Element {
               legalEdges={legalEdges}
               legalHexes={legalHexes}
               pulseHexes={pulseHexes}
+              swappedHexes={swappedHexes}
+              swappedHarbors={swappedHarbors}
               previewBuilding={setupVertex !== null && myColor !== undefined ? { vertex: setupVertex, color: myColor } : undefined}
               onVertexClick={onVertexClick}
               onEdgeClick={onEdgeClick}

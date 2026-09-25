@@ -96,6 +96,67 @@ describe('BoardSvg terrain and tokens', () => {
     expect(container.querySelectorAll('[data-hex-id]').length).toBe(19);
     expect(container.querySelectorAll('[data-vertex], [data-edge]').length).toBe(0);
   });
+
+  it('updates token and harbor UI elements when swapped via Surveyor or Port Renovation', () => {
+    const snap = snapshotFor(4);
+    const nonDesertHexes = Object.entries(snap.board.hexes).filter(([_, h]) => h.terrain !== 'desert');
+    const [hex1Id, hex1] = nonDesertHexes[0]!;
+    const [hex2Id, hex2] = nonDesertHexes[1]!;
+    const token1 = hex1.token;
+    const token2 = hex2.token;
+
+    const harborEntries = Object.entries(snap.board.harbors);
+    const [edge1Id, h1] = harborEntries[0]!;
+    const [edge2Id, h2] = harborEntries[1]!;
+
+    const { container, rerender } = render(<BoardSvg snap={snap} />);
+
+    const elHex1 = container.querySelector(`[data-hex-id="${hex1Id}"]`);
+    const elHex2 = container.querySelector(`[data-hex-id="${hex2Id}"]`);
+    expect(elHex1?.getAttribute('data-token')).toBe(String(token1));
+    expect(elHex2?.getAttribute('data-token')).toBe(String(token2));
+
+    const elHarbor1 = container.querySelector(`[data-harbor="${edge1Id}"]`);
+    const elHarbor2 = container.querySelector(`[data-harbor="${edge2Id}"]`);
+    expect(elHarbor1?.getAttribute('data-harbor-type')).toBe(h1.resource ?? 'generic');
+    expect(elHarbor2?.getAttribute('data-harbor-type')).toBe(h2.resource ?? 'generic');
+
+    const nextSnap: PersonalSnapshot = {
+      ...snap,
+      version: snap.version + 1,
+      board: {
+        ...snap.board,
+        hexes: {
+          ...snap.board.hexes,
+          [hex1Id]: { ...hex1, token: token2 },
+          [hex2Id]: { ...hex2, token: token1 },
+        },
+        harbors: {
+          ...snap.board.harbors,
+          [edge1Id]: h2,
+          [edge2Id]: h1,
+        },
+      },
+    };
+
+    rerender(
+      <BoardSvg
+        snap={nextSnap}
+        swappedHexes={new Set([hex1Id, hex2Id])}
+        swappedHarbors={new Set([edge1Id, edge2Id])}
+      />,
+    );
+
+    const updatedHex1 = container.querySelector(`[data-hex-id="${hex1Id}"]`);
+    const updatedHex2 = container.querySelector(`[data-hex-id="${hex2Id}"]`);
+    expect(updatedHex1?.getAttribute('data-token')).toBe(String(token2));
+    expect(updatedHex2?.getAttribute('data-token')).toBe(String(token1));
+
+    const updatedHarbor1 = container.querySelector(`[data-harbor="${edge1Id}"]`);
+    const updatedHarbor2 = container.querySelector(`[data-harbor="${edge2Id}"]`);
+    expect(updatedHarbor1?.getAttribute('data-harbor-type')).toBe(h2.resource ?? 'generic');
+    expect(updatedHarbor2?.getAttribute('data-harbor-type')).toBe(h1.resource ?? 'generic');
+  });
 });
 
 describe('legal placement highlighting & clicks', () => {

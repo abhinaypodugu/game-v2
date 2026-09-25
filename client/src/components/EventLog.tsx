@@ -41,6 +41,10 @@ function describe(event: GameEvent, names: string[]): string {
     case 'specialBuildDone': return `${name(event.seat)} finished special building`;
     case 'turnStarted': return `${name(event.seat)}'s turn ${event.turn}`;
     case 'turnEnded': return `${name(event.seat)} ended their turn`;
+    case 'tokensSwapped': return `${name(event.seat)} swapped number tokens (${event.token1} ⇄ ${event.token2})`;
+    case 'harborsSwapped': return `${name(event.seat)} swapped 2 coastal harbors`;
+    case 'fortified': return `${name(event.seat)} fortified their empire`;
+    case 'taxCollected': return `${name(event.seat)} collected ${event.totalCards} cards in taxes`;
     case 'timedOut': return `${name(event.seat)} ran out of time (${event.autoAction})`;
     case 'victory': return `${name(event.seat)} wins with ${event.vp} VP!`;
     default: return (event as { type: string }).type;

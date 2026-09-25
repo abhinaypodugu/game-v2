@@ -186,9 +186,13 @@ const BOARD_CSS = `
 .bs-robber{transition:transform .38s cubic-bezier(.3,1.35,.5,1)}
 .bs-place{transform-box:fill-box;transform-origin:50% 100%;animation:bs-place .32s cubic-bezier(.3,1.5,.5,1)}
 @keyframes bs-place{from{transform:scale(.4);opacity:.3}to{transform:scale(1);opacity:1}}
+.bs-swap{transform-box:fill-box;transform-origin:center;animation:bs-swap .7s cubic-bezier(.34,1.56,.64,1) 1}
+@keyframes bs-swap{0%{transform:scale(.3) rotate(-35deg);opacity:.3}60%{transform:scale(1.22) rotate(10deg);opacity:1}100%{transform:scale(1) rotate(0deg);opacity:1}}
+.bs-swap-glow{transform-box:fill-box;transform-origin:center;animation:bs-swap-glow 1.8s ease-in-out infinite}
+@keyframes bs-swap-glow{0%,100%{opacity:.3;transform:scale(1)}50%{opacity:.85;transform:scale(1.12)}}
 @media (prefers-reduced-motion:reduce){
-.bs-breathe,.bs-dash,.bs-pop,.bs-place{animation:none}
-.bs-glow{animation:none;opacity:.7}
+.bs-breathe,.bs-dash,.bs-pop,.bs-place,.bs-swap,.bs-swap-glow{animation:none}
+.bs-glow,.bs-swap-glow{animation:none;opacity:.7}
 .bs-robber{transition:none}
 }
 `;
