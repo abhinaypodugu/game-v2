@@ -8,8 +8,17 @@ import { createServer } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Server } from 'socket.io';
-import { RoomManager, registerSocketHandlers, type ServerContext } from '@catan/host';
 import { GameLog } from './jsonl';
+
+// Load .env if present (supported natively in Node.js 20+)
+if (typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile();
+  } catch {}
+  try {
+    process.loadEnvFile(resolve(dirname(fileURLToPath(import.meta.url)), '../../.env'));
+  } catch {}
+}
 
 const app = express();
 app.get('/api/health', (_req, res) => {

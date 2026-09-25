@@ -5,3 +5,6 @@ data/
 .DS_Store
 coverage/
 cloudflared.exe
+.env
+.env.*
+!.env.example

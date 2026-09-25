@@ -114,7 +114,11 @@ export interface Store {
 const SESSION_KEY = `catan.session${window.location.search}`;
 const OFFLINE_SESSION_KEY = `lc.offlineSession${window.location.search}`;
 const ADMIN_PASSWORD_KEY = 'catan_admin_unlocked';
-const VALID_ADMIN_PASSWORDS = new Set(['admin', 'catan-admin', 'admin123']);
+const envAdminPassword =
+  typeof import.meta !== 'undefined' && import.meta.env?.VITE_ADMIN_PASSWORD
+    ? String(import.meta.env.VITE_ADMIN_PASSWORD).trim()
+    : undefined;
+const VALID_ADMIN_PASSWORDS = new Set(['admin', 'catan-admin', 'admin123', envAdminPassword].filter(Boolean) as string[]);
 
 function readSession(key: string): Session | null {
   try {

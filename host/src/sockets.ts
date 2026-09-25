@@ -57,7 +57,9 @@ const settingsSchema = z.object({
 });
 
 const envAdminPassword =
-  typeof process !== 'undefined' && process?.env?.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD : null;
+  typeof process !== 'undefined'
+    ? (process?.env?.ADMIN_PASSWORD || process?.env?.VITE_ADMIN_PASSWORD || null)
+    : null;
 
 export const ADMIN_PASSWORDS = new Set(
   ['admin', 'catan-admin', 'admin123', envAdminPassword].filter(Boolean) as string[],
